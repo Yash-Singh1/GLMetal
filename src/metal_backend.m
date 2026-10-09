@@ -161,6 +161,8 @@ void glm_note_stall(const char *what, uint64_t started)
 static void report_slow_frame(void)
 {
     static uint64_t last;
+    static struct glm_pipeline_stats previous_prewarm;
+    struct glm_pipeline_stats prewarm = glm_pipeline_statistics();
     uint64_t now = glm_now_ns();
     double frame_ms = last ? (now - last) / 1e6 : 0;
     last = now;
@@ -172,13 +174,17 @@ static void report_slow_frame(void)
             if (frame_stalls[i].count)
                 n += snprintf(line + n, sizeof line - (size_t)n, " %s x%u %.0f ms;", frame_stalls[i].what,
                               frame_stalls[i].count, frame_stalls[i].ms);
-        fprintf(stderr, "%s\n", line);
+        fprintf(stderr, "%s prewarm predicted=%llu reused=%llu demanded=%llu waited=%llu dropped=%llu\n", line,
+                prewarm.predicted - previous_prewarm.predicted, prewarm.reused - previous_prewarm.reused,
+                prewarm.demanded - previous_prewarm.demanded, prewarm.waited - previous_prewarm.waited,
+                prewarm.dropped - previous_prewarm.dropped);
     }
     for (int i = 0; i < 16; ++i) {
         frame_stalls[i].count = 0;
         frame_stalls[i].ms = 0;
     }
     pthread_mutex_unlock(&frame_stalls_lock);
+    previous_prewarm = prewarm;
 }
 
 
@@ -1846,7 +1852,9 @@ static GLMCompiledFunction *function_entry(NSString *text, bool background)
         compiler = [NSOperationQueue new];
         compiler.name = @"GLMetal native shader prewarm";
         compiler.maxConcurrentOperationCount = 4;
-        compiler.qualityOfService = NSQualityOfServiceUtility;
+        /* A draw may already be waiting for this work. Utility priority can
+           leave a started prewarm behind the application's loading threads. */
+        compiler.qualityOfService = NSQualityOfServiceUserInitiated;
     });
     pthread_mutex_lock(&function_cache_lock);
     GLMCompiledFunction *entry = function_cache[text];
@@ -1862,16 +1870,27 @@ static GLMCompiledFunction *function_entry(NSString *text, bool background)
     pthread_mutex_unlock(&function_cache_lock);
     if (!fresh && !demand) return entry;
     GLMCompiledFunction *target = entry;
-    static NSString *salt;
+    static NSString *salt, *entry_name;
     static dispatch_once_t salted;
     dispatch_once(&salted, ^{
         salt = getenv("GLMETAL_MSL_SALT") ? [NSString stringWithFormat:@"// salt %d %u\n", getpid(), arc4random()] : nil;
+        entry_name = salt ? [NSString stringWithFormat:@"glm_cold_%d_%u_entry", getpid(), arc4random()] : @"main0";
     });
+    /* A comment alone need not invalidate Metal's downstream pipeline cache.
+       Cold programmable-function diagnostics also change the entry identity.
+       Retain this submitted source so subsequent variant patches find the
+       actual function name. Canonical source still keys prewarm/demand reuse. */
+    NSString *submitted = text;
+    if (salt) {
+        submitted = [text stringByReplacingOccurrencesOfString:@"\\bmain0\\b" withString:entry_name
+                    options:NSRegularExpressionSearch range:NSMakeRange(0, text.length)];
+        submitted = [salt stringByAppendingString:submitted];
+    }
     dispatch_block_t compile = ^{
-        [device newLibraryWithSource:salt ? [salt stringByAppendingString:text] : text options:options
+        [device newLibraryWithSource:submitted options:options
                    completionHandler:^(id<MTLLibrary> library, NSError *error) {
-                       target->function = [library newFunctionWithName:@"main0"];
-                       remember_function_source(target->function, text);
+                       target->function = [library newFunctionWithName:entry_name];
+                       remember_function_source(target->function, submitted);
                        if (!target->function) {
                            target->error = error;
                            pthread_mutex_lock(&function_cache_lock);
@@ -2070,8 +2089,8 @@ void glm_backend_prewarm_program(const struct glm_compile_result *r)
     if (sources[0] && sources[1]) {
         GLMCompiledFunction *vertex = function_entry(@(sources[0]), true);
         GLMCompiledFunction *fragment = function_entry(@(sources[1]), true);
-        dispatch_group_notify(vertex->group, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-            dispatch_group_notify(fragment->group, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        dispatch_group_notify(vertex->group, dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            dispatch_group_notify(fragment->group, dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
                 glm_pipeline_prewarm(device, vertex->function, fragment->function);
             });
         });

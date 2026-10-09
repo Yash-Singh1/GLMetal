@@ -15,6 +15,19 @@ make check               # pixel comparison suite against Apple's OpenGL
 `build/glmetal-compiler` must sit next to `libGLMetal.dylib`: processes
 running under Rosetta compile shaders in it natively.
 
+Native shader and pipeline prewarming use bounded queues at UserInitiated
+priority. A draw can share work that has already started, so that work must
+not remain at Utility priority while the application loads more resources.
+Slow-frame logs include pipeline prediction and reuse counters alongside
+native compiler waits.
+
+`GLMETAL_MSL_SALT=1` tests fresh programmable-function identities by changing
+the submitted source comment and entry-point name once per process. A comment
+alone does not establish a cold downstream pipeline cache. This diagnostic
+does not alter canonical source deduplication or normal compilation. Direct
+fixed-function, utility and border-variant compilation paths remain outside
+its coverage.
+
 ## Layout
 
 - `src/` the implementation; `src/marshal/` the threaded command stream

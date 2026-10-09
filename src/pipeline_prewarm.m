@@ -55,7 +55,8 @@ static void initialize(void)
         compiler = [NSOperationQueue new];
         compiler.name = @"GLMetal pipeline prewarm";
         compiler.maxConcurrentOperationCount = 2;
-        compiler.qualityOfService = NSQualityOfServiceUtility;
+        /* A first draw can be waiting for a running prediction. */
+        compiler.qualityOfService = NSQualityOfServiceUserInitiated;
         disabled = getenv("GLMETAL_NO_PIPELINE_PREWARM") != NULL;
     });
 }
