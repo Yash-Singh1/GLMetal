@@ -1402,9 +1402,9 @@ static void compressed3d(GLenum target, GLint level, GLenum internal, GLint x, G
     size_t row_bytes = (size_t)((w + 3) / 4) * (size_t)info.bytes_per_pixel;
     size_t image_bytes = row_bytes * (size_t)((h + 3) / 4);
     if ((size_t)image_size < image_bytes * (size_t)MAX(d, 1)) return glm_error(ctx, GL_INVALID_VALUE);
-    if (!glm_backend_texture_ensure_storage(ctx, t)) return;
     /* Levels smaller than a block still occupy whole blocks in Metal; the
-       copy size must cover the level exactly. */
+       copy size must cover the level exactly. The upload path also keeps
+       whole levels pending when the base level has not been defined yet. */
     glm_backend_texture_image(ctx, t, face_index(target), level, x, y, z, w, h, MAX(d, 1), source, row_bytes, image_bytes);
 }
 

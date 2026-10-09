@@ -148,11 +148,11 @@ static int texture_pname_slot(GLenum pname)
     return -1;
 }
 
-/* Level sizes of a texture this context defined completely (from level 0
-   or glTexStorage on): glGetTexLevelParameteriv answers without draining
-   the stream. */
+/* Level metadata this context defined. Unseen face/level entries remain
+   unknown, so their queries fall back to the implementation. */
 struct shadow_levels {
     GLint width[6][16], height[6][16], depth[6][16], format[6][16];
+    uint16_t known[6];
 };
 
 static void texture_index_rebuild(struct glm_shadow *s)
@@ -1462,15 +1462,12 @@ static void shadow_define_level(struct glm_context *ctx, GLenum target, GLint le
         t->levels = NULL;
         return;
     }
-    /* Complete knowledge starts with the base level. */
-    if (!t->levels) {
-        if (level != 0) return;
-        t->levels = calloc(1, sizeof *t->levels);
-    }
+    if (!t->levels) t->levels = calloc(1, sizeof *t->levels);
     t->levels->width[face][level] = w;
     t->levels->height[face][level] = h;
     t->levels->depth[face][level] = d;
     t->levels->format[face][level] = (GLint)internal;
+    t->levels->known[face] |= (uint16_t)(1u << level);
 }
 
 void glm_shadow_glTexImage1D(struct glm_context *ctx, GLenum target, GLint level, GLint internal, GLsizei w, GLint border,
@@ -1552,6 +1549,14 @@ void glm_shadow_glGenerateMipmap(struct glm_context *ctx, GLenum target)
     int faces = target == GL_TEXTURE_CUBE_MAP ? 6 : 1;
     int base = t->known ? t->p[5] : 0;
     if (base < 0 || base >= 16) return;
+    for (int f = 0; f < faces; ++f)
+        if (!(t->levels->known[f] & (1u << base))) {
+            /* Generated levels depend on a base image absent from this
+               context's cache. Existing cached levels may change too. */
+            free(t->levels);
+            t->levels = NULL;
+            return;
+        }
     for (int f = 0; f < faces; ++f) {
         GLint w = t->levels->width[f][base], h = t->levels->height[f][base], d = t->levels->depth[f][base];
         for (int level = base + 1; level < 16 && (w > 1 || h > 1 || (target == GL_TEXTURE_3D && d > 1)); ++level) {
@@ -1562,6 +1567,7 @@ void glm_shadow_glGenerateMipmap(struct glm_context *ctx, GLenum target)
             t->levels->height[f][level] = h;
             t->levels->depth[f][level] = d;
             t->levels->format[f][level] = t->levels->format[f][base];
+            t->levels->known[f] |= (uint16_t)(1u << level);
         }
     }
 }
@@ -1583,7 +1589,7 @@ static bool shadow_level_query(struct glm_context *ctx, GLenum target, GLint lev
     if (slot < 0 || unit >= GLM_MAX_TEXTURE_UNITS) return false;
     GLuint name = s->textures[unit][slot];
     struct shadow_texture *t = name ? shadow_texture(s, name, false) : NULL;
-    if (!t || !t->levels) return false;
+    if (!t || !t->levels || !(t->levels->known[face] & (1u << level))) return false;
     bool defined = t->levels->width[face][level] != 0;
     switch (pname) {
     case GL_TEXTURE_WIDTH: *out = t->levels->width[face][level]; break;
