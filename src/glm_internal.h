@@ -537,6 +537,9 @@ extern volatile uint64_t glm_object_generation;
    (loader threads) commit at once, or the upload would wait in a command
    buffer other contexts' draws do not order after. */
 GLM_HIDDEN void glm_backend_upload_encoded(struct glm_context *ctx);
+/* Copies upload bytes into transient shared storage retained until command
+   completion. The unretained buffer's byte offset is aligned to 256 bytes. */
+GLM_HIDDEN void *glm_backend_upload_staging(struct glm_context *ctx, size_t length, const void *data, size_t *offset);
 GLM_HIDDEN void glm_backend_read_pixels(struct glm_context *ctx, GLint x, GLint y, GLsizei width, GLsizei height,
                                         GLenum format, GLenum type, void *pixels);
 GLM_HIDDEN void glm_backend_framebuffer_changed(struct glm_context *ctx);
@@ -622,6 +625,7 @@ GLM_HIDDEN int glm_client_attrib_depth(void);
 GLM_HIDDEN GLenum glm_tex_image_error(GLenum internal_format, GLenum format, GLenum type, bool core);
 struct glm_compile_result;
 GLM_HIDDEN void glm_backend_prewarm_program(const struct glm_compile_result *r);
+GLM_HIDDEN void glm_backend_prepare_arb_fragment(struct glm_program *p);
 GLM_HIDDEN GLenum glm_base_internal_format(GLenum internal_format, GLenum format);
 /* Converts client pixels (format/type, with unpack state applied) into the
    storage layout of `info`. Returns malloc'd data or NULL if unsupported. */

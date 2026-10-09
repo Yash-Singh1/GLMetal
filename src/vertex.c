@@ -108,6 +108,7 @@ GLM_EXPORT void glRectsv(const GLshort *a, const GLshort *b) { glRects(a[0], a[1
 static void set_array(struct glm_context *ctx, int slot, GLint size, GLenum type, GLboolean normalized,
                       GLsizei stride, const void *pointer, bool integer)
 {
+    if (ctx->immediate) return glm_error(ctx, GL_INVALID_OPERATION);
     if (stride < 0) return glm_error(ctx, GL_INVALID_VALUE);
     struct glm_array *a = &ctx->vao->arrays[slot];
     glm_vao_changed(ctx->vao);
@@ -340,12 +341,13 @@ static float half_to_float(uint16_t h)
 }
 
 /* Reads one attribute element as float4 following GL's conversion rules. */
-static void fetch_element(const struct glm_array *a, const uint8_t *p, float *out)
+static void fetch_element(const struct glm_context *ctx, const struct glm_array *a, const uint8_t *p, float *out)
 {
     out[0] = out[1] = out[2] = 0;
     out[3] = 1;
     int size = a->size == GL_BGRA ? 4 : a->size;
     bool normalize = a->normalized && !a->integer;
+    bool core = ctx->profile == GLM_PROFILE_CORE;
     for (int i = 0; i < size; ++i) {
         float v = 0;
         switch (a->type) {
@@ -353,11 +355,11 @@ static void fetch_element(const struct glm_array *a, const uint8_t *p, float *ou
         case GL_DOUBLE: { double d; memcpy(&d, p + i * 8, 8); v = (float)d; break; }
         case GL_HALF_FLOAT: { uint16_t h; memcpy(&h, p + i * 2, 2); v = half_to_float(h); break; }
         case GL_UNSIGNED_BYTE: v = p[i]; if (normalize) v /= 255.0f; break;
-        case GL_BYTE: v = (int8_t)p[i]; if (normalize) v = (2 * v + 1) / 255.0f; break;
+        case GL_BYTE: v = (int8_t)p[i]; if (normalize) v = core ? fmaxf(-1.0f, v / 127.0f) : (2 * v + 1) / 255.0f; break;
         case GL_UNSIGNED_SHORT: { uint16_t s; memcpy(&s, p + i * 2, 2); v = s; if (normalize) v /= 65535.0f; break; }
-        case GL_SHORT: { int16_t s; memcpy(&s, p + i * 2, 2); v = s; if (normalize) v = (2 * v + 1) / 65535.0f; break; }
+        case GL_SHORT: { int16_t s; memcpy(&s, p + i * 2, 2); v = s; if (normalize) v = core ? fmaxf(-1.0f, v / 32767.0f) : (2 * v + 1) / 65535.0f; break; }
         case GL_UNSIGNED_INT: { uint32_t u; memcpy(&u, p + i * 4, 4); v = (float)u; if (normalize) v = (float)(u / 4294967295.0); break; }
-        case GL_INT: { int32_t s; memcpy(&s, p + i * 4, 4); v = (float)s; if (normalize) v = (float)((2.0 * s + 1) / 4294967295.0); break; }
+        case GL_INT: { int32_t s; memcpy(&s, p + i * 4, 4); v = (float)s; if (normalize) v = core ? (float)fmax(-1.0, s / 2147483647.0) : (float)((2.0 * s + 1) / 4294967295.0); break; }
         case GL_FIXED: { int32_t s; memcpy(&s, p + i * 4, 4); v = (float)s / 65536.0f; break; }
         default: break;
         }
@@ -447,7 +449,7 @@ static float *fetch_vertices(struct glm_context *ctx, uint32_t first, uint32_t c
                 dst[3] = 1;
                 continue;
             }
-            fetch_element(a, base + stride * index, dst);
+            fetch_element(ctx, a, base + stride * index, dst);
         }
     }
     return out;

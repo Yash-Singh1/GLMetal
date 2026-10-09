@@ -92,8 +92,14 @@ CUSTOM = {
 # calling thread wait for these (pending counter 1).
 TEXOBJ = re.compile(r'^gl(TexParameter|GenerateMipmap|CopyTexImage|CopyTexSubImage|TexSubImage|TexImage|'
                     r'CompressedTex|TexStorage|TextureParameter)')
+# Level queries depend on image metadata, not sampler parameters. Include
+# subimage calls because automatic mipmap generation can redefine levels.
+def texture_level_change(name):
+    return bool(TEXOBJ.match(name)) and not name.startswith(('glTexParameter', 'glTextureParameter'))
+
 # Client-side shadow updates (marshal_custom.c): glm_shadow_<name>(ctx, args).
 SHADOW = {
+    'glBegin', 'glEnd',
     'glBindBuffer', 'glBindBufferARB', 'glBindVertexArray', 'glBindVertexArrayAPPLE', 'glDeleteVertexArrays',
     'glDeleteVertexArraysAPPLE', 'glEnableVertexAttribArray', 'glEnableVertexAttribArrayARB', 'glDisableVertexAttribArray',
     'glDisableVertexAttribArrayARB', 'glEnableClientState', 'glDisableClientState', 'glClientActiveTexture',
@@ -320,6 +326,8 @@ for name in sorted(set(e for e in exports if e.startswith('gl'))):
     exec_done = '    glm_thread_state_executed(glm_current());\n' if bump else ''
     if TEXOBJ.match(name):
         exec_done += '    glm_thread_pending_add(glm_current(), 1, -1);\n'
+    if texture_level_change(name):
+        exec_done += '    glm_thread_pending_add(glm_current(), 2, -1);\n'
     exec_free = '    free(c->heap);\n' if sizes else ''
     exec_fn = (f'static void glm_exec_{name}(const void *payload)\n{{\n'
                f'    const struct glm_cmd_{name} *c = payload;\n'
@@ -363,6 +371,8 @@ for name in sorted(set(e for e in exports if e.startswith('gl'))):
     record_pending = '    glm_thread_state_recorded(ctx);\n' if bump else ''
     if TEXOBJ.match(name):
         record_pending += '    glm_thread_pending_add(ctx, 1, 1);\n'
+    if texture_level_change(name):
+        record_pending += '    glm_thread_pending_add(ctx, 2, 1);\n'
     if sizes:
         body += ''.join(f'    size_t n{i} = {names[i]} ? (size_t)({expr}) : 0;\n' for i, expr in sizes.items())
         total = ' + '.join(f'((n{i} + 7) & ~(size_t)7)' for i in sizes)

@@ -34,7 +34,8 @@ GLM_HIDDEN void glm_thread_sync_named(struct glm_context *ctx, const char *name)
 GLM_HIDDEN void glm_thread_state_recorded(struct glm_context *ctx);
 GLM_HIDDEN void glm_thread_state_executed(struct glm_context *ctx);
 GLM_HIDDEN int glm_thread_state_settled(struct glm_context *ctx);
-/* The same counters by index: 0 state changes, 1 texture-object changes. */
+/* The same counters by index: 0 state changes, 1 texture-object changes,
+   2 texture-level metadata changes. */
 GLM_HIDDEN void glm_thread_pending_add(struct glm_context *ctx, int which, int delta);
 GLM_HIDDEN int glm_thread_pending_zero(struct glm_context *ctx, int which);
 

@@ -78,6 +78,7 @@ struct glm_program {
     /* The fragment stage reads gl_Color / gl_SecondaryColor: flat under
        glShadeModel(GL_FLAT) in the legacy profile, as on Apple's. */
     bool color_inputs;
+    bool dynamic_alpha;             /* ARB fragment alpha test uses draw uniforms */
     uint64_t link_serial;   /* unique per successful link */
     /* metal_backend.m vertex_inputs, memoized per link (0 = not yet). */
     uint64_t inputs_link;

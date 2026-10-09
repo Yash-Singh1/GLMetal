@@ -31,7 +31,7 @@ static void *prepare_draw_raw(struct glm_context *ctx, const struct draw_stages 
                               uint32_t layout_id, bool capture);
 #define transient_alloc(b, length, offset) ((__bridge id<MTLBuffer>)transient_alloc_raw((b), (length), (offset)))
 /* Fragment variant bit (with the alpha test function): flat colour inputs. */
-enum { GLM_VARIANT_FLAT_COLORS = 0x100 };
+enum { GLM_VARIANT_FLAT_COLORS = 0x100, GLM_VARIANT_DYNAMIC_ALPHA = 0x200 };
 #define prepare_draw(...) ((__bridge id<MTLRenderCommandEncoder>)prepare_draw_raw(__VA_ARGS__))
 #include "glm_internal.h"
 #define GLM_APPLE_TYPES_ONLY
@@ -702,6 +702,21 @@ static void *transient_alloc_raw(struct glm_backend_context *b, NSUInteger lengt
     *offset = b->transient_used;
     b->transient_used += length;
     return (__bridge void *)b->transient;
+}
+
+void *glm_backend_upload_staging(struct glm_context *ctx, size_t length, const void *data, size_t *offset)
+{
+    struct glm_backend_context *b = ctx->backend;
+    /* Keep the staging allocation with the command buffer that copies it.
+       A shared loader context may commit that buffer immediately after its
+       upload, and the transient completion handler retains its chunks. */
+    end_encoder(b);
+    command_buffer(b);
+    NSUInteger at;
+    void *storage = transient_alloc_raw(b, (NSUInteger)length, &at);
+    if (storage && length) memcpy((uint8_t *)mtl_contents((__bridge id<MTLBuffer>)storage) + at, data, length);
+    *offset = (size_t)at;
+    return storage;
 }
 
 /* ---- textures and renderbuffers ------------------------------------------ */
@@ -1795,6 +1810,7 @@ static NSMutableArray *retired_functions;
     dispatch_group_t group;
     id<MTLFunction> function;
     NSError *error;
+    bool started;
 }
 @end
 @implementation GLMCompiledFunction
@@ -1814,51 +1830,68 @@ static void remember_function_source(id<MTLFunction> function, NSString *source)
     pthread_mutex_unlock(&function_cache_lock);
 }
 
-/* The entry for `text`, its compile started if new (Metal's compiler takes
-   ~20 ms a source but runs many at once: callers start what they will need
-   early and wait late). */
-static GLMCompiledFunction *function_entry(NSString *text)
+/* Limit speculative native compiles so an upload burst cannot put a draw's
+   shader behind hundreds of sources in Metal's compiler. A demand can claim
+   a queued source immediately; a started compile is shared by all consumers. */
+static GLMCompiledFunction *function_entry(NSString *text, bool background)
 {
     static MTLCompileOptions *options;
+    static NSOperationQueue *compiler;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         function_cache = [NSMutableDictionary dictionary];
         options = [MTLCompileOptions new];
         options.fastMathEnabled = NO;
         options.languageVersion = MTLLanguageVersion2_3;
+        compiler = [NSOperationQueue new];
+        compiler.name = @"GLMetal native shader prewarm";
+        compiler.maxConcurrentOperationCount = 4;
+        compiler.qualityOfService = NSQualityOfServiceUtility;
     });
     pthread_mutex_lock(&function_cache_lock);
     GLMCompiledFunction *entry = function_cache[text];
-    if (entry) {
-        pthread_mutex_unlock(&function_cache_lock);
-        return entry;
+    bool fresh = !entry;
+    if (fresh) {
+        entry = [GLMCompiledFunction new];
+        entry->group = dispatch_group_create();
+        dispatch_group_enter(entry->group);
+        function_cache[text] = entry;
     }
-    entry = [GLMCompiledFunction new];
-    entry->group = dispatch_group_create();
-    dispatch_group_enter(entry->group);
-    function_cache[text] = entry;
+    bool demand = !background && !entry->started;
+    if (demand) entry->started = true;
     pthread_mutex_unlock(&function_cache_lock);
+    if (!fresh && !demand) return entry;
     GLMCompiledFunction *target = entry;
-    /* GLMETAL_MSL_SALT=1 (benchmarks): a per-process comment defeats Metal's
-       own shader cache, so compiles are cold. */
     static NSString *salt;
     static dispatch_once_t salted;
     dispatch_once(&salted, ^{
         salt = getenv("GLMETAL_MSL_SALT") ? [NSString stringWithFormat:@"// salt %d %u\n", getpid(), arc4random()] : nil;
     });
-    [device newLibraryWithSource:salt ? [salt stringByAppendingString:text] : text options:options
-               completionHandler:^(id<MTLLibrary> library, NSError *error) {
-                   target->function = [library newFunctionWithName:@"main0"];
-                   remember_function_source(target->function, text);
-                   if (!target->function) {
-                       target->error = error;
-                       /* A failure is not kept: the next request retries. */
-                       pthread_mutex_lock(&function_cache_lock);
-                       if (function_cache[text] == target) [function_cache removeObjectForKey:text];
-                       pthread_mutex_unlock(&function_cache_lock);
-                   }
-                   dispatch_group_leave(target->group);
-               }];
+    dispatch_block_t compile = ^{
+        [device newLibraryWithSource:salt ? [salt stringByAppendingString:text] : text options:options
+                   completionHandler:^(id<MTLLibrary> library, NSError *error) {
+                       target->function = [library newFunctionWithName:@"main0"];
+                       remember_function_source(target->function, text);
+                       if (!target->function) {
+                           target->error = error;
+                           pthread_mutex_lock(&function_cache_lock);
+                           if (function_cache[text] == target) [function_cache removeObjectForKey:text];
+                           pthread_mutex_unlock(&function_cache_lock);
+                       }
+                       dispatch_group_leave(target->group);
+                   }];
+    };
+    if (demand) compile();
+    else [compiler addOperationWithBlock:^{
+        pthread_mutex_lock(&function_cache_lock);
+        bool claimed = !target->started;
+        if (claimed) target->started = true;
+        pthread_mutex_unlock(&function_cache_lock);
+        if (claimed) {
+            compile();
+            dispatch_group_wait(target->group, DISPATCH_TIME_FOREVER);
+        }
+    }];
     return entry;
 }
 
@@ -1878,7 +1911,7 @@ static id<MTLFunction> sample_shading_function(struct glm_backend_context *b, id
     pthread_mutex_unlock(&function_cache_lock);
     if (!cached) {
         char *patched = glm_sample_shading_msl(source.UTF8String, function.name.UTF8String);
-        cached = patched ? function_entry(@(patched)) : (id)[NSNull null];
+        cached = patched ? function_entry(@(patched), false) : (id)[NSNull null];
         free(patched);
         pthread_mutex_lock(&function_cache_lock);
         variants[key] = cached;
@@ -1913,7 +1946,7 @@ static id<MTLFunction> depth_clamp_function(struct glm_backend_context *b, id<MT
     pthread_mutex_unlock(&function_cache_lock);
     if (!cached) {
         char *patched = glm_depth_clamp_msl(source.UTF8String, function.name.UTF8String);
-        cached = patched ? function_entry(@(patched)) : (id)[NSNull null];
+        cached = patched ? function_entry(@(patched), false) : (id)[NSNull null];
         free(patched);
         pthread_mutex_lock(&function_cache_lock);
         variants[key] = cached;
@@ -1962,7 +1995,7 @@ static id<MTLFunction> clip_mask_function(struct glm_backend_context *b, id<MTLF
     pthread_mutex_unlock(&function_cache_lock);
     if (!cached) {
         char *patched = glm_clip_mask_msl(source.UTF8String, function.name.UTF8String, mask);
-        cached = patched ? function_entry(@(patched)) : (id)[NSNull null];
+        cached = patched ? function_entry(@(patched), false) : (id)[NSNull null];
         free(patched);
         pthread_mutex_lock(&function_cache_lock);
         variants[key] = cached;
@@ -1994,7 +2027,7 @@ resolve:
 static void metal_functions_prewarm(const char *const *sources, int count)
 {
     for (int i = 0; i < count; ++i)
-        if (sources[i]) function_entry(@(sources[i]));
+        if (sources[i]) function_entry(@(sources[i]), true);
 }
 
 /* main0 of each MSL source in `sources` (NULL entries skipped) into
@@ -2005,7 +2038,7 @@ static bool metal_functions(const char *const *sources, int count, __strong id<M
     GLMCompiledFunction *entries[8] = {nil};
     for (int i = 0; i < count && i < 8; ++i) {
         functions[i] = nil;
-        if (sources[i]) entries[i] = function_entry(@(sources[i]));
+        if (sources[i]) entries[i] = function_entry(@(sources[i]), false);
     }
     for (int i = 0; i < count && i < 8; ++i) {
         if (!entries[i]) continue;
@@ -2026,80 +2059,23 @@ static bool metal_functions(const char *const *sources, int count, __strong id<M
     return true;
 }
 
-/* Integer-input variants a vertex MSL source needed (games feed programs
-   sharing a vertex shader the same vertex formats): linked programs with
-   that source compile the variant along with their own stages. */
-static char *int_variant_msl(const char *msl, uint32_t uint_inputs, uint32_t int_inputs);
-static NSMutableDictionary<NSString *, NSNumber *> *predicted_variants;
-static pthread_mutex_t predicted_lock = PTHREAD_MUTEX_INITIALIZER;
-
-/* Locations any program has had integer data fed to float inputs at. */
-static uint32_t seen_uint_inputs, seen_int_inputs;
-
-static void remember_variant(const char *vertex_msl, uint32_t uint_inputs, uint32_t int_inputs)
-{
-    if (!vertex_msl) return;
-    __atomic_or_fetch(&seen_uint_inputs, uint_inputs, __ATOMIC_RELAXED);
-    __atomic_or_fetch(&seen_int_inputs, int_inputs, __ATOMIC_RELAXED);
-    pthread_mutex_lock(&predicted_lock);
-    if (!predicted_variants) predicted_variants = [NSMutableDictionary dictionary];
-    predicted_variants[@(vertex_msl)] = @((uint64_t)uint_inputs | (uint64_t)int_inputs << 32);
-    pthread_mutex_unlock(&predicted_lock);
-}
-
-/* The variant a program will likely need: what its vertex source needed
-   before, else the locations other programs were fed integers at (a game
-   uses the same vertex formats for many shaders). */
-static bool predicted_variant(const char *vertex_msl, uint32_t *uint_inputs, uint32_t *int_inputs);
-static bool guess_variant(const struct glm_compile_result *r, uint32_t *uint_inputs, uint32_t *int_inputs)
-{
-    if (predicted_variant(r->msl[GLM_STAGE_VERTEX], uint_inputs, int_inputs)) return true;
-    uint32_t float_inputs = 0;
-    for (int i = 0; i < r->attribute_count; ++i)
-        if (!r->attributes[i].integer && r->attributes[i].index != GLM_INPUT_BUILTIN && r->attributes[i].location >= 0 &&
-            r->attributes[i].location < 32)
-            float_inputs |= 1u << r->attributes[i].location;
-    *uint_inputs = __atomic_load_n(&seen_uint_inputs, __ATOMIC_RELAXED) & float_inputs;
-    *int_inputs = __atomic_load_n(&seen_int_inputs, __ATOMIC_RELAXED) & float_inputs & ~*uint_inputs;
-    return *uint_inputs || *int_inputs;
-}
-
-static bool predicted_variant(const char *vertex_msl, uint32_t *uint_inputs, uint32_t *int_inputs)
-{
-    if (!vertex_msl || !predicted_variants) return false;
-    pthread_mutex_lock(&predicted_lock);
-    NSNumber *masks = predicted_variants[@(vertex_msl)];
-    pthread_mutex_unlock(&predicted_lock);
-    if (!masks) return false;
-    *uint_inputs = (uint32_t)masks.unsignedLongLongValue;
-    *int_inputs = (uint32_t)(masks.unsignedLongLongValue >> 32);
-    return true;
-}
-
-/* Starts compiling a compile result's Metal functions (and its predicted
-   integer-input variant) in the background: the later link finds them
-   compiled or compiling (any thread). */
+/* Start compiling the program's native functions without waiting. Vertex
+   descriptors convert integer arrays to float inputs, so no source variants
+   are needed for vertex storage formats. */
 void glm_backend_prewarm_program(const struct glm_compile_result *r)
 {
     if (!r->ok || r->gs || r->tess) return;
-    uint32_t uint_inputs = 0, int_inputs = 0;
-    char *variant = guess_variant(r, &uint_inputs, &int_inputs)
-                        ? int_variant_msl(r->msl[GLM_STAGE_VERTEX], uint_inputs, int_inputs)
-                        : NULL;
-    const char *sources[4] = {r->msl[GLM_STAGE_VERTEX], r->msl[GLM_STAGE_FRAGMENT], r->msl_capture, variant};
-    metal_functions_prewarm(sources, 4);
-    /* Once both functions are ready, prepare the common configuration for
-       their vertex inputs while the application translates later programs. */
+    const char *sources[3] = {r->msl[GLM_STAGE_VERTEX], r->msl[GLM_STAGE_FRAGMENT], r->msl_capture};
+    metal_functions_prewarm(sources, 3);
     if (sources[0] && sources[1]) {
-        GLMCompiledFunction *vertex = function_entry(@(sources[3] ? sources[3] : sources[0]));
-        GLMCompiledFunction *fragment = function_entry(@(sources[1]));
+        GLMCompiledFunction *vertex = function_entry(@(sources[0]), true);
+        GLMCompiledFunction *fragment = function_entry(@(sources[1]), true);
         dispatch_group_notify(vertex->group, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
             dispatch_group_notify(fragment->group, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
                 glm_pipeline_prewarm(device, vertex->function, fragment->function);
             });
         });
     }
-    free(variant);
 }
 
 bool glm_backend_program_link(struct glm_context *ctx, struct glm_program *p, char **log)
@@ -2119,28 +2095,12 @@ bool glm_backend_program_link(struct glm_context *ctx, struct glm_program *p, ch
     if (getenv("GLM_DUMP_SHADERS"))
         for (int stage = 0; stage < GLM_STAGE_COUNT; ++stage)
             if (p->result.msl[stage]) glm_log("program stage %d MSL:\n%s", stage, p->result.msl[stage]);
-    uint32_t predicted_uint = 0, predicted_int = 0;
-    char *variant = guess_variant(&p->result, &predicted_uint, &predicted_int)
-                        ? int_variant_msl(p->result.msl[GLM_STAGE_VERTEX], predicted_uint, predicted_int)
-                        : NULL;
-    const char *sources[4] = {p->result.msl[GLM_STAGE_VERTEX], p->result.msl[GLM_STAGE_FRAGMENT], p->result.msl_capture,
-                              variant};
-    __strong id<MTLFunction> compiled[4];
-    bool compiled_ok = metal_functions(sources, 4, compiled, log);
-    free(variant);
-    if (!compiled_ok) return false;
+    const char *sources[3] = {p->result.msl[GLM_STAGE_VERTEX], p->result.msl[GLM_STAGE_FRAGMENT], p->result.msl_capture};
+    __strong id<MTLFunction> compiled[3];
+    if (!metal_functions(sources, 3, compiled, log)) return false;
     if (compiled[0]) p->functions[GLM_STAGE_VERTEX] = (__bridge_retained void *)compiled[0];
     if (compiled[1]) p->functions[GLM_STAGE_FRAGMENT] = (__bridge_retained void *)compiled[1];
     if (compiled[2]) p->functions_capture = (__bridge_retained void *)compiled[2];
-    if (compiled[3] && p->int_variant_count < 16) {
-        struct glm_int_variant *v = calloc(1, sizeof *v);
-        v->uint_inputs = predicted_uint;
-        v->int_inputs = predicted_int;
-        v->refs = 1;
-        v->ready = true;
-        v->function = (__bridge_retained void *)compiled[3];
-        p->int_variants[p->int_variant_count++] = v;
-    }
     if (p->result.gs && p->result.gs->kernel && p->result.gs->pull) {
         struct glm_gs_result *g = p->result.gs;
         struct glm_gs_state *gs = calloc(1, sizeof *gs);
@@ -2497,6 +2457,9 @@ static bool select_stages(struct glm_context *ctx, struct draw_stages *st)
     } else {
         if ((st->arb_vertex = glm_arb_current(ctx, 0))) st->vertex_program = &st->arb_vertex->linked;
         if ((st->arb_fragment = glm_arb_current(ctx, 1))) st->fragment_program = &st->arb_fragment->linked;
+        /* A selected ARB program remains selected while its native compile
+           resolves. Failure must not substitute fixed-function rendering. */
+        if (!glm_arb_ready(ctx, st->arb_vertex) || !glm_arb_ready(ctx, st->arb_fragment)) return false;
     }
     st->core = ctx->profile == GLM_PROFILE_CORE;
     if (st->core && !st->vertex_program) return false;
@@ -2549,6 +2512,18 @@ static void *prepare_draw_once(struct glm_context *ctx, const struct draw_stages
         glm_backend_occlusion_draw(ctx, ctx->active_queries[GLM_QUERY_OCCLUSION]);
         if (!b->encoder) return NULL;
     }
+    /* Border colours / GL_CLAMP Metal's samplers cannot give: the program's
+       border emulation variant draws once compiled. */
+    b->fragment_override = nil;
+    b->border_mask = 0;
+    if (__atomic_load_n(&glm_custom_borders, __ATOMIC_RELAXED) && st->program && st->fragment_program == st->program) {
+        uint32_t mask = glm_program_border_mask(ctx, st->program, b->border_data);
+        id<MTLFunction> variant = mask ? program_variant(st->program, 0, 0, mask, 0) : nil;
+        if (variant) {
+            b->fragment_override = variant;
+            b->border_mask = mask;
+        }
+    }
     /* The legacy alpha test after a GLSL or ARB fragment program: the
        program's alpha test variant (Source's HDR histogram counts
        alpha-tested fragments). */
@@ -2558,7 +2533,7 @@ static void *prepare_draw_once(struct glm_context *ctx, const struct draw_stages
     }
     uint32_t fragment_variant = 0;
     if (!st->core && st->fragment_program && !b->fragment_override) {
-        if (s->alpha_test && s->alpha_func != GL_ALWAYS) fragment_variant = (uint32_t)(s->alpha_func - GL_NEVER + 1);
+        if (!st->fragment_program->dynamic_alpha && s->alpha_test && s->alpha_func != GL_ALWAYS) fragment_variant = (uint32_t)(s->alpha_func - GL_NEVER + 1);
         if (s->shade_model == GL_FLAT && st->fragment_program->color_inputs) fragment_variant |= GLM_VARIANT_FLAT_COLORS;
     }
     if (fragment_variant) {
@@ -2668,7 +2643,10 @@ static void *prepare_draw_once(struct glm_context *ctx, const struct draw_stages
         }
         if (st->arb_vertex) bind_arb_parameters(ctx, st->arb_vertex, 0);
         if (st->arb_fragment) bind_arb_parameters(ctx, st->arb_fragment, 1);
-        if (b->alpha_override) enc_bytes(b, STAGE_FRAGMENT, &b->alpha_ref, sizeof b->alpha_ref, GLM_SLOT_ALPHA_REF);
+        if (st->fragment_program && st->fragment_program->dynamic_alpha) {
+            float alpha_state[2] = {s->alpha_ref, !st->core && s->alpha_test ? (float)(s->alpha_func - GL_NEVER + 1) : 0};
+            enc_bytes(b, STAGE_FRAGMENT, alpha_state, sizeof alpha_state, GLM_SLOT_ALPHA_REF);
+        } else if (b->alpha_override) enc_bytes(b, STAGE_FRAGMENT, &b->alpha_ref, sizeof b->alpha_ref, GLM_SLOT_ALPHA_REF);
     }
     if (b->depth_clamp_active) {
         float bounds[GLM_MAX_VIEWPORTS][2];
@@ -3256,12 +3234,7 @@ static size_t gl_type_size(GLenum type)
    `integer`, integer) shader input; Invalid when Metal has none. */
 static MTLVertexFormat vertex_format(const struct glm_array *array, bool integer_input)
 {
-    /* Unnormalized integer arrays feeding float inputs reach an integer
-       variant of the vertex function (int_variant). */
-    struct glm_array converted = *array;
-    if (integer_input && !array->integer && !array->normalized && array->type != GL_FLOAT && array->type != GL_HALF_FLOAT)
-        converted.integer = true;
-    const struct glm_array *a = &converted;
+    const struct glm_array *a = array;
     if (a->integer != integer_input) return MTLVertexFormatInvalid;
     if (a->size == GL_BGRA)
         return a->type == GL_UNSIGNED_BYTE && a->normalized ? MTLVertexFormatUChar4Normalized_BGRA : MTLVertexFormatInvalid;
@@ -3276,30 +3249,32 @@ static MTLVertexFormat vertex_format(const struct glm_array *array, bool integer
         if (a->integer) break;
         PICK(MTLVertexFormatHalf, MTLVertexFormatHalf2, MTLVertexFormatHalf3, MTLVertexFormatHalf4);
     case GL_UNSIGNED_BYTE:
-        if (a->integer) PICK(MTLVertexFormatUChar, MTLVertexFormatUChar2, MTLVertexFormatUChar3, MTLVertexFormatUChar4);
+        if (a->integer || !a->normalized) PICK(MTLVertexFormatUChar, MTLVertexFormatUChar2, MTLVertexFormatUChar3, MTLVertexFormatUChar4);
         if (a->normalized)
             PICK(MTLVertexFormatUCharNormalized, MTLVertexFormatUChar2Normalized, MTLVertexFormatUChar3Normalized,
                  MTLVertexFormatUChar4Normalized);
         break;
     case GL_BYTE:
-        if (a->integer) PICK(MTLVertexFormatChar, MTLVertexFormatChar2, MTLVertexFormatChar3, MTLVertexFormatChar4);
+        if (a->integer || !a->normalized) PICK(MTLVertexFormatChar, MTLVertexFormatChar2, MTLVertexFormatChar3, MTLVertexFormatChar4);
         if (a->normalized)
             PICK(MTLVertexFormatCharNormalized, MTLVertexFormatChar2Normalized, MTLVertexFormatChar3Normalized,
                  MTLVertexFormatChar4Normalized);
         break;
     case GL_UNSIGNED_SHORT:
-        if (a->integer) PICK(MTLVertexFormatUShort, MTLVertexFormatUShort2, MTLVertexFormatUShort3, MTLVertexFormatUShort4);
+        if (a->integer || !a->normalized) PICK(MTLVertexFormatUShort, MTLVertexFormatUShort2, MTLVertexFormatUShort3, MTLVertexFormatUShort4);
         if (a->normalized)
             PICK(MTLVertexFormatUShortNormalized, MTLVertexFormatUShort2Normalized, MTLVertexFormatUShort3Normalized,
                  MTLVertexFormatUShort4Normalized);
         break;
     case GL_SHORT:
-        if (a->integer) PICK(MTLVertexFormatShort, MTLVertexFormatShort2, MTLVertexFormatShort3, MTLVertexFormatShort4);
+        if (a->integer || !a->normalized) PICK(MTLVertexFormatShort, MTLVertexFormatShort2, MTLVertexFormatShort3, MTLVertexFormatShort4);
         if (a->normalized)
             PICK(MTLVertexFormatShortNormalized, MTLVertexFormatShort2Normalized, MTLVertexFormatShort3Normalized,
                  MTLVertexFormatShort4Normalized);
         break;
     case GL_INT:
+        /* 32-bit integer formats do not numerically convert to float on
+           every Metal device. Keep those arrays on the exact CPU path. */
         if (a->integer) PICK(MTLVertexFormatInt, MTLVertexFormatInt2, MTLVertexFormatInt3, MTLVertexFormatInt4);
         break;
     case GL_UNSIGNED_INT:
@@ -3308,101 +3283,6 @@ static MTLVertexFormat vertex_format(const struct glm_array *array, bool integer
     }
 #undef PICK
     return MTLVertexFormatInvalid;
-}
-
-/* The integer-input variant as a patch of the program's own vertex MSL
-   (no second GLSL compile): inputs at the `uint_inputs` / `int_inputs`
-   locations become uint/int vectors, converted to float at the top of
-   main0, as the GLSL rewrite (shader_compiler.cpp) would produce. NULL when
-   the source is not in the expected shape. malloc'd. */
-static char *int_variant_msl(const char *msl, uint32_t uint_inputs, uint32_t int_inputs)
-{
-    const char *in_struct = strstr(msl, "struct main0_in\n{\n");
-    const char *entry = strstr(msl, "vertex main0_out main0(");
-    if (!in_struct || !entry || entry < in_struct) return NULL;
-    const char *struct_end = strstr(in_struct, "\n};\n");
-    const char *body = strstr(entry, "\n{\n");
-    if (!struct_end || !body) return NULL;
-    body += 3;
-    const char *out_line = strstr(body, "    main0_out out = {};\n");
-    const char *body_start = out_line && out_line == body ? out_line + strlen("    main0_out out = {};\n") : body;
-    /* The patched struct and the conversions. */
-    size_t cap = strlen(msl) * 2 + 4096;
-    char *result = malloc(cap), *conversions = malloc(4096);
-    char names[32][64];
-    int name_count = 0;
-    size_t n = 0, c = 0;
-    conversions[0] = 0;
-    memcpy(result, msl, (size_t)(in_struct - msl));
-    n = (size_t)(in_struct - msl);
-    const char *line = in_struct;
-    while (line < struct_end + 1) {
-        const char *eol = strchr(line, '\n');
-        if (!eol) break;
-        char type[16], name[64];
-        int width = 0, location = -1;
-        char buffer[256];
-        size_t length = (size_t)(eol - line);
-        if (length < sizeof buffer) {
-            memcpy(buffer, line, length);
-            buffer[length] = 0;
-        } else {
-            buffer[0] = 0;
-        }
-        bool patched = false;
-        if (sscanf(buffer, " %15[a-z0-9] %63[A-Za-z0-9_] [[attribute(%d)]];", type, name, &location) == 3 && location >= 0 &&
-            location < 32 && (((uint_inputs | int_inputs) >> location) & 1) && !strncmp(type, "float", 5) &&
-            name_count < 32) {
-            width = type[5] ? type[5] - '0' : 1;
-            const char *itype = (uint_inputs >> location) & 1 ? "uint" : "int";
-            char suffix[2] = {width > 1 ? (char)('0' + width) : 0, 0};
-            n += (size_t)snprintf(result + n, cap - n, "    %s%s glm_int_%s [[attribute(%d)]];\n", itype, suffix, name, location);
-            c += (size_t)snprintf(conversions + c, 4096 - c, "    %s glm_in_%s = %s(in.glm_int_%s);\n", type, name, type, name);
-            snprintf(names[name_count++], 64, "%s", name);
-            patched = true;
-        }
-        if (!patched) {
-            memcpy(result + n, line, length + 1);
-            n += length + 1;
-        }
-        line = eol + 1;
-    }
-    if (!name_count) {
-        free(result);
-        free(conversions);
-        return NULL;
-    }
-    /* Up to the body, then the conversions, then the body with in.<name>
-       reads replaced by the converted locals. */
-    size_t middle = (size_t)(body_start - line);
-    memcpy(result + n, line, middle);
-    n += middle;
-    memcpy(result + n, conversions, c);
-    n += c;
-    free(conversions);
-    for (const char *q = body_start; *q;) {
-        bool replaced = false;
-        if (q[0] == 'i' && q[1] == 'n' && q[2] == '.' && (q == msl || !(isalnum((unsigned char)q[-1]) || q[-1] == '_' || q[-1] == '.'))) {
-            for (int k = 0; k < name_count; ++k) {
-                size_t len = strlen(names[k]);
-                if (!strncmp(q + 3, names[k], len) && !(isalnum((unsigned char)q[3 + len]) || q[3 + len] == '_')) {
-                    n += (size_t)snprintf(result + n, cap - n, "glm_in_%s", names[k]);
-                    q += 3 + len;
-                    replaced = true;
-                    break;
-                }
-            }
-        }
-        if (!replaced) {
-            if (n + 1 >= cap) {
-                free(result);
-                return NULL;
-            }
-            result[n++] = *q++;
-        }
-    }
-    result[n] = 0;
-    return result;
 }
 
 /* The fragment function with the legacy alpha test applied to colour 0
@@ -3443,7 +3323,8 @@ static char *alpha_variant_msl(const char *source_msl, uint32_t variant)
     static const char *const tests[] = {"false", "<", "==", "<=", ">", "!=", ">=", "true"};
     char *flat = variant & GLM_VARIANT_FLAT_COLORS ? flat_colors_msl(source_msl) : NULL;
     uint32_t func = variant & 0xff;
-    if (!func) return flat;
+    bool dynamic = variant & GLM_VARIANT_DYNAMIC_ALPHA;
+    if (!func && !dynamic) return flat;
     const char *msl = flat ? flat : source_msl;
     if (func > 8) { free(flat); return NULL; }
     const char *out_struct = strstr(msl, "struct main0_out");
@@ -3457,16 +3338,25 @@ static char *alpha_variant_msl(const char *source_msl, uint32_t variant)
     const char *entry = strstr(msl, "fragment main0_out main0(");
     const char *signature_end = entry ? strstr(entry, ")\n{") : NULL;
     if (!signature_end) { free(flat); return NULL; }
-    char test[256];
-    if (func == 1) snprintf(test, sizeof test, "{ discard_fragment(); return out; }");
+    const char *first_parameter = entry + strlen("fragment main0_out main0(");
+    while (first_parameter < signature_end && isspace((unsigned char)*first_parameter)) ++first_parameter;
+    bool has_parameters = first_parameter != signature_end;
+    char test[1024];
+    if (dynamic) snprintf(test, sizeof test,
+        "{ float a = out.%s.a; float r = glm_alpha_state.x; uint f = uint(glm_alpha_state.y); "
+        "if (!(f == 0 || f == 8 || (f == 2 && a < r) || (f == 3 && a == r) || "
+        "(f == 4 && a <= r) || (f == 5 && a > r) || (f == 6 && a != r) || (f == 7 && a >= r))) "
+        "discard_fragment(); return out; }", member);
+    else if (func == 1) snprintf(test, sizeof test, "{ discard_fragment(); return out; }");
     else if (func == 8) snprintf(test, sizeof test, "return out;");
     else snprintf(test, sizeof test, "{ if (!(out.%s.a %s glm_alpha_ref)) discard_fragment(); return out; }", member, tests[func - 1]);
     size_t cap = strlen(msl) * 2 + 4096, n = 0;
     char *result = malloc(cap);
-    const char *param = ", constant float& glm_alpha_ref [[buffer(23)]]";
+    const char *param = dynamic ? ", constant float2& glm_alpha_state [[buffer(23)]]" :
+                                  ", constant float& glm_alpha_ref [[buffer(23)]]";
     for (const char *q = msl; *q;) {
         if (q == signature_end) {
-            n += (size_t)snprintf(result + n, cap - n, "%s", param);
+            n += (size_t)snprintf(result + n, cap - n, "%s", has_parameters ? param : param + 2);
         }
         if (q > signature_end && !strncmp(q, "return out;", 11)) {
             n += (size_t)snprintf(result + n, cap - n, "%s", test);
@@ -3489,6 +3379,19 @@ static char *alpha_variant_msl(const char *source_msl, uint32_t variant)
     return result;
 }
 
+/* ARB programs have no compile-time alpha state. Keep every comparison in
+   one native fragment function and select it with uniforms at each draw. */
+void glm_backend_prepare_arb_fragment(struct glm_program *p)
+{
+    p->dynamic_alpha = false;
+    if (!p->result.msl[GLM_STAGE_FRAGMENT]) return;
+    char *patched = alpha_variant_msl(p->result.msl[GLM_STAGE_FRAGMENT], GLM_VARIANT_DYNAMIC_ALPHA);
+    if (!patched) return;
+    free(p->result.msl[GLM_STAGE_FRAGMENT]);
+    p->result.msl[GLM_STAGE_FRAGMENT] = patched;
+    p->dynamic_alpha = true;
+}
+
 /* Shader work can start asynchronously, but its first consumer must wait.
    Dropping a draw or clear can leave cached shadow maps corrupted indefinitely. */
 static id<MTLFunction> variant_function(struct glm_int_variant *v)
@@ -3499,7 +3402,7 @@ static id<MTLFunction> variant_function(struct glm_int_variant *v)
     if (!ready) {
         uint64_t started = glm_now_ns();
         dispatch_group_wait((__bridge dispatch_group_t)v->group, DISPATCH_TIME_FOREVER);
-        glm_note_stall(v->border_mask ? "border emulation variant" : "integer input variant", started);
+        glm_note_stall(v->border_mask ? "border emulation variant" : "alpha test variant", started);
     }
     pthread_mutex_lock(&variant_lock);
     id<MTLFunction> function = (__bridge id<MTLFunction>)v->function;
@@ -3507,9 +3410,7 @@ static id<MTLFunction> variant_function(struct glm_int_variant *v)
     return function;
 }
 
-/* A recompiled stage of the program: the vertex function with the float
-   inputs in `uint_inputs` / `int_inputs` declared as integers, or (with
-   `border_mask`) the fragment function emulating those samplers' borders.
+/* A recompiled fragment stage with alpha-test or sampler-border behavior.
    Compiled in the background and waited for (see variant_function); the
    variant is shared by the program and the job. */
 static id<MTLFunction> program_variant(struct glm_program *p, uint32_t uint_inputs,
@@ -3524,17 +3425,14 @@ static id<MTLFunction> program_variant(struct glm_program *p, uint32_t uint_inpu
     }
     int stage = border_mask ? GLM_STAGE_FRAGMENT : GLM_STAGE_VERTEX;
     if (p->int_variant_count == 16) return nil;
-    /* Alpha test: patch the fragment MSL. Integer inputs: patch the
-       program's own MSL (cheap), else recompile. */
-    char *patched = alpha_func ? (p->result.msl[GLM_STAGE_FRAGMENT] ? alpha_variant_msl(p->result.msl[GLM_STAGE_FRAGMENT], alpha_func) : NULL)
-                    : !border_mask && p->result.msl[GLM_STAGE_VERTEX] && !getenv("GLMETAL_NO_MSL_VARIANTS")
-                        ? int_variant_msl(p->result.msl[GLM_STAGE_VERTEX], uint_inputs, int_inputs)
-                        : NULL;
+    /* Alpha test is shader behavior; vertex storage formats are handled
+       by the native vertex descriptor without recompiling shader sources. */
+    char *patched = alpha_func && p->result.msl[GLM_STAGE_FRAGMENT]
+                        ? alpha_variant_msl(p->result.msl[GLM_STAGE_FRAGMENT], alpha_func) : NULL;
     if (alpha_func && !patched) return nil;
     if (patched) {
-        GLMCompiledFunction *entry = function_entry(@(patched));
+        GLMCompiledFunction *entry = function_entry(@(patched), false);
         free(patched);
-        if (!alpha_func) remember_variant(p->result.msl[GLM_STAGE_VERTEX], uint_inputs, int_inputs);
         struct glm_int_variant *v = calloc(1, sizeof *v);
         v->uint_inputs = uint_inputs;
         v->int_inputs = int_inputs;
@@ -4124,40 +4022,10 @@ bool glm_backend_draw_gpu(struct glm_context *ctx, GLenum mode, GLint first, GLs
     /* Vertex layout. */
     uint32_t used, integer, unsigned_mask;
     vertex_inputs(&st, &used, &integer, &unsigned_mask);
-    /* Unnormalized integer arrays for float inputs: Metal fetches them only
-       into integer inputs, so the program's integer variant draws. */
+    /* Metal's vertex descriptor converts integer storage to float inputs,
+       including component expansion to (0, 0, 0, 1). Keep the original
+       vertex function so changing array formats never compiles a shader. */
     b->vertex_override = nil;
-    uint32_t convert_uint = 0, convert_int = 0;
-    for (uint32_t bits = used & ~integer; bits; bits &= bits - 1) {
-        int i = __builtin_ctz(bits);
-        const struct glm_array *a = &ctx->vao->arrays[i];
-        if (!a->enabled || a->normalized || a->integer) continue;
-        if (a->type == GL_UNSIGNED_BYTE || a->type == GL_UNSIGNED_SHORT || a->type == GL_UNSIGNED_INT) convert_uint |= 1u << i;
-        else if (a->type == GL_BYTE || a->type == GL_SHORT || a->type == GL_INT) convert_int |= 1u << i;
-    }
-    static int no_variants = -1;
-    if (no_variants < 0) no_variants = getenv("GLMETAL_NO_INT_VARIANTS") != NULL;
-    if ((convert_uint | convert_int) && no_variants) return gpu_fallback("integer data for float inputs (variants off)");
-    if (convert_uint | convert_int) {
-        if (!st.vertex_program || st.vertex_program != st.program) return gpu_fallback("integer data for float inputs");
-        id<MTLFunction> variant = program_variant(st.vertex_program, convert_uint, convert_int, 0, 0);
-        if (!variant) return gpu_fallback("integer input variant failed");
-        b->vertex_override = variant;
-        integer |= convert_uint | convert_int;
-        unsigned_mask |= convert_uint;
-    }
-    /* Border colours / GL_CLAMP Metal's samplers cannot give: the program's
-       border emulation variant draws once compiled. */
-    b->fragment_override = nil;
-    b->border_mask = 0;
-    if (__atomic_load_n(&glm_custom_borders, __ATOMIC_RELAXED) && st.program && st.fragment_program == st.program) {
-        uint32_t mask = glm_program_border_mask(ctx, st.program, b->border_data);
-        id<MTLFunction> variant = mask ? program_variant(st.program, 0, 0, mask, 0) : nil;
-        if (variant) {
-            b->fragment_override = variant;
-            b->border_mask = mask;
-        }
-    }
     static __thread struct gpu_layout cache;
     struct gpu_layout *L = &cache;
     uint64_t buffer_generation = __atomic_load_n(&glm_object_generation, __ATOMIC_ACQUIRE);

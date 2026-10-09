@@ -470,6 +470,8 @@ struct Bindings {
     std::map<std::string, int> attributes, outputs;
     uint32_t uint_inputs = 0, int_inputs = 0; // glm_compile_request's
     std::map<std::string, int> border;        // glm_compile_request's border_samplers: name -> base slot
+    std::set<std::string> shadow_border;     // shadow borders need two raw depth samplers
+    bool unsupported_shadow_border = false;
     // Transform feedback capture (vertex stage): varyings in order.
     std::vector<std::string> feedback;
     bool interleaved = true, capture = false, fp64 = false;
@@ -2694,10 +2696,17 @@ const char border_code[] =
     "vec4 glm_border(vec4 a, vec4 w, int k) { vec4 c = glm_border_color[k]; vec4 v = mix(a, w, c); return mix(mix(v, a, equal(c, vec4(0.0))), w, equal(c, vec4(1.0))); }\n"
     "float glm_border_p(float p, int k) { return mix(p, clamp(p, 0.0, 1.0), glm_border_clamp[k].x); }\n"
     "vec2 glm_border_p(vec2 p, int k) { return mix(p, clamp(p, 0.0, 1.0), glm_border_clamp[k].xy); }\n"
-    "vec3 glm_border_p(vec3 p, int k) { return mix(p, clamp(p, 0.0, 1.0), glm_border_clamp[k].xyz); }\n";
+    "vec3 glm_border_p(vec3 p, int k) { return mix(p, clamp(p, 0.0, 1.0), glm_border_clamp[k].xyz); }\n"
+    "float glm_shadow_ref(float r, int k) { return glm_border_color[k].z != 0.0 ? clamp(r, 0.0, 1.0) : r; }\n"
+    "float glm_shadow_compare(float r, float d, int k) { int f = int(glm_border_color[k].y); "
+    "return f == 0 ? 0.0 : f == 1 ? float(r < d) : f == 2 ? float(r == d) : f == 3 ? float(r <= d) : "
+    "f == 4 ? float(r > d) : f == 5 ? float(r != d) : f == 6 ? float(r >= d) : 1.0; }\n"
+    "float glm_shadow_border(float a, float b, float w, float r, int k) { r = glm_shadow_ref(r, k); "
+    "return a + (w - b) * (glm_shadow_compare(r, glm_border_color[k].x, k) - glm_shadow_compare(r, 0.0, k)); }\n";
 
 // Sampling calls on `declared` samplers, repeated with glm_bw_<name>.
-std::string border_calls(const std::string &text, const std::map<std::string, int> &declared)
+std::string border_calls(const std::string &text, const std::map<std::string, int> &declared,
+                         const std::map<std::string, std::string> &shadow_types)
 {
     // GL_CLAMP clamps the coordinate (argument 2) of these; projective ones
     // are sampled unclamped.
@@ -2749,8 +2758,37 @@ std::string border_calls(const std::string &text, const std::map<std::string, in
             result += word;
             continue;
         }
-        for (size_t a = 1; a < args.size(); ++a) args[a] = border_calls(args[a], declared);
+        for (size_t a = 1; a < args.size(); ++a) args[a] = border_calls(args[a], declared, shadow_types);
         std::string k = std::to_string(found->second);
+        auto shadow = shadow_types.find(sampler);
+        if (shadow != shadow_types.end()) {
+            bool array2d = shadow->second == "sampler2DArrayShadow";
+            bool array1d = shadow->second == "sampler1DArrayShadow";
+            std::string p = "(" + args[1] + ")";
+            std::string coordinate = p + (array2d ? ".xyz" : ".xy");
+            std::string reference = p + (array2d ? ".w" : ".z");
+            if (proj) {
+                coordinate = "(" + coordinate + " / " + p + ".w)";
+                reference = "(" + reference + " / " + p + ".w)";
+            }
+            // Array layers and comparison references are never GL_CLAMP axes.
+            coordinate = "glm_border_p(" + coordinate + ", " + k + ")";
+            std::string comparison = (array2d ? "vec4(" : "vec3(") + coordinate + ", " + reference + ")";
+            std::string call = word;
+            if (proj) {
+                size_t at = call.find("Proj");
+                call.erase(at, 4);
+            }
+            std::string tail;
+            for (size_t a = 2; a < args.size(); ++a) tail += "," + args[a];
+            std::string base = call + "(" + sampler + ", " + comparison + tail + ")";
+            std::string raw = coordinate;
+            if (array1d) raw = "(" + coordinate + ").xy";
+            result += "glm_shadow_border(" + base + ", " + call + "(glm_bb_" + sampler + ", " + raw + tail + ").r, " +
+                      call + "(glm_bw_" + sampler + ", " + raw + tail + ").r, " + reference + ", " + k + ")";
+            i = j + 1;
+            continue;
+        }
         if (clamp) args[1] = "glm_border_p(" + args[1] + ", " + k + ")";
         std::string rest;
         for (size_t a = 1; a < args.size(); ++a) rest += "," + args[a];
@@ -2760,13 +2798,48 @@ std::string border_calls(const std::string &text, const std::map<std::string, in
     return result;
 }
 
-std::string border_rewrite(const std::string &text, const std::map<std::string, int> &border)
+// Reject unsupported shadow uses once during variant compilation. The driver
+// retains its ordinary sampler when no border variant is available.
+static bool shadow_border_direct_calls(const std::string &text, const std::string &name)
 {
-    std::string out = text;
+    static const std::set<std::string> supported = {
+        "texture", "textureLod", "textureOffset", "textureLodOffset", "textureGrad", "textureGradOffset",
+        "textureProj", "textureProjLod", "textureProjOffset", "textureProjLodOffset", "textureProjGrad",
+        "textureSize", "textureQueryLod"};
+    std::vector<std::pair<size_t, size_t>> declarations;
+    std::regex declaration("uniform\\s+(?:(?:lowp|mediump|highp)\\s+)?sampler\\w*\\s+[^;]+;");
+    for (std::sregex_iterator it(text.begin(), text.end(), declaration), last; it != last; ++it)
+        declarations.emplace_back(it->position(), it->position() + it->length());
+    for (size_t at = 0; at < text.size();) {
+        if (!ident_start(text[at])) { ++at; continue; }
+        size_t begin = at++;
+        while (at < text.size() && ident_char(text[at])) ++at;
+        if (text.compare(begin, at - begin, name)) continue;
+        bool declaration_use = false;
+        for (const auto &range : declarations)
+            declaration_use |= begin >= range.first && begin < range.second;
+        if (declaration_use) continue;
+        size_t open = begin;
+        while (open && std::isspace(static_cast<unsigned char>(text[open - 1]))) --open;
+        if (!open || text[open - 1] != '(') return false;
+        size_t end = open - 1;
+        while (end && std::isspace(static_cast<unsigned char>(text[end - 1]))) --end;
+        size_t start = end;
+        while (start && ident_char(text[start - 1])) --start;
+        if (!supported.count(text.substr(start, end - start))) return false;
+    }
+    return true;
+}
+
+std::string border_rewrite(const std::string &text, const std::map<std::string, int> &border,
+                           std::set<std::string> &shadow_border, bool &unsupported)
+{
+    std::string out = preprocessed(text, EShLangFragment);
     std::map<std::string, int> declared;
+    std::map<std::string, std::string> shadow_types;
     for (auto &[name, slot] : border) {
         std::regex decl("uniform\\s+(?:(?:lowp|mediump|highp)\\s+)?(sampler1D|sampler2D|sampler3D|sampler2DRect|"
-                        "sampler1DArray|sampler2DArray)\\s+([^;]+);");
+                        "sampler1DArray|sampler2DArray|sampler2DShadow|sampler1DArrayShadow|sampler2DArrayShadow)\\s+([^;]+);");
         std::regex scalar("(^|,)\\s*" + name + "\\s*(,|$)");
         std::smatch m;
         bool found = false;
@@ -2780,13 +2853,30 @@ std::string border_rewrite(const std::string &text, const std::map<std::string, 
             break;
         }
         if (!found) continue;
-        out.insert(end, " uniform " + type + " glm_bw_" + name + ";");
+        if (type.find("Shadow") != std::string::npos) {
+            if (!shadow_border_direct_calls(out, name)) {
+                unsupported = true;
+                return text;
+            }
+            shadow_types[name] = type;
+            shadow_border.insert(name);
+            type.erase(type.find("Shadow"));
+            out.insert(end, " uniform " + type + " glm_bb_" + name + "; uniform " + type + " glm_bw_" + name + ";");
+        } else out.insert(end, " uniform " + type + " glm_bw_" + name + ";");
         declared[name] = slot;
     }
     if (declared.empty()) return text;
-    std::string result = border_calls(out, declared);
+    std::string result = border_calls(out, declared, shadow_types);
     size_t line = result.find("#line 1\n");
-    if (line == std::string::npos) line = 0;
+    if (line == std::string::npos) {
+        line = 0;
+        while (line < result.size()) {
+            size_t first = result.find_first_not_of(" \t\r\n", line);
+            if (first == std::string::npos || result[first] != '#') break;
+            size_t end = result.find('\n', first);
+            line = end == std::string::npos ? result.size() : end + 1;
+        }
+    }
     result.insert(line, border_code);
     return result;
 }
@@ -2883,8 +2973,14 @@ static void compile_program(const glm_compile_request *req, glm_compile_result *
             compile_program(req, result, capture, false);
             return;
         }
-        if (s == GLM_STAGE_FRAGMENT && !bindings.border.empty())
-            prepared[s].text = border_rewrite(prepared[s].text, bindings.border);
+        if (s == GLM_STAGE_FRAGMENT && !bindings.border.empty()) {
+            prepared[s].text = border_rewrite(prepared[s].text, bindings.border, bindings.shadow_border,
+                                             bindings.unsupported_shadow_border);
+            if (bindings.unsupported_shadow_border) {
+                result->log = copy("Shadow border variant requires direct supported sampling calls.");
+                return;
+            }
+        }
         auto shader = std::make_unique<glslang::TShader>(language(static_cast<glm_stage>(s)));
         const char *text = prepared[s].text.c_str();
         shader->setStrings(&text, 1);
@@ -2999,7 +3095,7 @@ static void compile_program(const glm_compile_request *req, glm_compile_result *
         auto resources = reflect.get_shader_resources();
         for (auto &image : resources.sampled_images) {
             std::string name = reflect.get_name(image.id);
-            if (name.rfind("glm_bw_", 0) == 0) continue; // after the program's own samplers, below
+            if (name.rfind("glm_bw_", 0) == 0 || name.rfind("glm_bb_", 0) == 0) continue; // after the program's own samplers, below
             if (!sampler_slots.count(name)) {
                 int slot = static_cast<int>(sampler_slots.size());
                 sampler_slots[name] = slot;
@@ -3195,8 +3291,12 @@ static void compile_program(const glm_compile_request *req, glm_compile_result *
     // (the backend binds them there).
     {
         int next = static_cast<int>(sampler_slots.size());
-        for (int k = 0; k < 32; ++k)
-            if (req->border_samplers[k]) sampler_slots[std::string("glm_bw_") + req->border_samplers[k]] = next++;
+        for (int k = 0; k < 32; ++k) {
+            if (!req->border_samplers[k]) continue;
+            std::string name = req->border_samplers[k];
+            if (bindings.shadow_border.count(name)) sampler_slots["glm_bb_" + name] = next++;
+            sampler_slots["glm_bw_" + name] = next++;
+        }
     }
     // MSL per stage.
     for (int s = 0; s < GLM_STAGE_COUNT; ++s) {

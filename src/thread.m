@@ -25,7 +25,8 @@ struct glm_thread {
     uint64_t submitted;         /* batches handed to the worker */
     uint64_t completed;         /* batches executed (under lock) */
     uint64_t frames_recorded, frames_executed;
-    volatile int64_t pending[2]; /* recorded, unexecuted: [0] state changes, [1] texture-object changes */
+    /* Recorded, unexecuted: state, texture objects, texture-level metadata. */
+    volatile int64_t pending[3];
     /* Commands recorded (application thread) and executed (worker). */
     uint64_t recorded;
     volatile uint64_t executed;

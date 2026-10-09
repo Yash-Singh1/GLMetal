@@ -84,6 +84,8 @@ struct shadow_vao {
     GLuint name, element_buffer;
     uint32_t enabled;       /* attribute arrays enabled */
     GLuint buffer[GLM_MAX_ATTRIBS];
+    struct glm_array arrays[GLM_MAX_ATTRIBS];
+    uint32_t arrays_known;
 };
 
 /* Where each query's glEndQuery sits in the command stream, so result
@@ -122,6 +124,7 @@ struct glm_shadow {
     /* Capabilities glIsEnabled asks about most, and the colour mask
        (draw buffer 0), seeded when the shadow is refreshed. */
     uint32_t caps, caps_known;
+    bool primitive_restart, immediate;
     GLboolean color_mask[4];
     bool color_mask_known;
     /* GL_DRAW_BUFFER (draw buffer 0) per draw framebuffer. */
@@ -254,9 +257,10 @@ static int shadow_query_slot(const struct glm_context *ctx, GLenum cap)
 
 static void shadow_set_cap(struct glm_context *ctx, GLenum cap, bool value)
 {
+    struct glm_shadow *s = shadow(ctx);
+    if (cap == GL_PRIMITIVE_RESTART) s->primitive_restart = value;
     int slot = shadow_cap_slot(cap);
     if (slot < 0) return;
-    struct glm_shadow *s = shadow(ctx);
     if (value) s->caps |= 1u << slot;
     else s->caps &= ~(1u << slot);
     s->caps_known |= 1u << slot;
@@ -319,6 +323,8 @@ void glm_shadow_refresh(struct glm_context *ctx)
 {
     struct glm_shadow *s = shadow(ctx);
     const struct glm_state *st = &ctx->state;
+    s->primitive_restart = st->primitive_restart;
+    s->immediate = ctx->immediate != NULL;
     s->array_buffer = ctx->array_buffer;
     s->pixel_pack = ctx->pixel_pack_buffer;
     s->pixel_unpack = ctx->pixel_unpack_buffer;
@@ -380,7 +386,9 @@ void glm_shadow_refresh(struct glm_context *ctx)
     for (int i = 0; i < GLM_MAX_ATTRIBS; ++i) {
         if (ctx->vao->arrays[i].enabled) v->enabled |= 1u << i;
         v->buffer[i] = ctx->vao->arrays[i].buffer;
+        v->arrays[i] = ctx->vao->arrays[i];
     }
+    v->arrays_known = UINT32_MAX;
     s->vao = v;
 }
 
@@ -416,9 +424,16 @@ static void set_enabled(struct glm_shadow *s, int slot, bool on)
     else s->vao->enabled &= ~(1u << slot);
 }
 
-static void set_pointer(struct glm_shadow *s, int slot)
+static void set_pointer(struct glm_shadow *s, int slot, GLint size, GLenum type, bool normalized,
+                        GLsizei stride, const void *pointer, bool integer)
 {
-    if (slot >= 0 && slot < GLM_MAX_ATTRIBS) s->vao->buffer[slot] = s->array_buffer;
+    /* Match set_array's validation before changing either descriptor shadow. */
+    if (s->immediate || slot < 0 || slot >= GLM_MAX_ATTRIBS || stride < 0) return;
+    struct glm_array *a = &s->vao->arrays[slot];
+    a->size = size; a->type = type; a->normalized = normalized; a->integer = integer;
+    a->stride = stride; a->pointer = pointer; a->buffer = s->array_buffer;
+    s->vao->buffer[slot] = s->array_buffer;
+    s->vao->arrays_known |= 1u << slot;
 }
 
 static int texture_slot(GLenum target)
@@ -495,7 +510,7 @@ void glm_shadow_glDeleteBuffers(struct glm_context *ctx, GLsizei n, const GLuint
         if (s->texture_buffer == name) s->texture_buffer = 0;
         if (s->vao->element_buffer == name) s->vao->element_buffer = 0;
         for (int a = 0; a < GLM_MAX_ATTRIBS; ++a)
-            if (s->vao->buffer[a] == name) s->vao->buffer[a] = 0;
+            if (s->vao->buffer[a] == name) { s->vao->buffer[a] = 0; s->vao->arrays[a].buffer = 0; }
         struct shadow_buffer *b = shadow_buffer(s, name, false);
         if (b) *b = s->buffers[--s->buffer_count];
     }
@@ -544,59 +559,46 @@ void glm_shadow_glClientActiveTextureARB(struct glm_context *ctx, GLenum unit) {
 void glm_shadow_glVertexAttribPointer(struct glm_context *ctx, GLuint index, GLint size, GLenum type, GLboolean normalized,
                                       GLsizei stride, const GLvoid *pointer)
 {
-    set_pointer(shadow(ctx), (int)index);
+    if (index < GLM_MAX_ATTRIBS) set_pointer(shadow(ctx), (int)index, size, type, normalized, stride, pointer, false);
 }
 void glm_shadow_glVertexAttribPointerARB(struct glm_context *ctx, GLuint index, GLint size, GLenum type,
                                          GLboolean normalized, GLsizei stride, const GLvoid *pointer)
-{
-    set_pointer(shadow(ctx), (int)index);
-}
+{ glm_shadow_glVertexAttribPointer(ctx, index, size, type, normalized, stride, pointer); }
 void glm_shadow_glVertexAttribIPointer(struct glm_context *ctx, GLuint index, GLint size, GLenum type, GLsizei stride,
                                        const GLvoid *pointer)
 {
-    set_pointer(shadow(ctx), (int)index);
+    if (index < GLM_MAX_ATTRIBS) set_pointer(shadow(ctx), (int)index, size, type, false, stride, pointer, true);
 }
 void glm_shadow_glVertexAttribIPointerEXT(struct glm_context *ctx, GLuint index, GLint size, GLenum type, GLsizei stride,
                                           const GLvoid *pointer)
-{
-    set_pointer(shadow(ctx), (int)index);
-}
+{ glm_shadow_glVertexAttribIPointer(ctx, index, size, type, stride, pointer); }
 void glm_shadow_glVertexPointer(struct glm_context *ctx, GLint size, GLenum type, GLsizei stride, const GLvoid *pointer)
-{
-    set_pointer(shadow(ctx), GLM_ATTR_POSITION);
-}
+{ set_pointer(shadow(ctx), GLM_ATTR_POSITION, size, type, false, stride, pointer, false); }
 void glm_shadow_glNormalPointer(struct glm_context *ctx, GLenum type, GLsizei stride, const GLvoid *pointer)
-{
-    set_pointer(shadow(ctx), GLM_ATTR_NORMAL);
-}
+{ set_pointer(shadow(ctx), GLM_ATTR_NORMAL, 3, type, true, stride, pointer, false); }
 void glm_shadow_glColorPointer(struct glm_context *ctx, GLint size, GLenum type, GLsizei stride, const GLvoid *pointer)
-{
-    set_pointer(shadow(ctx), GLM_ATTR_COLOR);
-}
-void glm_shadow_glSecondaryColorPointer(struct glm_context *ctx, GLint size, GLenum type, GLsizei stride, const GLvoid *pointer)
-{
-    set_pointer(shadow(ctx), GLM_ATTR_SECONDARY_COLOR);
-}
+{ set_pointer(shadow(ctx), GLM_ATTR_COLOR, size, type, true, stride, pointer, false); }
+void glm_shadow_glSecondaryColorPointer(struct glm_context *ctx, GLint size, GLenum type, GLsizei stride,
+                                        const GLvoid *pointer)
+{ set_pointer(shadow(ctx), GLM_ATTR_SECONDARY_COLOR, size, type, true, stride, pointer, false); }
 void glm_shadow_glSecondaryColorPointerEXT(struct glm_context *ctx, GLint size, GLenum type, GLsizei stride,
                                            const GLvoid *pointer)
-{
-    set_pointer(shadow(ctx), GLM_ATTR_SECONDARY_COLOR);
-}
+{ glm_shadow_glSecondaryColorPointer(ctx, size, type, stride, pointer); }
 void glm_shadow_glFogCoordPointer(struct glm_context *ctx, GLenum type, GLsizei stride, const GLvoid *pointer)
-{
-    set_pointer(shadow(ctx), GLM_ATTR_FOG);
-}
+{ set_pointer(shadow(ctx), GLM_ATTR_FOG, 1, type, false, stride, pointer, false); }
 void glm_shadow_glFogCoordPointerEXT(struct glm_context *ctx, GLenum type, GLsizei stride, const GLvoid *pointer)
-{
-    set_pointer(shadow(ctx), GLM_ATTR_FOG);
-}
+{ glm_shadow_glFogCoordPointer(ctx, type, stride, pointer); }
 void glm_shadow_glTexCoordPointer(struct glm_context *ctx, GLint size, GLenum type, GLsizei stride, const GLvoid *pointer)
 {
     struct glm_shadow *s = shadow(ctx);
-    set_pointer(s, GLM_ATTR_TEX0 + (int)(s->client_active_texture - GL_TEXTURE0));
+    set_pointer(s, GLM_ATTR_TEX0 + (int)((s->client_active_texture - GL_TEXTURE0) & 7), size, type, false, stride, pointer, false);
 }
-void glm_shadow_glVertexAttribDivisor(struct glm_context *ctx, GLuint index, GLuint divisor) {}
-void glm_shadow_glVertexAttribDivisorARB(struct glm_context *ctx, GLuint index, GLuint divisor) {}
+void glm_shadow_glVertexAttribDivisor(struct glm_context *ctx, GLuint index, GLuint divisor)
+{
+    if (index < GLM_MAX_ATTRIBS) shadow(ctx)->vao->arrays[index].divisor = divisor;
+}
+void glm_shadow_glVertexAttribDivisorARB(struct glm_context *ctx, GLuint index, GLuint divisor)
+{ glm_shadow_glVertexAttribDivisor(ctx, index, divisor); }
 
 void glm_shadow_glUseProgram(struct glm_context *ctx, GLuint program) { shadow(ctx)->program = program; }
 void glm_shadow_glUseProgramObjectARB(struct glm_context *ctx, GLhandleARB program)
@@ -714,6 +716,13 @@ void glm_shadow_glDrawBuffersARB(struct glm_context *ctx, GLsizei n, const GLenu
 
 /* ---- draws ------------------------------------------------------------------ */
 
+void glm_shadow_glBegin(struct glm_context *ctx, GLenum mode)
+{
+    struct glm_shadow *s = shadow(ctx);
+    if (!s->immediate && mode <= GL_TRIANGLE_STRIP_ADJACENCY) s->immediate = true;
+}
+void glm_shadow_glEnd(struct glm_context *ctx) { shadow(ctx)->immediate = false; }
+
 /* Draws compiled into a display list keep their vertices (GL 2.1 5.4). */
 static bool draw_arrays_list(struct glm_context *ctx, GLenum mode, GLint first, GLsizei count, GLsizei instances)
 {
@@ -738,6 +747,7 @@ static bool draw_elements_list(struct glm_context *ctx, GLenum mode, GLsizei cou
             *c = (struct name##_cmd){__VA_ARGS__};                                                         \
             return;                                                                                        \
         }                                                                                                  \
+        if (name##_record_client(ctx, __VA_ARGS__)) return;                                             \
         glm_thread_sync_named(ctx, #name);                                                                 \
     }
 
@@ -748,6 +758,10 @@ static void draw_arrays_exec(const void *p)
     const struct draw_arrays_cmd *c = p;
     if (c->instances == 1) glm_impl_glDrawArrays(c->mode, c->first, c->count);
     else glm_impl_glDrawArraysInstanced(c->mode, c->first, c->count, c->instances);
+}
+static bool draw_arrays_record_client(struct glm_context *ctx, GLenum mode, GLint first, GLsizei count, GLsizei instances)
+{
+    return false;
 }
 GLM_EXPORT void glDrawArrays(GLenum mode, GLint first, GLsizei count)
 {
@@ -771,6 +785,155 @@ static void draw_elements_exec(const void *p)
 {
     const struct draw_elements_cmd *c = p;
     glm_impl_glDrawElementsInstancedBaseVertex(c->mode, c->count, c->type, c->indices, c->instances, c->base);
+}
+/* A bounded prefix keeps the original indices, base vertex and gl_VertexID.
+   Only referenced elements are read; holes and stride padding stay zero. */
+struct client_vertices_cmd {
+    struct draw_elements_cmd draw;
+    uint32_t mask;
+    struct glm_array arrays[GLM_MAX_ATTRIBS];
+};
+static void client_vertices_exec(const void *raw)
+{
+    const struct client_vertices_cmd *c = raw;
+    struct glm_context *ctx = glm_current();
+    struct glm_vertex_array *saved = ctx->vao;
+    struct glm_vertex_array copy = *saved;
+    for (uint32_t bits = c->mask; bits; bits &= bits - 1) {
+        unsigned i = __builtin_ctz(bits);
+        copy.arrays[i] = c->arrays[i];
+        copy.arrays[i].enabled = true;
+    }
+    /* Batch addresses repeat and layouts cache their VAO pointer and serial. */
+    glm_vao_changed(&copy);
+    ctx->vao = &copy;
+    draw_elements_exec(&c->draw);
+    ctx->vao = saved;
+}
+static uint32_t snapshot_index(const unsigned char *indices, size_t width, GLsizei i)
+{
+    uint32_t value = 0;
+    if (width == 1) value = indices[i];
+    else if (width == 2) { uint16_t v; memcpy(&v, indices + (size_t)i * width, width); value = v; }
+    else memcpy(&value, indices + (size_t)i * width, width);
+    return value;
+}
+static size_t snapshot_element(const struct glm_array *a)
+{
+    if (a->size < 1 || a->size > 4 || a->stride < 0) return 0;
+    size_t width;
+    switch (a->type) {
+    case GL_BYTE: case GL_UNSIGNED_BYTE: width = 1; break;
+    case GL_SHORT: case GL_UNSIGNED_SHORT: case GL_HALF_FLOAT: width = 2; break;
+    case GL_INT: case GL_UNSIGNED_INT: case GL_FLOAT: case GL_FIXED: width = 4; break;
+    case GL_DOUBLE: width = 8; break;
+    default: return 0;
+    }
+    return width * (size_t)a->size;
+}
+static bool record_client_vertices(struct glm_context *ctx, GLenum mode, GLsizei count, GLenum type,
+                                   const void *indices, GLsizei instances, GLint base, size_t width)
+{
+    struct glm_shadow *s = shadow(ctx);
+    struct shadow_vao *v = s->vao;
+    if (ctx->profile != GLM_PROFILE_LEGACY || instances != 1 || base < 0 || s->primitive_restart) return false;
+    uint32_t mask = 0;
+    for (uint32_t bits = v->enabled; bits; bits &= bits - 1) {
+        unsigned i = __builtin_ctz(bits);
+        if (!v->buffer[i]) mask |= 1u << i;
+    }
+    if (!mask || (mask & ~v->arrays_known)) return false;
+    size_t element[GLM_MAX_ATTRIBS] = {0}, stride[GLM_MAX_ATTRIBS] = {0};
+    for (uint32_t bits = mask; bits; bits &= bits - 1) {
+        unsigned i = __builtin_ctz(bits);
+        const struct glm_array *a = &v->arrays[i];
+        element[i] = snapshot_element(a);
+        if (!element[i] || !a->pointer || a->divisor) return false;
+        stride[i] = a->stride ? (size_t)a->stride : element[i];
+    }
+    /* Preserve interleaved fetch layouts. Sort by numeric address so the
+       first attribute in each group establishes its lowest source address.
+       We still read each referenced element separately, never stride padding. */
+    struct snapshot_group { uintptr_t source; size_t stride, end, offset; } groups[GLM_MAX_ATTRIBS];
+    unsigned group_count = 0, group_for[GLM_MAX_ATTRIBS] = {0};
+    size_t relative[GLM_MAX_ATTRIBS] = {0};
+    for (uint32_t remaining = mask; remaining;) {
+        unsigned i = __builtin_ctz(remaining);
+        for (uint32_t bits = remaining; bits; bits &= bits - 1) {
+            unsigned candidate = __builtin_ctz(bits);
+            if ((uintptr_t)v->arrays[candidate].pointer < (uintptr_t)v->arrays[i].pointer) i = candidate;
+        }
+        remaining &= ~(1u << i);
+        uintptr_t pointer = (uintptr_t)v->arrays[i].pointer;
+        unsigned group;
+        for (group = 0; group < group_count; ++group) {
+            struct snapshot_group *g = &groups[group];
+            size_t delta = pointer - g->source;
+            if (g->stride == stride[i] && delta < g->stride && element[i] <= g->stride - delta) {
+                relative[i] = delta;
+                if (delta + element[i] > g->end) g->end = delta + element[i];
+                break;
+            }
+        }
+        if (group == group_count) {
+            groups[group_count++] = (struct snapshot_group){pointer, stride[i], element[i], 0};
+        }
+        group_for[i] = group;
+    }
+    uint64_t high = 0;
+    for (GLsizei i = 0; i < count; ++i) {
+        uint64_t index = (uint64_t)snapshot_index(indices, width, i) + (uint32_t)base;
+        if (index > high) high = index;
+    }
+    size_t total = sizeof(struct client_vertices_cmd) + (size_t)count * width;
+    for (unsigned i = 0; i < group_count; ++i) {
+        struct snapshot_group *g = &groups[i];
+        total = (total + 7) & ~(size_t)7;
+        g->offset = total;
+        if (high > (256u << 10) / g->stride) return false;
+        size_t extent = (size_t)high * g->stride + g->end;
+        if (extent > (256u << 10) || total > (256u << 10) - extent ||
+            g->source > UINTPTR_MAX - extent) return false;
+        total += extent;
+    }
+    struct client_vertices_cmd *c = glm_thread_alloc(ctx, total, client_vertices_exec);
+    memset(c, 0, total);
+    void *index_copy = c + 1;
+    memcpy(index_copy, indices, (size_t)count * width);
+    c->draw = (struct draw_elements_cmd){mode, count, type, index_copy, instances, base};
+    c->mask = mask;
+    for (uint32_t bits = mask; bits; bits &= bits - 1) {
+        unsigned i = __builtin_ctz(bits);
+        unsigned char *data = (unsigned char *)c + groups[group_for[i]].offset + relative[i];
+        c->arrays[i] = v->arrays[i];
+        c->arrays[i].pointer = data;
+        for (GLsizei j = 0; j < count; ++j) {
+            size_t index = (size_t)snapshot_index(index_copy, width, j) + (uint32_t)base;
+            memcpy(data + index * stride[i], (const unsigned char *)v->arrays[i].pointer + index * stride[i], element[i]);
+        }
+    }
+    return true;
+}
+/* VBO vertices with a client index list are common in legacy applications.
+   Own a small index snapshot in the command batch so the caller can reuse
+   its memory immediately, without draining all earlier draw commands. */
+static bool draw_elements_record_client(struct glm_context *ctx, GLenum mode, GLsizei count, GLenum type,
+                                       const GLvoid *indices, GLsizei instances, GLint base)
+{
+    /* Validation and empty draws must not read otherwise unused indices. */
+    if ((mode > GL_TRIANGLE_STRIP_ADJACENCY && mode != GL_PATCHES) || count <= 0 || instances <= 0 || !indices)
+        return false;
+    if (shadow(ctx)->immediate || shadow(ctx)->vao->element_buffer) return false;
+    size_t width = type == GL_UNSIGNED_BYTE ? 1 : type == GL_UNSIGNED_SHORT ? 2 : type == GL_UNSIGNED_INT ? 4 : 0;
+    if (!width || (size_t)count > (256u << 10) / width) return false;
+    if (!draw_recordable(ctx, false))
+        return record_client_vertices(ctx, mode, count, type, indices, instances, base, width);
+    size_t bytes = (size_t)count * width;
+    struct draw_elements_cmd *c = glm_thread_alloc(ctx, sizeof *c + bytes, draw_elements_exec);
+    void *copy = c + 1;
+    memcpy(copy, indices, bytes);
+    *c = (struct draw_elements_cmd){mode, count, type, copy, instances, base};
+    return true;
 }
 GLM_EXPORT void glDrawElements(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices)
 {
@@ -1106,9 +1269,10 @@ GLM_EXPORT void glGetSynciv(GLsync sync, GLenum pname, GLsizei size, GLsizei *le
 
 /* The application's binding for `target`, with no texture-object change
    pending in the stream: the implementation's object is current. */
-static bool texture_query_ready(struct glm_context *ctx, GLenum target, GLuint *name)
+static bool texture_query_ready(struct glm_context *ctx, GLenum target, GLuint *name, bool levels)
 {
-    if (!glm_thread_pending_zero(ctx, 1)) return false;
+    /* Sampler parameters cannot change image dimensions or formats. */
+    if (!glm_thread_pending_zero(ctx, levels ? 2 : 1)) return false;
     struct glm_shadow *s = shadow(ctx);
     GLenum binding = target >= GL_TEXTURE_CUBE_MAP_POSITIVE_X && target <= GL_TEXTURE_CUBE_MAP_NEGATIVE_Z ? GL_TEXTURE_CUBE_MAP : target;
     int slot = texture_slot(binding);
@@ -1120,11 +1284,11 @@ static bool texture_query_ready(struct glm_context *ctx, GLenum target, GLuint *
 
 static bool shadow_level_query(struct glm_context *ctx, GLenum target, GLint level, GLenum pname, GLint *out);
 
-#define TEXTURE_QUERY(call, target)                                                                         \
+#define TEXTURE_QUERY(call, target, levels)                                                                 \
     struct glm_context *ctx = glm_current();                                                                \
     if (ctx && ctx->thread) {                                                                               \
         GLuint name;                                                                                        \
-        if (texture_query_ready(ctx, target, &name)) {                                                      \
+        if (texture_query_ready(ctx, target, &name, levels)) {                                              \
             glm_texture_query_override(ctx, target, name);                                                  \
             call;                                                                                           \
             glm_texture_query_override_end();                                                               \
@@ -1154,21 +1318,21 @@ GLM_EXPORT void glGetTexParameteriv(GLenum target, GLenum pname, GLint *params)
 {
     struct glm_context *early = glm_current();
     if (early && early->thread && shadow_tex_query(early, target, pname, params)) return;
-    TEXTURE_QUERY(glm_impl_glGetTexParameteriv(target, pname, params), target)
+    TEXTURE_QUERY(glm_impl_glGetTexParameteriv(target, pname, params), target, false)
 }
 GLM_EXPORT void glGetTexParameterfv(GLenum target, GLenum pname, GLfloat *params)
 {
-    TEXTURE_QUERY(glm_impl_glGetTexParameterfv(target, pname, params), target)
+    TEXTURE_QUERY(glm_impl_glGetTexParameterfv(target, pname, params), target, false)
 }
 GLM_EXPORT void glGetTexLevelParameteriv(GLenum target, GLint level, GLenum pname, GLint *params)
 {
     struct glm_context *early = glm_current();
     if (early && early->thread && shadow_level_query(early, target, level, pname, params)) return;
-    TEXTURE_QUERY(glm_impl_glGetTexLevelParameteriv(target, level, pname, params), target)
+    TEXTURE_QUERY(glm_impl_glGetTexLevelParameteriv(target, level, pname, params), target, true)
 }
 GLM_EXPORT void glGetTexLevelParameterfv(GLenum target, GLint level, GLenum pname, GLfloat *params)
 {
-    TEXTURE_QUERY(glm_impl_glGetTexLevelParameterfv(target, level, pname, params), target)
+    TEXTURE_QUERY(glm_impl_glGetTexLevelParameterfv(target, level, pname, params), target, true)
 }
 
 /* ---- buffers ----------------------------------------------------------------------- */
@@ -1291,6 +1455,13 @@ static void shadow_define_level(struct glm_context *ctx, GLenum target, GLint le
     int face;
     struct shadow_texture *t = bound_shadow_texture(ctx, target, &face);
     if (!t || level < 0 || level >= 16) return;
+    /* Automatic mipmaps also redefine higher levels. Query their actual
+       metadata after the upload rather than returning an incomplete shadow. */
+    if (t->known && t->p[10] && level == t->p[5]) {
+        free(t->levels);
+        t->levels = NULL;
+        return;
+    }
     /* Complete knowledge starts with the base level. */
     if (!t->levels) {
         if (level != 0) return;

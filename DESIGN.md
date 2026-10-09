@@ -51,6 +51,27 @@ directly. Apple's GLSL quirks (implicit conversions it accepts, CR line
 endings, `#version`-less shaders) are handled in a preprocessing step, each
 with a glcompare case.
 
+ARB uploads validate assembly and translate shaders before returning. Native
+Metal compilation starts asynchronously, with at most four background jobs.
+The first draw that selects a program waits for its actual function if needed.
+Queued jobs can be claimed by a draw before they start. Fragment alpha tests
+use draw constants in one native function instead of recompiling for each
+comparison mode. Unnormalized 8-bit and 16-bit vertex attributes use Metal's
+float fetch conversion; 32-bit integer attributes retain CPU conversion.
+
+The threaded command stream owns bounded snapshots of client indices and
+eligible legacy client vertices. Interleaved attributes share one allocation,
+but only referenced element bytes are read. Original indices and vertex IDs
+remain intact. Unsupported layouts retain synchronous execution. Texture-level
+queries wait for pending image changes, including automatic mip generation,
+without waiting for unrelated sampler changes. Ordinary texture uploads share
+the command buffer's transient staging pool; GPU completion controls reuse.
+
+Supported direct shadow-sampler calls reconstruct custom depth borders from
+comparison samples and two raw depth samples. Array layers and comparison
+references are excluded from spatial clamping. Unsupported call forms retain
+the ordinary sampler path, and auxiliary samplers respect Metal's slot limit.
+
 Vertex-only transform-feedback programs can retain binary64 values as raw
 64-bit integers in Metal. This path supports exact uniform storage, feedback,
 comparisons, rounding, bit packing, and common scalar/vector math. Integer
@@ -127,6 +148,11 @@ to that backend. Default textures belong to their context; named textures and
 cube aliases are released when their last shared context closes.
 
 ## Testing
+
+`tests/probes/run_shadow_border_cpu.sh` validates shadow-border translation and
+compiles its generated Metal stages without executing GPU work. Rendering
+cases cover all depth comparison modes, alpha-state changes, pending ARB
+program replacement and deletion, client-memory reuse, and staging rollover.
 
 - **glcompare** runs each case in two processes, one per implementation,
   renders into an offscreen framebuffer, and compares the results pixel by

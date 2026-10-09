@@ -70,6 +70,8 @@ static void release(struct glm_arb_program *p)
     free(p->source);
     free(p->glsl);
     p->source = p->glsl = NULL;
+    __atomic_store_n(&p->backend_ready, false, __ATOMIC_RELEASE);
+    p->backend_failed = false;
 }
 
 GLM_EXPORT void glDeleteProgramsARB(GLsizei n, const GLuint *names)
@@ -143,7 +145,7 @@ GLM_EXPORT void glProgramStringARB(GLenum target, GLenum format, GLsizei length,
     request.attribute_count = attribute_count;
     glm_program_compile(&request, &p->linked.result);
     char *log = NULL;
-    bool ok = p->linked.result.ok && glm_backend_program_link(ctx, &p->linked, &log);
+    bool ok = p->linked.result.ok;
     if (!ok) {
         /* Translation succeeded, so this is our bug, not the program's. */
         glm_log("ARB program failed to compile:\n%s\n%s%s", p->glsl, p->linked.result.log ? p->linked.result.log : "",
@@ -153,8 +155,35 @@ GLM_EXPORT void glProgramStringARB(GLenum target, GLenum format, GLsizei length,
         free(log);
         return glm_error(ctx, GL_INVALID_OPERATION);
     }
+    /* Validate assembly and GLSL synchronously, then overlap native Metal
+       compilation with subsequent uploads. The first draw resolves every
+       selected stage; no draw or render-target write is discarded. */
+    if (index == 1) glm_backend_prepare_arb_fragment(&p->linked);
+    glm_backend_prewarm_program(&p->linked.result);
     p->valid = true;
     ++p->generation;
+}
+
+bool glm_arb_ready(struct glm_context *ctx, struct glm_arb_program *p)
+{
+    if (!p || __atomic_load_n(&p->backend_ready, __ATOMIC_ACQUIRE)) return true;
+    /* First use mutates backend state even when both shared contexts are
+       only reading the GL program. Resolve it once under the share lock. */
+    pthread_mutex_lock(&ctx->share->lock);
+    if (!p->backend_ready && !p->backend_failed) {
+        char *log = NULL;
+        if (!glm_backend_program_link(ctx, &p->linked, &log)) {
+            glm_log("ARB native compile failed: %s", log ? log : "unknown error");
+            p->backend_failed = true;
+        } else {
+            __atomic_store_n(&p->backend_ready, true, __ATOMIC_RELEASE);
+        }
+        free(log);
+    }
+    bool ready = p->backend_ready;
+    pthread_mutex_unlock(&ctx->share->lock);
+    if (!ready) glm_error(ctx, GL_INVALID_OPERATION);
+    return ready;
 }
 
 /* ---- parameters ---------------------------------------------------------- */

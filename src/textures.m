@@ -848,7 +848,9 @@ void glm_backend_texture_image(struct glm_context *ctx, struct glm_texture *t, i
         glm_backend_upload_encoded(ctx);
         return;
     }
-    id<MTLBuffer> staging = glm_new_shared_buffer(total, data);
+    size_t staging_offset;
+    id<MTLBuffer> staging = (__bridge id<MTLBuffer>)glm_backend_upload_staging(ctx, total, data, &staging_offset);
+    if (!staging) return;
     id<MTLBlitCommandEncoder> blit = [(__bridge id<MTLCommandBuffer>)glm_backend_command_buffer(ctx) blitCommandEncoder];
     /* Array layers are Metal slices: 1D arrays one row each, the others
        one image each. */
@@ -858,7 +860,7 @@ void glm_backend_texture_image(struct glm_context *ctx, struct glm_texture *t, i
     for (NSUInteger slice = 0; slice < slices; ++slice) {
         MTLSize size = MTLSizeMake((NSUInteger)width, rows ? 1 : (NSUInteger)MAX(height, 1),
                                    rows || images ? 1 : (NSUInteger)MAX(depth, 1));
-        [blit copyFromBuffer:staging sourceOffset:slice * (rows ? row_bytes : image_bytes) sourceBytesPerRow:row_bytes
+        [blit copyFromBuffer:staging sourceOffset:staging_offset + slice * (rows ? row_bytes : image_bytes) sourceBytesPerRow:row_bytes
             sourceBytesPerImage:rows ? row_bytes : image_bytes sourceSize:size toTexture:storage
                destinationSlice:first + (rows || images ? slice : 0) destinationLevel:(NSUInteger)level
               destinationOrigin:MTLOriginMake((NSUInteger)x, rows ? 0 : (NSUInteger)y, rows || images ? 0 : (NSUInteger)z)];
@@ -2046,7 +2048,10 @@ int glm_sampler_binding(uint32_t type)
 static bool emulated_border(const struct glm_texture *t, const struct glm_sampler_state *s, int binding, float *color,
                             float *clamp)
 {
-    if (!t || s->compare_mode != GL_NONE) return false;
+    if (!t) return false;
+    bool shadow = s->compare_mode == GL_COMPARE_R_TO_TEXTURE;
+    // Rectangle border samplers have a separate non-normalized Metal path.
+    if (shadow && binding == GLM_TEX_RECT) return false;
     if (binding != GLM_TEX_1D && binding != GLM_TEX_2D && binding != GLM_TEX_3D && binding != GLM_TEX_RECT &&
         binding != GLM_TEX_2D_ARRAY && binding != GLM_TEX_1D_ARRAY)
         return false;
@@ -2067,6 +2072,15 @@ static bool emulated_border(const struct glm_texture *t, const struct glm_sample
         }
     }
     if (!any) return false;
+    if (shadow) {
+        bool fixed = info.depth && t->levels[0][base].internal_format != GL_DEPTH_COMPONENT32F &&
+                     t->levels[0][base].internal_format != GL_DEPTH32F_STENCIL8;
+        color[0] = fixed ? MAX(0.0f, MIN(s->border_color[0], 1.0f)) : s->border_color[0];
+        color[1] = (float)((s->compare_func - GL_NEVER) & 7);
+        color[2] = fixed;
+        color[3] = 0;
+        return true;
+    }
     float storage[4] = {0, 0, 0, 1}, format[4];
     bool filled[4] = {false};
     for (int c = 0; c < 4; ++c) {
@@ -2088,6 +2102,19 @@ static int program_sampler_binding(const struct glm_uniform_info *uniform)
     return glm_sampler_binding(uniform->type);
 }
 
+static uint32_t program_shadow_sampler_mask(const struct glm_program *program)
+{
+    uint32_t mask = 0;
+    for (int i = 0; i < program->result.uniform_count; ++i) {
+        const struct glm_uniform_info *u = &program->result.uniforms[i];
+        if (u->offset >= 0 || u->sampler_slot < 0 || u->sampler_slot >= 32) continue;
+        if (u->type == GL_SAMPLER_1D_SHADOW || u->type == GL_SAMPLER_2D_SHADOW ||
+            u->type == GL_SAMPLER_1D_ARRAY_SHADOW || u->type == GL_SAMPLER_2D_ARRAY_SHADOW)
+            mask |= 1u << u->sampler_slot;
+    }
+    return mask;
+}
+
 uint32_t glm_program_border_mask(struct glm_context *ctx, const struct glm_program *program, float (*data)[4])
 {
     uint32_t mask = 0;
@@ -2106,7 +2133,8 @@ uint32_t glm_program_border_mask(struct glm_context *ctx, const struct glm_progr
             mask |= 1u << uniform->sampler_slot;
     }
     /* Metal has 16 sampler slots per stage. */
-    if (program->result.sampler_count + __builtin_popcount(mask) > 16) return 0;
+    if (program->result.sampler_count + __builtin_popcount(mask) +
+        __builtin_popcount(mask & program_shadow_sampler_mask(program)) > 16) return 0;
     return mask;
 }
 
@@ -2139,6 +2167,7 @@ bool glm_bind_program_textures(struct glm_context *ctx, id<MTLRenderCommandEncod
                                const struct glm_program *program, unsigned stages, uint32_t border_mask,
                                float (*lod_bias)[4])
 {
+    uint32_t shadow_mask = border_mask & program_shadow_sampler_mask(program);
     for (int i = 0; i < program->result.uniform_count; ++i) {
         const struct glm_uniform_info *uniform = &program->result.uniforms[i];
         if (uniform->sampler_slot < 0 || uniform->offset >= 0) continue;
@@ -2205,12 +2234,23 @@ bool glm_bind_program_textures(struct glm_context *ctx, id<MTLRenderCommandEncod
                     if (*wraps[a] == GL_CLAMP) *wraps[a] = GL_CLAMP_TO_BORDER;
                 memset(emulated.border_color, 0, sizeof emulated.border_color);
                 id<MTLSamplerState> black = sampler_for(&emulated, bias, mipmapped, slot == GLM_TEX_RECT, cube_seams);
+                uint32_t preceding = (1u << metal_slot) - 1;
+                int white_slot = program->result.sampler_count + __builtin_popcount(border_mask & preceding) +
+                                 __builtin_popcount(shadow_mask & preceding);
+                if ((shadow_mask >> metal_slot) & 1) {
+                    // Raw depth samples measure only the border's filter weight.
+                    emulated.compare_mode = GL_NONE;
+                    id<MTLSamplerState> raw_black = sampler_for(&emulated, bias, mipmapped, false, cube_seams);
+                    lod_bias[white_slot][0] = state->lod_bias;
+                    sampling_lod_metadata(lod_bias, white_slot, state, mipmapped);
+                    glm_encoder_texture(ctx, stages, (__bridge void *)view, (__bridge void *)raw_black, (NSUInteger)white_slot++);
+                }
                 for (int c = 0; c < 4; ++c) emulated.border_color[c] = 1;
                 id<MTLSamplerState> white = sampler_for(&emulated, bias, mipmapped, slot == GLM_TEX_RECT, cube_seams);
-                int white_slot = program->result.sampler_count + __builtin_popcount(border_mask & ((1u << metal_slot) - 1));
                 if (white_slot < 64) {
                     lod_bias[white_slot][0] = state->lod_bias;
                     lod_bias[GLM_DEPTH_METADATA_BASE + white_slot][0] = fixed_depth_reference(t);
+                    sampling_lod_metadata(lod_bias, white_slot, state, mipmapped);
                 }
                 glm_encoder_texture(ctx, stages, (__bridge void *)view, (__bridge void *)black, (NSUInteger)metal_slot);
                 glm_encoder_texture(ctx, stages, (__bridge void *)view, (__bridge void *)white, (NSUInteger)white_slot);
