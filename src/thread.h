@@ -21,7 +21,8 @@ typedef void (*glm_exec_fn)(const void *payload);
 /* Starts the worker for `ctx` (idempotent) / drains and stops it. */
 GLM_HIDDEN void glm_thread_start(struct glm_context *ctx);
 GLM_HIDDEN void glm_thread_stop(struct glm_context *ctx);
-/* Room for a command of `size` payload bytes, executed by `exec`. */
+/* Room for a command of `size` payload bytes, executed by `exec`. Oversized
+   payloads live on the heap until their ordered command has executed. */
 GLM_HIDDEN void *glm_thread_alloc(struct glm_context *ctx, size_t size, glm_exec_fn exec);
 /* Hands the current batch to the worker without waiting. */
 GLM_HIDDEN void glm_thread_submit(struct glm_context *ctx);

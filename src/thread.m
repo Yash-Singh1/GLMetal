@@ -163,9 +163,33 @@ static void report_syncs(void)
     }
 }
 
+struct heap_command {
+    glm_exec_fn exec;
+    void *payload;
+};
+
+static void heap_command_exec(const void *payload)
+{
+    const struct heap_command *command = payload;
+    command->exec(command->payload);
+    free(command->payload);
+}
+
 void *glm_thread_alloc(struct glm_context *ctx, size_t size, glm_exec_fn exec)
 {
     struct glm_thread *t = ctx->thread;
+    /* Keep one command in the stream even when its payload cannot fit a
+       batch. The worker owns the heap copy until that command executes. */
+    if (size > BATCH_BYTES - sizeof(struct command_header)) {
+        void *payload = malloc(size);
+        if (!payload) {
+            fputs("glmetal: command payload allocation failed\n", stderr);
+            abort();
+        }
+        struct heap_command *command = glm_thread_alloc(ctx, sizeof *command, heap_command_exec);
+        *command = (struct heap_command){exec, payload};
+        return payload;
+    }
     size_t total = (sizeof(struct command_header) + size + 7) & ~(size_t)7;
     if (t->filling + total > BATCH_BYTES) glm_thread_submit(ctx);
     struct command_header *h = (struct command_header *)(t->batch[t->submitted % BATCHES] + t->filling);
