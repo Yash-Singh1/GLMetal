@@ -21,6 +21,10 @@ struct glm_query {
     uint64_t pass_id;      /* backend pass of the last segment */
 };
 
+/* Worker-only, no flush/wait/error mutation. Publishes an exact completed
+   value to the marshal caller after its ordinary query has executed. */
+GLM_HIDDEN bool glm_query_completed_value(struct glm_context *ctx, GLuint name, uint64_t *value);
+
 GLM_HIDDEN void glm_queries_destroy(struct glm_context *ctx);
 
 GLM_HIDDEN void glm_query_add_segment(struct glm_query *q, void *retained_buffer, uint32_t offset);

@@ -9,6 +9,7 @@
 #define GLM_APPLE_TYPES_ONLY
 #include "glm_apple_gets.h"
 #include "../marshal_support.h"
+#include "../queries.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -93,6 +94,8 @@ struct shadow_vao {
 struct shadow_query_end {
     struct glm_thread *thread;
     uint64_t mark;             /* commands recorded through the glEndQuery */
+    uint64_t completed_value;
+    bool completed;           /* exact value for this end/generation */
 };
 
 struct glm_shadow {
@@ -319,9 +322,13 @@ GLM_EXPORT void glGetBooleanv(GLenum pname, GLboolean *params)
     glm_impl_glGetBooleanv(pname, params);
 }
 
+static void shadow_queries_invalidate_all(struct glm_shadow *s);
+
 void glm_shadow_refresh(struct glm_context *ctx)
 {
     struct glm_shadow *s = shadow(ctx);
+    /* Display lists can reuse queries without individual caller-side hooks. */
+    shadow_queries_invalidate_all(s);
     const struct glm_state *st = &ctx->state;
     s->primitive_restart = st->primitive_restart;
     s->immediate = ctx->immediate != NULL;
@@ -2504,8 +2511,47 @@ static int shadow_query_class(GLenum target)
     }
 }
 
+static void shadow_queries_invalidate_all(struct glm_shadow *s)
+{
+    if (s->query_end_capacity) memset(s->query_ends, 0, s->query_end_capacity * sizeof *s->query_ends);
+    memset(s->active_queries, 0, sizeof s->active_queries);
+}
+static void shadow_query_invalidate(struct glm_context *ctx, GLuint name)
+{
+    struct glm_shadow *s = shadow(ctx);
+    if (name < s->query_end_capacity) memset(&s->query_ends[name], 0, sizeof s->query_ends[name]);
+}
+void glm_shadow_glDeleteQueries(struct glm_context *ctx, GLsizei n, const GLuint *names)
+{
+    if (n > 0 && names) for (GLsizei i = 0; i < n; ++i) shadow_query_invalidate(ctx, names[i]);
+}
+void glm_shadow_glDeleteQueriesARB(struct glm_context *ctx, GLsizei n, const GLuint *names)
+{
+    glm_shadow_glDeleteQueries(ctx, n, names);
+}
+void glm_shadow_glQueryCounter(struct glm_context *ctx, GLuint name, GLenum target)
+{
+    shadow_query_invalidate(ctx, name);
+}
+void glm_shadow_glBeginQueryIndexed(struct glm_context *ctx, GLenum target, GLuint index, GLuint name)
+{
+    /* Indexed paths have no end marks. Fall back to stream validation. */
+    shadow_query_invalidate(ctx, name);
+}
+void glm_shadow_glEndQueryIndexed(struct glm_context *ctx, GLenum target, GLuint index)
+{
+    /* Index zero can end a query begun through the non-indexed entry point. */
+    struct glm_shadow *s = shadow(ctx);
+    int c = shadow_query_class(target);
+    if (!index && c >= 0) {
+        shadow_query_invalidate(ctx, s->active_queries[c]);
+        s->active_queries[c] = 0;
+    }
+}
+
 void glm_shadow_glBeginQuery(struct glm_context *ctx, GLenum target, GLuint name)
 {
+    shadow_query_invalidate(ctx, name);
     int c = shadow_query_class(target);
     if (c >= 0) shadow(ctx)->active_queries[c] = name;
 }
@@ -2539,12 +2585,18 @@ void glm_shadow_glEndQueryARB(struct glm_context *ctx, GLenum target) { glm_shad
 void glm_impl_glGetQueryObjectiv(GLuint name, GLenum pname, GLint *params);
 void glm_impl_glGetQueryObjectuiv(GLuint name, GLenum pname, GLuint *params);
 
-struct query_get { GLuint name; GLenum pname; void *params; bool is_unsigned; };
+struct query_get {
+    GLuint name; GLenum pname; void *params; bool is_unsigned;
+    bool completed;
+    uint64_t completed_value;
+};
 static void query_get_exec(const void *payload)
 {
-    const struct query_get *q = payload;
+    struct query_get *q = (struct query_get *)payload;
     if (q->is_unsigned) glm_impl_glGetQueryObjectuiv(q->name, q->pname, q->params);
     else glm_impl_glGetQueryObjectiv(q->name, q->pname, q->params);
+    q->completed = (q->pname == GL_QUERY_RESULT || q->pname == GL_QUERY_RESULT_AVAILABLE) &&
+        glm_query_completed_value(glm_current(), q->name, &q->completed_value);
 }
 
 /* Result queries wait for the stream only up to the query's glEndQuery
@@ -2570,12 +2622,22 @@ static void query_object(GLuint name, GLenum pname, void *params, bool is_unsign
         glm_thread_sync_named(ctx, entry);
         return query_get_exec(&q);
     }
+    if (end->completed) {
+        if (pname == GL_QUERY_RESULT_AVAILABLE) *(GLuint *)params = GL_TRUE;
+        else if (is_unsigned) *(GLuint *)params = end->completed_value > UINT32_MAX ? UINT32_MAX : (GLuint)end->completed_value;
+        else *(GLint *)params = end->completed_value > INT32_MAX ? INT32_MAX : (GLint)end->completed_value;
+        return;
+    }
     if (pname == GL_QUERY_RESULT_AVAILABLE && glm_thread_executed(ctx) < end->mark) {
         glm_thread_submit(ctx); /* so a polling loop gets there */
         *(GLint *)params = GL_FALSE;
         return;
     }
     glm_thread_request(ctx, end->mark, query_get_exec, &q);
+    if (q.completed) {
+        end->completed_value = q.completed_value;
+        end->completed = true;
+    }
 }
 
 GLM_EXPORT void glGetQueryObjectiv(GLuint name, GLenum pname, GLint *params)

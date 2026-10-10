@@ -195,7 +195,10 @@ GLM_EXPORT void glGetBufferSubData(GLenum target, GLintptr offset, GLsizeiptr si
     struct glm_buffer *buffer = bound_buffer(ctx, target);
     if (!buffer) return;
     if (offset < 0 || size < 0 || offset + size > buffer->size) return glm_error(ctx, GL_INVALID_VALUE);
-    glm_backend_flush(ctx, true);
+    /* The marshal wrapper has already applied prior CPU commands. GPU
+       readers cannot change these bytes; only a recorded GPU writer needs
+       submission/completion. Keep the existing GPU-written readback path. */
+    if (buffer->gpu_writer && buffer->gpu_write_serial) glm_backend_flush(ctx, true);
     const uint8_t *contents = glm_backend_buffer_contents(ctx, buffer, false);
     if (contents) memcpy(data, contents + offset, (size_t)size);
 }

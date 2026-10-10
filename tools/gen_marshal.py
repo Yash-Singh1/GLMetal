@@ -118,6 +118,7 @@ SHADOW = {
     'glScissorIndexedv', 'glAttachShader', 'glDetachShader', 'glBindAttribLocation', 'glBindFragDataLocation',
     'glBindFragDataLocationEXT', 'glBindFragDataLocationIndexed', 'glTransformFeedbackVaryings', 'glDeleteShader',
     'glDeleteProgram', 'glBeginQuery', 'glBeginQueryARB', 'glEndQuery', 'glEndQueryARB',
+    'glDeleteQueries', 'glDeleteQueriesARB', 'glQueryCounter', 'glBeginQueryIndexed', 'glEndQueryIndexed',
 }
 # Change shadowed state in ways the hooks do not follow: run synchronously,
 # then re-read the shadow (glm_shadow_refresh).

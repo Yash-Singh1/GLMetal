@@ -219,6 +219,15 @@ static uint64_t result(struct glm_context *ctx, struct glm_query *q)
     return value;
 }
 
+bool glm_query_completed_value(struct glm_context *ctx, GLuint name, uint64_t *value)
+{
+    if (!ctx) return false;
+    struct glm_query *q = query_get(ctx, name);
+    if (!q || q->active || (q->segment_count && !glm_backend_fence_done(ctx, q->serial))) return false;
+    *value = result(ctx, q);
+    return true;
+}
+
 static bool object_value(GLuint name, GLenum pname, uint64_t *out)
 {
     GLM_CONTEXT(ctx, false);

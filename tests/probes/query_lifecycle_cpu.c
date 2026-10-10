@@ -6,6 +6,9 @@
 static struct glm_context context;
 static GLenum error;
 static unsigned released, occlusion_ends;
+static bool fence_complete=true;
+static uint64_t visibility_value;
+static unsigned fence_inserts, fence_waits;
 struct glm_context *glm_current(void) { return &context; }
 void glm_error(struct glm_context *ctx, GLenum value) { (void)ctx; error = value; }
 void *glm_table_get(struct glm_object_table *table, GLuint name)
@@ -29,15 +32,20 @@ GLuint glm_table_reserve(struct glm_object_table *table)
 void glm_backend_release(void *buffer) { if (buffer) ++released; }
 void glm_backend_occlusion_end(struct glm_context *ctx) { (void)ctx; ++occlusion_ends; }
 uint64_t glm_backend_pending_serial(struct glm_context *ctx) { (void)ctx; return 1; }
-uint64_t glm_backend_fence_insert(struct glm_context *ctx) { (void)ctx; return 1; }
-bool glm_backend_fence_done(struct glm_context *ctx, uint64_t serial) { (void)ctx; (void)serial; return true; }
-void glm_backend_fence_wait(struct glm_context *ctx, uint64_t serial) { (void)ctx; (void)serial; }
-uint64_t glm_backend_buffer_read_u64(void *buffer, uint32_t offset) { (void)buffer; (void)offset; return 0; }
+uint64_t glm_backend_fence_insert(struct glm_context *ctx) { (void)ctx; ++fence_inserts;return 1; }
+bool glm_backend_fence_done(struct glm_context *ctx, uint64_t serial) { (void)ctx; (void)serial; return fence_complete; }
+void glm_backend_fence_wait(struct glm_context *ctx, uint64_t serial) { (void)ctx; (void)serial; ++fence_waits;}
+uint64_t glm_backend_buffer_read_u64(void *buffer, uint32_t offset) { (void)buffer; (void)offset; return visibility_value; }
 
 int main(void)
 {
     GLuint name;
     glGenQueries(1, &name);
+    uint64_t unused_snapshot=123;
+    assert(!glm_query_completed_value(&context,name,&unused_snapshot)&&unused_snapshot==123);
+    GLuint unused_value=77;
+    glGetQueryObjectuiv(name,GL_QUERY_RESULT,&unused_value);
+    assert(error==GL_INVALID_OPERATION&&unused_value==77);error=0;
     glBeginQueryIndexed(GL_PRIMITIVES_GENERATED, 1, name);
     struct glm_query *old = context.indexed_queries[GLM_QUERY_PRIMITIVES][0];
     glm_query_add_segment(old, (void *)1, 0);
@@ -89,5 +97,21 @@ int main(void)
     assert(!context.active_queries[GLM_QUERY_PRIMITIVES]);
     assert(!context.indexed_queries[GLM_QUERY_FEEDBACK][2]);
     assert(!error);
+    /* The production snapshot reads exact64 visibility only when complete;
+       failed snapshots leave output/errors unchanged and never submit/wait. */
+    glGenQueries(1, &other);glBeginQuery(GL_SAMPLES_PASSED, other);
+    glm_query_add_segment(query_get(&context, other), (void *)5, 0);
+    uint64_t snapshot=123;
+    assert(!glm_query_completed_value(&context, other, &snapshot));
+    glEndQuery(GL_SAMPLES_PASSED);fence_complete=false;
+    assert(!glm_query_completed_value(&context, other, &snapshot));
+    assert(snapshot==123&&!fence_inserts&&!fence_waits&&!error);
+    fence_complete=true;visibility_value=UINT64_MAX;
+    assert(glm_query_completed_value(&context, other, &snapshot)&&snapshot==UINT64_MAX);
+    assert(!fence_inserts&&!fence_waits&&!error);
+    glDeleteQueries(1,&other);
+    assert(!glm_query_completed_value(&context, other, &snapshot));
+    assert(!glm_query_completed_value(NULL, other, &snapshot));
+    glm_queries_destroy(&context);
     puts("CPU query lifecycle: deferred deletion, name reuse, active timestamp rejection, stream isolation and cleanup passed");
 }
