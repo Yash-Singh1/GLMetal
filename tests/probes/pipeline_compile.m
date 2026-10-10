@@ -33,8 +33,9 @@ static MTLRenderPipelineDescriptor *descriptor(id<MTLFunction> v, id<MTLFunction
 
 int main(int argc, char **argv)
 {
-    if (argc != 5) { fprintf(stderr, "usage: pipeline_compile index.json baseline|prewarm cold|warm gap_us\n"); return 2; }
-    bool prewarm = !strcmp(argv[2], "prewarm"), cold = !strcmp(argv[3], "cold");
+    if (argc != 5) { fprintf(stderr, "usage: pipeline_compile index.json baseline|prewarm|deferred cold|warm gap_us\n"); return 2; }
+    bool deferred = !strcmp(argv[2], "deferred");
+    bool prewarm = deferred || !strcmp(argv[2], "prewarm"), cold = !strcmp(argv[3], "cold");
     unsigned gap = (unsigned)strtoul(argv[4], NULL, 10);
     if (!prewarm) setenv("GLMETAL_NO_PIPELINE_PREWARM", "1", 1);
     @autoreleasepool {
@@ -71,7 +72,7 @@ int main(int argc, char **argv)
         double library_ms = now_ms() - library_start;
         /* Seed every observed vertex-input signature with the same target
            configuration. This models configurations learned in earlier areas. */
-        for (MTLRenderPipelineDescriptor *d in descriptors) {
+        for (MTLRenderPipelineDescriptor *d in deferred ? @[] : descriptors) {
             if (!glm_pipeline_acquire(device, d, true, &error)) {
                 fprintf(stderr, "seed: %s\n", error.localizedDescription.UTF8String); return 2;
             }
@@ -99,6 +100,18 @@ int main(int argc, char **argv)
         double started = now_ms();
         for (MTLRenderPipelineDescriptor *d in burst) {
             if (prewarm) glm_pipeline_prewarm(device, d.vertexFunction, d.fragmentFunction);
+            if (gap) usleep(gap);
+        }
+        /* Model functions uploaded before the first confident recipe. The
+           second observation makes each seed recipe confident. The old
+           implementation drops these pairs; deferred retry can compile them
+           during the application's remaining preparation time. */
+        if (deferred) {
+            for (unsigned observation = 0; observation < 2; ++observation)
+                for (MTLRenderPipelineDescriptor *d in descriptors)
+                    if (!glm_pipeline_acquire(device, d, true, &error)) {
+                        fprintf(stderr, "late seed: %s\n", error.localizedDescription.UTF8String); return 2;
+                    }
             if (gap) usleep(gap);
         }
         double lead_ms = now_ms() - started;

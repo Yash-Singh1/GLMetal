@@ -58,7 +58,7 @@ static MTLRenderPipelineDescriptor *descriptor(id<MTLFunction> v,id<MTLFunction>
 static void reset(void) {
     compiler.suspended=NO;[compiler waitUntilAllOperationsAreFinished];
     pthread_mutex_lock(&lock);
-    assert(!pending);[cache removeAllObjects];[order removeAllObjects];[recipes removeAllObjects];
+    assert(!pending);[cache removeAllObjects];[order removeAllObjects];[recipes removeAllObjects];[deferred removeAllObjects];
     memset(&stats,0,sizeof(stats));pthread_mutex_unlock(&lock);
 }
 static FakeDevice *train(void) {
@@ -76,6 +76,70 @@ static void *demand_worker(void *raw) {
 #define CHANGE(x) ^(MTLRenderPipelineDescriptor *d){ x; }
 int main(void) { @autoreleasepool {
     alarm(15);unsetenv("GLMETAL_NO_PIPELINE_PREWARM");initialize();
+    /* A pair uploaded before recipes is retried once training is confident. */
+    reset();FakeDevice *early_device=[FakeDevice new];
+    id<MTLFunction> early_vertex=function(),early_fragment=fragment();
+    glm_pipeline_prewarm((id<MTLDevice>)early_device,early_vertex,early_fragment);
+    assert(!stats.predicted && !early_device->calls);
+    MTLRenderPipelineDescriptor *training=descriptor(function(),fragment());
+    assert(glm_pipeline_acquire((id<MTLDevice>)early_device,training,true,NULL));
+    assert(glm_pipeline_acquire((id<MTLDevice>)early_device,training,true,NULL));
+    [compiler waitUntilAllOperationsAreFinished];
+    assert(stats.predicted==1 && early_device->calls==2 && !deferred.count);
+    glm_pipeline_prewarm((id<MTLDevice>)early_device,early_vertex,early_fragment);
+    [compiler waitUntilAllOperationsAreFinished];
+    assert(stats.predicted==1 && early_device->calls==2);
+    id<MTLRenderPipelineState> retried=glm_pipeline_acquire((id<MTLDevice>)early_device,
+        descriptor(early_vertex,early_fragment),false,NULL);
+    assert(retried && stats.reused==1 && early_device->calls==2);
+    /* A final fragment variant cannot reuse the prepared base pair. */
+    assert(glm_pipeline_acquire((id<MTLDevice>)early_device,
+        descriptor(early_vertex,fragment()),false,NULL));
+    assert(early_device->calls==3);
+    MTLRenderPipelineDescriptor *wrong=descriptor(early_vertex,early_fragment);
+    wrong.colorAttachments[0].pixelFormat=MTLPixelFormatBGRA8Unorm;
+    assert(glm_pipeline_acquire((id<MTLDevice>)early_device,wrong,false,NULL));
+    assert(early_device->calls==4);
+    /* Retention deduplicates, expires using monotonic age and evicts oldest. */
+    reset();early_device=[FakeDevice new];early_vertex=function();early_fragment=fragment();
+    glm_pipeline_prewarm((id<MTLDevice>)early_device,early_vertex,early_fragment);
+    glm_pipeline_prewarm((id<MTLDevice>)early_device,early_vertex,early_fragment);
+    assert(deferred.count==1);
+    deferred[0]->added_ns=deferred_now_ns()-DEFERRED_MAX_AGE_NS;
+    glm_pipeline_prewarm((id<MTLDevice>)early_device,function(),fragment());
+    assert(deferred.count==1 && deferred[0]->vertex!=early_vertex);
+    id<MTLFunction> oldest_vertex=deferred[0]->vertex;
+    for(unsigned i=0;i<DEFERRED_LIMIT;++i)
+        glm_pipeline_prewarm((id<MTLDevice>)early_device,function(),fragment());
+    assert(deferred.count==DEFERRED_LIMIT);
+    for(GLMDeferredPair *pair in deferred) assert(pair->vertex!=oldest_vertex);
+    /* Expired pairs cannot revive when learning finally becomes confident. */
+    for(GLMDeferredPair *pair in deferred)
+        pair->added_ns=deferred_now_ns()-DEFERRED_MAX_AGE_NS;
+    training=descriptor(function(),fragment());
+    assert(glm_pipeline_acquire((id<MTLDevice>)early_device,training,true,NULL));
+    assert(glm_pipeline_acquire((id<MTLDevice>)early_device,training,true,NULL));
+    assert(!deferred.count && !stats.predicted);
+    /* Each learned recipe retries at most four, retaining the rest. */
+    reset();early_device=[FakeDevice new];compiler.suspended=YES;
+    for(unsigned i=0;i<RETRY_LIMIT+2;++i)
+        glm_pipeline_prewarm((id<MTLDevice>)early_device,function(),fragment());
+    training=descriptor(function(),fragment());
+    assert(glm_pipeline_acquire((id<MTLDevice>)early_device,training,true,NULL));
+    assert(!pending && deferred.count==RETRY_LIMIT+2);
+    assert(glm_pipeline_acquire((id<MTLDevice>)early_device,training,true,NULL));
+    assert(pending==RETRY_LIMIT && deferred.count==2);
+    assert(glm_pipeline_acquire((id<MTLDevice>)early_device,training,true,NULL));
+    assert(pending==RETRY_LIMIT+2 && !deferred.count);
+    compiler.suspended=NO;[compiler waitUntilAllOperationsAreFinished];
+    /* A pair demanded before confidence must never be deferred afterwards. */
+    reset();early_device=[FakeDevice new];early_vertex=function();early_fragment=fragment();
+    glm_pipeline_prewarm((id<MTLDevice>)early_device,early_vertex,early_fragment);
+    training=descriptor(early_vertex,early_fragment);
+    assert(glm_pipeline_acquire((id<MTLDevice>)early_device,training,true,NULL));
+    assert(!deferred.count);
+    assert(glm_pipeline_acquire((id<MTLDevice>)early_device,training,true,NULL));
+    assert(!stats.predicted && early_device->calls==1);
     FakeDevice *dev=train();id<MTLFunction> v=function(),f=fragment();
     glm_pipeline_prewarm((id<MTLDevice>)dev,v,f);[compiler waitUntilAllOperationsAreFinished];
     assert(dev->calls==2 && stats.predicted==1);
@@ -185,7 +249,7 @@ int main(void) { @autoreleasepool {
     assert(!stats.predicted);
     assert(glm_pipeline_acquire((id<MTLDevice>)dev,one,true,NULL));
     glm_pipeline_prewarm((id<MTLDevice>)dev,function(),fragment());
-    [compiler waitUntilAllOperationsAreFinished];assert(stats.predicted==1);
+    [compiler waitUntilAllOperationsAreFinished];assert(stats.predicted==3);
     /* Outstanding predictions and background concurrency have hard bounds. */
     dev=train();compiler.suspended=YES;dev->gated=true;
     for(unsigned i=0;i<PENDING_LIMIT+3;++i) glm_pipeline_prewarm((id<MTLDevice>)dev,function(),fragment());
@@ -204,5 +268,5 @@ int main(void) { @autoreleasepool {
     assert(cache.count==CACHE_LIMIT && !cache[descriptor_key(first)] && kept);
     unsigned before=dev->calls;assert(glm_pipeline_acquire((id<MTLDevice>)dev,first,false,NULL));
     assert(dev->calls==before+1);
-    reset();puts("pipeline-prewarm CPU PASS (prediction, exact keys/signatures, queued/running demand, failure retry, limits, eviction)");
+    reset();puts("pipeline-prewarm CPU PASS (deferred retry/expiry/dedup/eviction, prediction, exact keys/signatures, queued/running demand, failure retry, limits, eviction)");
 } return 0; }

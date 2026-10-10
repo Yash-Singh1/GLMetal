@@ -710,16 +710,58 @@ static void *transient_alloc_raw(struct glm_backend_context *b, NSUInteger lengt
     return (__bridge void *)b->transient;
 }
 
+/* Loader uploads submit immediately, so a transient arena cannot amortize
+   its 4 MB block. Reuse the ordinary size classes for these short batches. */
+static id<MTLBuffer> upload_staging_storage(NSUInteger length, bool *reused)
+{
+    static int no_pool = -1;
+    if (no_pool < 0) no_pool = getenv("GLMETAL_NO_BUFFER_POOL") != NULL;
+    *reused = false;
+    int c = storage_class(length);
+    if (no_pool || c < 0) return glm_new_shared_buffer(length, NULL);
+    pthread_mutex_lock(&storage_pool_lock);
+    id<MTLBuffer> storage = storage_pool[c].lastObject;
+    if (storage) [storage_pool[c] removeLastObject];
+    pthread_mutex_unlock(&storage_pool_lock);
+    *reused = storage != nil;
+    return storage ? storage : glm_new_shared_buffer((NSUInteger)1 << (c + POOL_MIN_SHIFT), NULL);
+}
+
 void *glm_backend_upload_staging(struct glm_context *ctx, size_t length, const void *data, size_t *offset)
 {
     struct glm_backend_context *b = ctx->backend;
-    /* Keep the staging allocation with the command buffer that copies it.
-       A shared loader context may commit that buffer immediately after its
-       upload, and the transient completion handler retains its chunks. */
     end_encoder(b);
     command_buffer(b);
-    NSUInteger at;
-    void *storage = transient_alloc_raw(b, (NSUInteger)length, &at);
+    bool immediate = false;
+    if (!ctx->presents) {
+        pthread_mutex_lock(&ctx->share->lock);
+        immediate = ctx->share->refcount > 1;
+        pthread_mutex_unlock(&ctx->share->lock);
+    }
+    NSUInteger at = 0;
+    void *storage;
+    if (immediate) {
+        bool reused;
+        id<MTLBuffer> block = upload_staging_storage((NSUInteger)length, &reused);
+        storage = (__bridge void *)block;
+        /* Flush retains this array until completion and returns its buffers
+           to the storage pool. Never reuse staging while a blit reads it. */
+        if (block) [b->retiring addObject:block];
+        static int diagnostics = -1;
+        if (diagnostics < 0) diagnostics = getenv("GLMETAL_UPLOAD_STAGING_STATS") != NULL;
+        if (diagnostics && block) {
+            static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+            static uint64_t calls, payload, reserved, fresh, reuse;
+            pthread_mutex_lock(&lock);
+            ++calls; payload += length; reserved += block.length;
+            fresh += !reused; reuse += reused;
+            if ((calls & (calls - 1)) == 0)
+                fprintf(stderr, "glmetal: loader staging uploads=%llu payload=%llu reserved=%llu fresh=%llu reused=%llu\n",
+                        (unsigned long long)calls, (unsigned long long)payload, (unsigned long long)reserved,
+                        (unsigned long long)fresh, (unsigned long long)reuse);
+            pthread_mutex_unlock(&lock);
+        }
+    } else storage = transient_alloc_raw(b, (NSUInteger)length, &at);
     if (storage && length) memcpy((uint8_t *)mtl_contents((__bridge id<MTLBuffer>)storage) + at, data, length);
     *offset = (size_t)at;
     return storage;
