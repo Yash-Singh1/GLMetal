@@ -191,3 +191,13 @@ check-reference: lib $(OUT)/apple_get_sweep
 
 clean:
 	rm -rf $(OUT)
+
+# CPU-only sampler metadata checks. An optional request directory benchmarks
+# existing .prog reflection without compiling shaders or invoking Metal.
+$(OUT)/sampler_plan_cpu: tests/probes/sampler_plan_cpu.cpp src/sampler_plan.h $(OUT)/obj/shader_compiler.o $(OUT)/obj/compile_cache.o $(OUT)/obj/compile_remote.o
+	$(CXX) $(CXXFLAGS) tests/probes/sampler_plan_cpu.cpp $(OUT)/obj/shader_compiler.o $(OUT)/obj/compile_cache.o $(OUT)/obj/compile_remote.o $(DEP_LIBS) -o $@
+
+.PHONY: test-sampler-plan
+test-sampler-plan: $(OUT)/sampler_plan_cpu
+	arch -x86_64 $(OUT)/sampler_plan_cpu
+	arch -arm64 $(OUT)/sampler_plan_cpu

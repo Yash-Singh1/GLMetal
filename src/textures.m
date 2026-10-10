@@ -21,6 +21,7 @@
 
 GLM_HIDDEN id<MTLBuffer> glm_new_shared_buffer(NSUInteger length, const void *bytes);
 #include "programs.h"
+#include "sampler_plan.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -2098,7 +2099,7 @@ static bool emulated_border(const struct glm_texture *t, const struct glm_sample
 static int program_sampler_binding(const struct glm_uniform_info *uniform)
 {
     int arb_unit, arb_target;
-    if (sscanf(uniform->name, "glm_arb_tex%d_%d", &arb_unit, &arb_target) == 2) return -1;
+    if (glm_sampler_arb_name(uniform->name, &arb_unit, &arb_target)) return -1;
     return glm_sampler_binding(uniform->type);
 }
 
@@ -2167,15 +2168,22 @@ bool glm_bind_program_textures(struct glm_context *ctx, id<MTLRenderCommandEncod
                                const struct glm_program *program, unsigned stages, uint32_t border_mask,
                                float (*lod_bias)[4])
 {
-    uint32_t shadow_mask = border_mask & program_shadow_sampler_mask(program);
-    for (int i = 0; i < program->result.uniform_count; ++i) {
+    uint32_t shadow_mask = border_mask ? border_mask & program_shadow_sampler_mask(program) : 0;
+    static __thread struct glm_sampler_plan_cache sampler_plans;
+    const struct glm_sampler_plan *plan = glm_sampler_plan_get(&sampler_plans, program,
+        program->link_serial, program->result.uniforms, program->result.uniform_count);
+    int count = plan ? plan->count : program->result.uniform_count;
+    for (int at = 0; at < count; ++at) {
+        const struct glm_sampler_plan_item *item = plan ? &plan->items[at] : NULL;
+        int i = item ? item->uniform_index : at;
         const struct glm_uniform_info *uniform = &program->result.uniforms[i];
         if (uniform->sampler_slot < 0 || uniform->offset >= 0) continue;
         int slot;
         MTLTextureType type;
         /* Translated ARB programs name their samplers by unit and target. */
-        int arb_unit, arb_target;
-        if (sscanf(uniform->name, "glm_arb_tex%d_%d", &arb_unit, &arb_target) == 2) {
+        int arb_unit = item ? item->arb_unit : 0, arb_target = item ? item->arb_target : 0;
+        bool arb = item ? item->arb : glm_sampler_arb_name(uniform->name, &arb_unit, &arb_target);
+        if (arb) {
             static const int slots[] = {GLM_TEX_1D, GLM_TEX_2D, GLM_TEX_3D, GLM_TEX_CUBE, GLM_TEX_RECT, GLM_TEX_1D,
                                         GLM_TEX_2D, GLM_TEX_RECT};
             slot = slots[arb_target & 7];
