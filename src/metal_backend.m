@@ -4158,8 +4158,6 @@ bool glm_backend_draw_gpu(struct glm_context *ctx, GLenum mode, GLint first, GLs
             metal_indices = (__bridge id<MTLBuffer>)index_buffer->backend;
             metal_index_offset = (uintptr_t)indices;
             metal_index_type = size == 2 ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32;
-            note_gpu_read(ctx, index_buffer, (GLintptr)(uintptr_t)indices,
-                          (GLintptr)((uintptr_t)indices + (size_t)count * size));
         } else {
             metal_indices = transient_alloc(b, (NSUInteger)count * size, &metal_index_offset);
             memcpy((uint8_t *)mtl_contents(metal_indices) + metal_index_offset, index_data, (size_t)count * size);
@@ -4205,6 +4203,12 @@ bool glm_backend_draw_gpu(struct glm_context *ctx, GLenum mode, GLint first, GLs
     }
 
     if (metal_indices) {
+        /* prepare_draw opens the command buffer. Recording this earlier can
+           assign the previous submission's serial to its first index read,
+           allowing a following CPU write to overwrite the queued draw. */
+        if (index_buffer && metal_indices == (__bridge id<MTLBuffer>)index_buffer->backend)
+            note_gpu_read(ctx, index_buffer, (GLintptr)(uintptr_t)indices,
+                          (GLintptr)((uintptr_t)indices + (size_t)count * gl_type_size(index_type)));
         [e drawIndexedPrimitives:primitive indexCount:draw_count indexType:metal_index_type indexBuffer:metal_indices
                indexBufferOffset:metal_index_offset instanceCount:(NSUInteger)instances
                       baseVertex:index_base - (NSInteger)rebase baseInstance:0];
