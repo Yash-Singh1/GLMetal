@@ -90,6 +90,11 @@ $(OUT)/glmetal-compiler: tools/glmetal_compiler.cpp src/shader_compiler.cpp src/
 	xcrun clang++ -arch arm64 -isysroot $(SDK) -mmacosx-version-min=11.0 -O2 -std=c++17 -I$(DEPS)/include -I$(GLSLANG_SRC) -Isrc -I$(GEN) \
 		tools/glmetal_compiler.cpp src/shader_compiler.cpp src/compile_cache.cpp src/compile_remote.cpp $(DEP_LIBS) -o $@
 
+# Serial offline request replay uses the same compiler and persistent cache.
+$(OUT)/glmetal-precompile: tools/glmetal_precompile.mm $(OUT)/obj/shader_compiler.o $(OUT)/obj/compile_cache.o $(OUT)/obj/compile_remote.o
+	xcrun clang++ -arch arm64 -isysroot $(SDK) -mmacosx-version-min=11.0 -O2 -std=c++17 -fobjc-arc -I$(DEPS)/include -Isrc -I$(GEN) \
+		tools/glmetal_precompile.mm $(OUT)/obj/shader_compiler.o $(OUT)/obj/compile_cache.o $(OUT)/obj/compile_remote.o $(DEP_LIBS) -framework Foundation -framework Metal -o $@
+
 # The shader compiler's identity for the disk caches: a hash of its source
 # (and glslang/SPIRV-Cross), so rebuilds that do not change it keep caches.
 COMPILER_INPUTS := src/shader_compiler.cpp src/shader_compiler.h src/shader_texture_bias.h src/shader_fp64.h src/shader_fp64_arithmetic.h src/shader_fp64_matrix.h src/shader_cube_shadow.h src/shader_clip.h src/compile_cache.cpp $(DEPS)/lib/libglslang.a

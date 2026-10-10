@@ -15,6 +15,7 @@
 #include <map>
 #include <mutex>
 #include <spawn.h>
+#include <sys/stat.h>
 #include <string>
 #include <sys/sysctl.h>
 #include <sys/wait.h>
@@ -25,6 +26,32 @@
 extern "C" char **environ;
 extern "C" void glm_remote_encode_request(const glm_compile_request *req, std::vector<unsigned char> *out);
 extern "C" bool glm_remote_decode_result(const unsigned char *data, size_t size, glm_compile_result *res);
+
+// Optional exact request capture for offline precompilation. The normal path
+// only checks the environment variable; cache hits are captured as well.
+extern "C" void glm_compile_record_request(const glm_compile_request *req)
+{
+    const char *dir = getenv("GLMETAL_DUMP_REQUESTS");
+    if (!dir || !*dir) return;
+    std::vector<unsigned char> payload;
+    glm_remote_encode_request(req, &payload);
+    uint64_t hash = 1469598103934665603ull;
+    for (unsigned char byte : payload) hash = (hash ^ byte) * 1099511628211ull;
+    char name[32];
+    snprintf(name, sizeof name, "/%016llx.request", (unsigned long long)hash);
+    std::string path = std::string(dir) + name;
+    static std::mutex capture_lock;
+    std::lock_guard<std::mutex> guard(capture_lock);
+    if (access(path.c_str(), F_OK) == 0) return;
+    mkdir(dir, 0755);
+    std::string temporary = path + ".tmp." + std::to_string(getpid());
+    FILE *file = fopen(temporary.c_str(), "wb");
+    if (!file) return;
+    bool ok = fwrite(payload.data(), 1, payload.size(), file) == payload.size();
+    ok = fclose(file) == 0 && ok;
+    if (ok) rename(temporary.c_str(), path.c_str());
+    else unlink(temporary.c_str());
+}
 
 namespace {
 

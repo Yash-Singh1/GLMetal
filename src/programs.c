@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+extern void glm_compile_record_request(const struct glm_compile_request *request);
+
 /* Shaders and programs share one name space, as in GL. */
 static struct glm_object_table *objects(struct glm_context *ctx) { return &ctx->share->shaders; }
 
@@ -378,6 +380,7 @@ bool glm_program_link_sources(struct glm_context *ctx, struct glm_program *p, co
     request.feedback_varyings = (const char *const *)p->feedback_varyings;
     request.feedback_count = p->feedback_count;
     request.feedback_interleaved = p->feedback_mode == GL_INTERLEAVED_ATTRIBS;
+    glm_compile_record_request(&request);
     struct glm_compile_result result = {0};
     uint64_t started = glm_now_ns();
     if (request.feedback_count && !sources[GLM_STAGE_VERTEX] &&
@@ -1579,6 +1582,7 @@ GLM_EXPORT void glGetActiveSubroutineUniformiv(GLuint name, GLenum type, GLuint 
    real program will. */
 struct glm_program *glm_program_shadow_link(const struct glm_compile_request *request)
 {
+    glm_compile_record_request(request);
     struct glm_program *p = calloc(1, sizeof *p);
     p->feedback_mode = GL_INTERLEAVED_ATTRIBS;
     p->ext_geometry[1] = GL_TRIANGLES;

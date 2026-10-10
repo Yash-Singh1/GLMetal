@@ -40,6 +40,40 @@ verified equivalent fast-path build retains its predecessor's identity through
 that exception. This avoids discarding installed caches for an optimization
 that produces the same results.
 
+## Offline shader preparation
+
+Set `GLMETAL_DUMP_REQUESTS=/absolute/existing/parent/requests` while running an
+application to record exact vertex/fragment link requests, including bindings
+and variant fields. Recording is opt-in and includes cache hits. Request files
+contain application shader source and belong in local, ignored build storage.
+
+```sh
+make build/glmetal-precompile
+build/glmetal-precompile --request-dir /path/to/requests --metal-libraries
+```
+
+The native arm64 utility validates each stage and prepares the production
+`.ok` and `.prog` caches under `~/Library/Caches/GLMetal`. It processes one
+request at a time with a 25 ms pause. `--metal-libraries` also compiles the
+generated Metal libraries with the driver's language and math options to warm
+the system's device cache. It does not submit GPU work or store standalone
+`.metallib` files. A second invocation reports exact program-cache hits.
+`--dry-run` checks inputs without compilation; `--limit N` bounds the workload.
+A JSON manifest can specify source files and every request field instead of
+using recorded binary requests. Geometry, tessellation and compute requests
+are not supported by this utility.
+
+Shader libraries alone cannot precompile every render pipeline. Pipeline
+creation also needs the draw's attachment formats, sample count, blending,
+vertex inputs and function specialization. New shader or state variants can
+still compile during gameplay. See Apple's documentation on
+[binary archives](https://developer.apple.com/documentation/metal/metal-binary-archives)
+for the distinction between Metal IR and GPU-specific pipeline binaries.
+
+`python3 tests/probes/precompile_cli.py` checks cold/hot cache reuse, binding
+and feedback variants, exact JSON/binary request identity, and malformed input
+rejection without a GL context or Metal compilation.
+
 ## Layout
 
 - `src/` the implementation; `src/marshal/` the threaded command stream
