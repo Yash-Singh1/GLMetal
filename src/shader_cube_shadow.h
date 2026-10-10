@@ -16,6 +16,7 @@ static GLMCubeSpirv cube_shadow_spirv(const std::vector<uint32_t> &words,
     using namespace spv;
     using namespace spirv_cross;
     GLMCubeSpirv out; out.words = words;
+    if (!spirv_has_image_type(words, spv::DimCube)) return out;
     Compiler reflect(words);
     std::map<uint32_t, std::vector<uint32_t>> types;
     uint32_t next = words[3], float_type = 0, uint_type = 0, vector_type = 0;

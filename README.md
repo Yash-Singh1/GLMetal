@@ -28,6 +28,18 @@ does not alter canonical source deduplication or normal compilation. Direct
 fixed-function, utility and border-variant compilation paths remain outside
 its coverage.
 
+`tests/probes/run_shader_prepare_cpu.sh` compares the matrix-token fast path
+against its prior declaration scan without creating a GL context. It checks
+prepared GLSL and complete serialized compiler results for generated shader
+pairs, and can accept a tab-separated vertex/fragment source manifest. Set
+`GLM_PROBE_ARCH=arm64` or `x86_64` to select the compiler architecture.
+
+Compiler cache identities normally hash all listed compiler inputs. The exact
+verified equivalent fast-path build retains its predecessor's identity through
+`tools/compiler_stamp.py`; any further source or dependency edit invalidates
+that exception. This avoids discarding installed caches for an optimization
+that produces the same results.
+
 ## Layout
 
 - `src/` the implementation; `src/marshal/` the threaded command stream

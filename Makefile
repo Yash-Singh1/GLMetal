@@ -92,9 +92,10 @@ $(OUT)/glmetal-compiler: tools/glmetal_compiler.cpp src/shader_compiler.cpp src/
 
 # The shader compiler's identity for the disk caches: a hash of its source
 # (and glslang/SPIRV-Cross), so rebuilds that do not change it keep caches.
-$(GEN)/compiler_stamp.h: src/shader_compiler.cpp src/shader_compiler.h src/shader_texture_bias.h src/shader_fp64.h src/shader_fp64_arithmetic.h src/shader_fp64_matrix.h src/shader_cube_shadow.h src/shader_clip.h src/compile_cache.cpp $(DEPS)/lib/libglslang.a
+COMPILER_INPUTS := src/shader_compiler.cpp src/shader_compiler.h src/shader_texture_bias.h src/shader_fp64.h src/shader_fp64_arithmetic.h src/shader_fp64_matrix.h src/shader_cube_shadow.h src/shader_clip.h src/compile_cache.cpp $(DEPS)/lib/libglslang.a
+$(GEN)/compiler_stamp.h: $(COMPILER_INPUTS) tools/compiler_stamp.py
 	@mkdir -p $(GEN)
-	printf '#define GLM_COMPILER_STAMP "%s"\n' "$$(cat $^ | shasum -a 256 | cut -c1-32)" > $@
+	python3 tools/compiler_stamp.py $(COMPILER_INPUTS) > $@
 
 $(OUT)/obj/%.o: src/%.cpp src/shader_compiler.h $(DEPS)/lib/libglslang.a $(GEN)/compiler_stamp.h
 	@mkdir -p $(OUT)/obj

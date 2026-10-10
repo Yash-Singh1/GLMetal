@@ -5,6 +5,7 @@
 static std::vector<uint32_t> texture_bias_spirv(const std::vector<uint32_t> &words,
                                                const std::map<std::string, int> &slots)
 {
+    if (!spirv_has_image_type(words)) return words;
     using namespace spv;
     spirv_cross::Compiler reflect(words);
     struct Image { uint32_t slot; uint32_t index = 0; uint32_t parameter = 0; };

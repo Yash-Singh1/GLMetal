@@ -793,10 +793,25 @@ std::vector<UniformInit> take_uniform_initializers(std::string &text, std::strin
 // Arrays of matrices as stage inputs/outputs (MSL has none): flat arrays of
 // their column vectors, copied to/from a private array of the matrices
 // around the shader's main. Locations are unchanged (one per column).
+static bool has_matrix_type_token(const std::string &text)
+{
+    for (size_t at = text.find("mat"); at != std::string::npos; at = text.find("mat", at + 3)) {
+        if (at && ident_char(text[at - 1])) continue;
+        size_t end = at + 3;
+        if (end >= text.size() || text[end] < '2' || text[end] > '4') continue;
+        ++end;
+        if (end + 1 < text.size() && text[end] == 'x' && text[end + 1] >= '2' && text[end + 1] <= '4') end += 2;
+        if (end == text.size() || !ident_char(text[end])) return true;
+    }
+    return false;
+}
+
 std::string flatten_matrix_array_io(const std::string &text, glm_stage stage)
 {
     const char *storage = stage == GLM_STAGE_VERTEX ? "out" : "in";
-    if (text.find("mat") == std::string::npos) return text;
+    // Names such as cinematic contain "mat" but cannot match the matrix
+    // declaration regex. Avoid scanning their entire shader as declarations.
+    if (!has_matrix_type_token(text)) return text;
     static const std::regex declaration(
         R"(((?:layout\s*\([^)]*\)\s*)?)((?:\w+\s+)*?)\b(in|out)\s+(mat([234])(?:x([234]))?)\s+(\w+)\s*\[\s*(\d+)\s*\]\s*;)");
     std::string out, copies_in, copies_out;
@@ -2674,6 +2689,23 @@ static void signed_remainder(std::vector<unsigned int> &words)
         if ((words[i] & 0xffff) == OP_SMOD) words[i] = (words[i] & 0xffff0000u) | OP_SREM;
         i += count ? count : 1;
     }
+}
+
+// These rewrites need image types. Avoid building reflection when their
+// required type is absent, but retain the original path for malformed input.
+static bool spirv_has_image_type(const std::vector<uint32_t> &words, int dimension = -1)
+{
+    if (words.size() < 5) return true;
+    for (size_t at = 5; at < words.size();) {
+        uint32_t count = words[at] >> 16;
+        if (!count || count > words.size() - at) return true;
+        if ((words[at] & 0xffff) == spv::OpTypeImage) {
+            if (count < 9 || dimension < 0 ||
+                words[at + 3] == static_cast<uint32_t>(dimension)) return true;
+        }
+        at += count;
+    }
+    return false;
 }
 
 #include "shader_texture_bias.h"
