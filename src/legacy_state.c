@@ -402,6 +402,8 @@ GLM_EXPORT void glActiveTexture(GLenum texture)
 {
     GLM_CONTEXT(ctx);
     if (texture < GL_TEXTURE0 || texture >= GL_TEXTURE0 + GLM_MAX_TEXTURE_UNITS) return glm_error(ctx, GL_INVALID_ENUM);
+    /* This selector routes subsequent setters; draws use explicit units.
+       Its pending-state accounting remains in the marshal layer. */
     ctx->state.active_texture = texture;
 }
 GLM_EXPORT void glActiveTextureARB(GLenum texture) { glActiveTexture(texture); }

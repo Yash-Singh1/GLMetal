@@ -253,6 +253,9 @@ struct glm_backend_context {
     id<MTLBuffer> visibility;
     NSUInteger visibility_used;
     uint64_t pass_id;
+    uint64_t framebuffer_resource_generation;
+    uint64_t reported_pass_id;
+    unsigned reported_frames;
     bool pass_has_visibility;
     int64_t counting_offset; /* -1: counting disabled on the open encoder */
     /* State already set on the open encoder, to skip redundant calls. */
@@ -273,6 +276,15 @@ struct glm_backend_context {
         NSUInteger offsets[2][31];
         __unsafe_unretained id textures[2][96], samplers[2][16];
     } cache;
+    /* Inline uniforms remain bound until that slot receives another binding
+       or the encoder ends. Keep their snapshots outside the reset cache. */
+    struct inline_byte_binding {
+        uint64_t encoder;
+        NSUInteger length, capacity;
+        uint8_t *data;
+    } inline_bytes[2][31];
+    bool inline_bytes_enabled, inline_bytes_stats;
+    uint64_t inline_bytes_calls, inline_bytes_skipped, inline_bytes_saved;
     uint64_t encoder_serial; /* bumped for every new render encoder */
     uint32_t vertex_id_base; /* fourth word of GLMPoint, independent of state serial */
     uint32_t vertex_id_offset, vertex_id_mapped;
@@ -340,7 +352,9 @@ static void enc_buffer(struct glm_backend_context *b, unsigned stages, __unsafe_
     for (int stage = 0; stage < 2; ++stage) {
         if (!(stages & (1u << stage))) continue;
         struct encoder_cache *c = &b->cache;
-        if (c->buffers[stage][slot] == buffer) {
+        bool was_bytes = b->inline_bytes[stage][slot].encoder == b->encoder_serial;
+        b->inline_bytes[stage][slot].encoder = 0;
+        if (!was_bytes && c->buffers[stage][slot] == buffer) {
             if (c->offsets[stage][slot] == offset) continue;
             if (stage == 0) [b->encoder setVertexBufferOffset:offset atIndex:slot];
             else [b->encoder setFragmentBufferOffset:offset atIndex:slot];
@@ -357,13 +371,39 @@ static void enc_buffer(struct glm_backend_context *b, unsigned stages, __unsafe_
 static void enc_bytes(struct glm_backend_context *b, unsigned stages, const void *bytes, NSUInteger length,
                       NSUInteger slot)
 {
-    if (stages & STAGE_VERTEX) {
-        [b->encoder setVertexBytes:bytes length:length atIndex:slot];
-        b->cache.buffers[0][slot] = nil;
-    }
-    if (stages & STAGE_FRAGMENT) {
-        [b->encoder setFragmentBytes:bytes length:length atIndex:slot];
-        b->cache.buffers[1][slot] = nil;
+    for (int stage = 0; stage < 2; ++stage) {
+        if (!(stages & (1u << stage))) continue;
+        struct inline_byte_binding *entry = &b->inline_bytes[stage][slot];
+        bool cached = b->inline_bytes_enabled && length <= 4096;
+        bool same = cached && entry->encoder == b->encoder_serial && entry->data && entry->length == length &&
+                    (!length || !memcmp(entry->data, bytes, length));
+        if (!same) {
+            if (stage == 0) [b->encoder setVertexBytes:bytes length:length atIndex:slot];
+            else [b->encoder setFragmentBytes:bytes length:length atIndex:slot];
+            entry->encoder = b->encoder_serial;
+            entry->length = NSUIntegerMax;
+            if (cached) {
+                NSUInteger capacity = MAX(length, 1u);
+                if (entry->capacity < capacity) {
+                    void *data = realloc(entry->data, capacity);
+                    if (data) { entry->data = data; entry->capacity = capacity; }
+                }
+                if (entry->capacity >= capacity) {
+                    if (length) memcpy(entry->data, bytes, length);
+                    entry->length = length;
+                }
+            }
+            b->cache.buffers[stage][slot] = nil;
+        }
+        if (b->inline_bytes_stats) {
+            ++b->inline_bytes_calls;
+            b->inline_bytes_skipped += same;
+            if (same) b->inline_bytes_saved += length;
+            if (b->inline_bytes_calls % 20000 == 0)
+                fprintf(stderr, "glmetal: inline uniforms %llu bindings, %llu skipped, %llu bytes not uploaded\n",
+                        (unsigned long long)b->inline_bytes_calls, (unsigned long long)b->inline_bytes_skipped,
+                        (unsigned long long)b->inline_bytes_saved);
+        }
     }
 }
 
@@ -435,6 +475,8 @@ struct glm_backend_context *glm_backend_context_create(struct glm_context *ctx)
 {
     struct glm_backend_context *b = calloc(1, sizeof *b);
     b->ctx = ctx;
+    b->inline_bytes_enabled = getenv("GLMETAL_NO_INLINE_BYTES_CACHE") == NULL;
+    b->inline_bytes_stats = getenv("GLMETAL_STREAM_STATS") != NULL;
     b->queue = (__bridge id<MTLCommandQueue>)ctx->share->queue;
     b->completions = dispatch_group_create();
     b->transients = [NSMutableArray array];
@@ -539,6 +581,8 @@ void glm_backend_context_destroy(struct glm_backend_context *b)
     b->ff_buffer = b->legacy_buffer = nil;
     for (int i = 0; i < 256; ++i)
         if (b->index_ranges[i].list) CFRelease(b->index_ranges[i].list);
+    for (int stage = 0; stage < 2; ++stage)
+        for (int slot = 0; slot < 31; ++slot) free(b->inline_bytes[stage][slot].data);
     free(b);
 }
 
@@ -771,7 +815,7 @@ void *glm_backend_upload_staging(struct glm_context *ctx, size_t length, const v
 
 void glm_backend_renderbuffer_storage(struct glm_context *ctx, struct glm_renderbuffer *rb)
 {
-    (void)ctx;
+    glm_framebuffer_resource_changed(ctx->share);
     glm_backend_release(rb->backend);
     rb->backend = NULL;
     if (!rb->width || !rb->height) return;
@@ -899,6 +943,8 @@ static id<MTLTexture> render_view(struct glm_context *ctx, id<MTLTexture> t)
 static bool ensure_encoder(struct glm_context *ctx)
 {
     struct glm_backend_context *b = ctx->backend;
+    uint64_t resources = __atomic_load_n(&ctx->share->framebuffer_resource_generation, __ATOMIC_ACQUIRE);
+    if (ctx->draw_framebuffer && b->framebuffer_resource_generation != resources) b->framebuffer_dirty = true;
     if (b->encoder && !b->framebuffer_dirty && b->pass_srgb == ctx->state.framebuffer_srgb) return true;
     end_encoder(b);
     b->framebuffer_dirty = false;
@@ -1041,6 +1087,8 @@ static bool ensure_encoder(struct glm_context *ctx)
         b->pass_has_visibility = true;
     }
     b->encoder = [command_buffer(b) renderCommandEncoderWithDescriptor:pass];
+    /* Attachment resolution can allocate texture storage lazily. */
+    b->framebuffer_resource_generation = __atomic_load_n(&ctx->share->framebuffer_resource_generation, __ATOMIC_ACQUIRE);
     memset(&b->cache, 0, sizeof b->cache);
     ++b->encoder_serial;
     return b->encoder != nil;
@@ -1717,6 +1765,11 @@ bool glm_backend_present(struct glm_context *ctx, void *layer_pointer, bool opaq
     (void)opaque;
     dump_presented(b, commands);
     ++glm_trace_frames;
+    if (b->inline_bytes_stats && ++b->reported_frames == 60) {
+        fprintf(stderr, "glmetal: render passes per frame=%.2f\n", (b->pass_id - b->reported_pass_id) / 60.0);
+        b->reported_pass_id = b->pass_id;
+        b->reported_frames = 0;
+    }
     report_slow_frame();
     [commands presentDrawable:drawable];
     glm_backend_flush(ctx, false);

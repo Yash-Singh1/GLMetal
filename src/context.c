@@ -553,22 +553,41 @@ static void set_depth_range(struct glm_state *s, GLuint i, double n, double f)
     if (i == 0) memcpy(s->depth_range, s->depth_ranges[0], sizeof s->depth_range);
 }
 
+static void local_draw_state_changed(struct glm_context *ctx)
+{
+    __atomic_add_fetch(&ctx->state_serial, 1, __ATOMIC_RELAXED);
+}
+
 GLM_EXPORT void glViewport(GLint x, GLint y, GLsizei width, GLsizei height)
 {
     GLM_CONTEXT(ctx);
     if (width < 0 || height < 0) return glm_error(ctx, GL_INVALID_VALUE);
+    const float value[4] = {(float)x, (float)y, width > 16384 ? 16384.0f : (float)width,
+                           height > 16384 ? 16384.0f : (float)height};
+    const GLint integer[4] = {x, y, width, height};
+    bool changed = memcmp(ctx->state.viewport, integer, sizeof integer) != 0;
+    for (GLuint i = 0; i < GLM_MAX_VIEWPORTS; ++i)
+        changed |= memcmp(ctx->state.viewports[i], value, sizeof value) != 0;
+    if (!changed) return;
     for (GLuint i = 0; i < GLM_MAX_VIEWPORTS; ++i) set_viewport(&ctx->state, i, (float)x, (float)y, (float)width, (float)height);
     ctx->state.viewport[0] = x;
     ctx->state.viewport[1] = y;
     ctx->state.viewport[2] = width;
     ctx->state.viewport[3] = height;
+    local_draw_state_changed(ctx);
 }
 
 GLM_EXPORT void glScissor(GLint x, GLint y, GLsizei width, GLsizei height)
 {
     GLM_CONTEXT(ctx);
     if (width < 0 || height < 0) return glm_error(ctx, GL_INVALID_VALUE);
+    const GLint value[4] = {x, y, width, height};
+    bool changed = memcmp(ctx->state.scissor, value, sizeof value) != 0;
+    for (GLuint i = 0; i < GLM_MAX_VIEWPORTS; ++i)
+        changed |= memcmp(ctx->state.scissors[i], value, sizeof value) != 0;
+    if (!changed) return;
     for (GLuint i = 0; i < GLM_MAX_VIEWPORTS; ++i) set_scissor(&ctx->state, i, x, y, width, height);
+    local_draw_state_changed(ctx);
 }
 
 GLM_EXPORT void glDepthRange(GLclampd n, GLclampd f)
@@ -641,10 +660,38 @@ int glm_indexed_state_query(struct glm_context *ctx, GLenum pname, GLuint index,
     }
 }
 
-GLM_EXPORT void glDepthFunc(GLenum func) { GLM_CONTEXT(ctx); if (func < GL_NEVER || func > GL_ALWAYS) return glm_error(ctx, GL_INVALID_ENUM); ctx->state.depth_func = func; }
-GLM_EXPORT void glDepthMask(GLboolean flag) { GLM_CONTEXT(ctx); ctx->state.depth_mask = flag; }
-GLM_EXPORT void glCullFace(GLenum mode) { GLM_CONTEXT(ctx); if (mode != GL_FRONT && mode != GL_BACK && mode != GL_FRONT_AND_BACK) return glm_error(ctx, GL_INVALID_ENUM); ctx->state.cull_mode = mode; }
-GLM_EXPORT void glFrontFace(GLenum mode) { GLM_CONTEXT(ctx); if (mode != GL_CW && mode != GL_CCW) return glm_error(ctx, GL_INVALID_ENUM); ctx->state.front_face = mode; }
+GLM_EXPORT void glDepthFunc(GLenum func)
+{
+    GLM_CONTEXT(ctx);
+    if (func < GL_NEVER || func > GL_ALWAYS) return glm_error(ctx, GL_INVALID_ENUM);
+    if (ctx->state.depth_func == func) return;
+    ctx->state.depth_func = func;
+    local_draw_state_changed(ctx);
+}
+GLM_EXPORT void glDepthMask(GLboolean flag)
+{
+    GLM_CONTEXT(ctx);
+    bool value = flag != GL_FALSE;
+    if (ctx->state.depth_mask == value) return;
+    ctx->state.depth_mask = value;
+    local_draw_state_changed(ctx);
+}
+GLM_EXPORT void glCullFace(GLenum mode)
+{
+    GLM_CONTEXT(ctx);
+    if (mode != GL_FRONT && mode != GL_BACK && mode != GL_FRONT_AND_BACK) return glm_error(ctx, GL_INVALID_ENUM);
+    if (ctx->state.cull_mode == mode) return;
+    ctx->state.cull_mode = mode;
+    local_draw_state_changed(ctx);
+}
+GLM_EXPORT void glFrontFace(GLenum mode)
+{
+    GLM_CONTEXT(ctx);
+    if (mode != GL_CW && mode != GL_CCW) return glm_error(ctx, GL_INVALID_ENUM);
+    if (ctx->state.front_face == mode) return;
+    ctx->state.front_face = mode;
+    local_draw_state_changed(ctx);
+}
 GLM_EXPORT void glShadeModel(GLenum mode) { GLM_CONTEXT(ctx); if (mode != GL_FLAT && mode != GL_SMOOTH) return glm_error(ctx, GL_INVALID_ENUM); ctx->state.shade_model = mode; }
 GLM_EXPORT void glLogicOp(GLenum op) { GLM_CONTEXT(ctx); if (op < GL_CLEAR || op > GL_SET) return glm_error(ctx, GL_INVALID_ENUM); ctx->state.logic_op = op; }
 GLM_EXPORT void glPointSize(GLfloat size) { GLM_CONTEXT(ctx); if (size <= 0) return glm_error(ctx, GL_INVALID_VALUE); ctx->state.point_size = size; }

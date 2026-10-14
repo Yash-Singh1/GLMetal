@@ -140,6 +140,13 @@ CHEAP = re.compile(
     r'EnableVertexAttribArray|DisableVertexAttribArray|EnableClientState|DisableClientState|ClientActiveTexture|'
     r'BindVertexArray|ArrayElement|Rect|Gen[A-Z]|PixelStore|BeginQuery|EndQuery|TestFence|FinishFence|SetFence|'
     r'ClientWaitSync|WaitSync|FenceSync|DeleteSync)')
+# These implementations validate and advance the render-state serial only
+# when stored draw state changes. They still count as pending state commands:
+# query synchronization is independent of whether a call changes a value.
+IMPLEMENTATION_TRACKED = {
+    'glActiveTexture', 'glActiveTextureARB', 'glDepthFunc', 'glDepthMask',
+    'glCullFace', 'glFrontFace', 'glViewport', 'glScissor',
+}
 # Queries of state only state-changing (serial-bumping) calls modify: when
 # none of those are pending in the stream, they read the implementation
 # directly instead of draining it. glGet{Boolean,Float,Double}v also check
@@ -285,7 +292,8 @@ for name in sorted(set(e for e in exports if e.startswith('gl'))):
     shadow = f'    if (ctx) glm_shadow_{name}(ctx{"".join(", " + n for n in names)});\n' if name in SHADOW else ''
     # The state serial moves when the call executes (worker or caller), never
     # when it is recorded: a draw executing earlier must not see it.
-    bump = not CHEAP.match(name)
+    pending_state = not CHEAP.match(name)
+    bump = pending_state and name not in IMPLEMENTATION_TRACKED
     pointers = [i for i, (t, _) in enumerate(params) if is_pointer(t)]
     sizes = {} if not pointers else pointer_sizes(name, [(t, n) for (t, _), n in zip(params, names)])
     if name in POINTER_IS_VALUE:
@@ -324,7 +332,7 @@ for name in sorted(set(e for e in exports if e.startswith('gl'))):
         fields = '    char unused;\n'
     struct = f'struct glm_cmd_{name} {{\n{fields}}};\n'
     exec_bump = '    GLM_STATE_CHANGED(glm_current());\n' if bump else ''
-    exec_done = '    glm_thread_state_executed(glm_current());\n' if bump else ''
+    exec_done = '    glm_thread_state_executed(glm_current());\n' if pending_state else ''
     if TEXOBJ.match(name):
         exec_done += '    glm_thread_pending_add(glm_current(), 1, -1);\n'
     if texture_level_change(name):
@@ -369,7 +377,7 @@ for name in sorted(set(e for e in exports if e.startswith('gl'))):
     body = f'GLM_EXPORT void {name}({sig})\n{{\n    struct glm_context *ctx = glm_current();\n{guard}{list_branch}{shadow}'
     direct_bump = '        if (ctx) GLM_STATE_CHANGED(ctx);\n' if bump else ''
     body += f'    if (!ctx || !GLM_STREAM(ctx)) {{\n{direct_bump}        glm_impl_{name}({call});\n        return;\n    }}\n'
-    record_pending = '    glm_thread_state_recorded(ctx);\n' if bump else ''
+    record_pending = '    glm_thread_state_recorded(ctx);\n' if pending_state else ''
     if TEXOBJ.match(name):
         record_pending += '    glm_thread_pending_add(ctx, 1, 1);\n'
     if texture_level_change(name):

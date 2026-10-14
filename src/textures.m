@@ -196,6 +196,7 @@ GLM_EXPORT void glDeleteTextures(GLsizei n, const GLuint *names)
         glm_table_set(&ctx->share->textures, names[i], NULL);
         pthread_mutex_unlock(&ctx->share->lock);
         glm_detach_deleted(ctx, GL_TEXTURE, names[i]);
+        glm_framebuffer_resource_changed(ctx->share);
         glm_texture_destroy(t);
     }
 }
@@ -677,6 +678,19 @@ bool glm_backend_texture_ensure_storage(struct glm_context *ctx, struct glm_text
         if (!b->defined) return false;
     }
     struct glm_format_info info;
+    struct glm_texture_storage_key validation;
+    memset(&validation, 0, sizeof validation);
+    validation.target = t->target;
+    validation.internal_format = b->internal_format;
+    validation.width = b->width;
+    validation.height = b->height;
+    validation.depth = b->depth;
+    validation.samples = t->samples;
+    validation.base = base;
+    /* Storage is immutable between definitions. Validate the GL inputs before
+       consulting Metal, whose property calls are expensive under Rosetta. */
+    if (t->backend && !t->storage_dirty && t->storage_validation_valid &&
+        !memcmp(&validation, &t->storage_validation_key, sizeof validation)) return true;
     if (!glm_format_lookup(b->internal_format, &info)) return false;
     GLenum target = t->target;
     GLsizei w0 = b->width << base, h0 = layers_in_height(target) ? 1 : b->height << base;
@@ -700,8 +714,11 @@ bool glm_backend_texture_ensure_storage(struct glm_context *ctx, struct glm_text
     if (current && !t->storage_dirty && current.width == (NSUInteger)MAX(w0, 1) && current.height == (NSUInteger)MAX(h0, 1) &&
         current.pixelFormat == (MTLPixelFormat)info.metal_format && current.textureType == type &&
         current.arrayLength == (NSUInteger)MAX(layers, 1) && current.sampleCount == samples &&
-        (type != MTLTextureType3D || current.depth == (NSUInteger)MAX(d0, 1)))
+        (type != MTLTextureType3D || current.depth == (NSUInteger)MAX(d0, 1))) {
+        t->storage_validation_key = validation;
+        t->storage_validation_valid = true;
         return true;
+    }
     MTLTextureDescriptor *d = [MTLTextureDescriptor new];
     d.pixelFormat = (MTLPixelFormat)info.metal_format;
     d.width = (NSUInteger)MAX(w0, 1);
@@ -739,6 +756,9 @@ bool glm_backend_texture_ensure_storage(struct glm_context *ctx, struct glm_text
     t->metal_format = info.metal_format;
     t->storage_dirty = false;
     ++t->storage_generation;
+    glm_framebuffer_resource_changed(ctx->share);
+    t->storage_validation_key = validation;
+    t->storage_validation_valid = true;
     glm_backend_framebuffer_changed(ctx);
     if (t->pending) flush_pending(ctx, t);
     return true;
@@ -1011,6 +1031,10 @@ static void generate_cpu_mipmaps(struct glm_context *ctx, struct glm_texture *t,
 
 void glm_backend_generate_mipmaps(struct glm_context *ctx, struct glm_texture *t)
 {
+    /* All three generators can define new levels, including CPU/compressed
+       paths that upload each generated image before returning. */
+    ++t->definition_generation;
+    glm_framebuffer_resource_changed(ctx->share);
     if (!glm_backend_texture_ensure_storage(ctx, t)) return;
     id<MTLTexture> storage = (__bridge id<MTLTexture>)t->backend;
     if (storage.mipmapLevelCount < 2) return;
@@ -1076,6 +1100,8 @@ static bool define_level(struct glm_context *ctx, struct glm_texture *t, GLenum 
     bool changed = !l->defined || l->width != w || l->height != h || l->depth != d || l->internal_format != internal;
     *l = (struct glm_texture_level){w, h, d, internal, true};
     if (changed) {
+        ++t->definition_generation;
+        glm_framebuffer_resource_changed(ctx->share);
         /* Rebuild storage only if this level no longer fits it. */
         id<MTLTexture> storage = (__bridge id<MTLTexture>)t->backend;
         if (!storage || storage.pixelFormat != (MTLPixelFormat)info.metal_format ||
@@ -1829,7 +1855,29 @@ static MTLPixelFormat linear_format(MTLPixelFormat f)
 static id<MTLTexture> sampling_view(struct glm_context *ctx, struct glm_texture *t, bool skip_decode, bool *mipmapped)
 {
     *mipmapped = false;
+    struct glm_texture_sampling_key validation;
+    memset(&validation, 0, sizeof validation);
+    validation.definitions = t->definition_generation;
+    validation.storage = t->storage_generation;
+    validation.base = t->base_level;
+    validation.max = t->max_level;
+    validation.immutable_levels = t->immutable_levels;
+    validation.min_filter = t->sampler.min_filter;
+    validation.depth_mode = t->depth_texture_mode;
+    memcpy(validation.swizzle, t->swizzle, sizeof validation.swizzle);
+    validation.immutable = t->immutable;
+    validation.core = ctx->profile == GLM_PROFILE_CORE;
+    validation.skip_decode = skip_decode;
+    /* Cache only successful selections. Allocation failures remain retryable,
+       and a dirty image must still rebuild its storage before another draw. */
+    if (!t->storage_dirty && t->sampling_validation_valid &&
+        !memcmp(&validation, &t->sampling_validation_key, sizeof validation)) {
+        *mipmapped = t->sampling_validation_mipmapped;
+        return (__bridge id<MTLTexture>)t->sampling_validation_result;
+    }
+    t->sampling_validation_valid = false;
     if (!complete(t) || !glm_backend_texture_ensure_storage(ctx, t)) return nil;
+    validation.storage = t->storage_generation;
     id<MTLTexture> storage = (__bridge id<MTLTexture>)t->backend;
     NSUInteger base = (NSUInteger)MAX(t->base_level, 0);
     NSUInteger last = storage.mipmapLevelCount - 1;
@@ -1850,16 +1898,23 @@ static id<MTLTexture> sampling_view(struct glm_context *ctx, struct glm_texture 
     for (int c = 0; c < 4; ++c) swizzle[c] = t->swizzle[c] < 4 ? info.swizzle[t->swizzle[c]] : t->swizzle[c];
     MTLPixelFormat format = skip_decode ? linear_format(storage.pixelFormat) : storage.pixelFormat;
     bool identity = swizzle[0] == 0 && swizzle[1] == 1 && swizzle[2] == 2 && swizzle[3] == 3;
-    if (base == 0 && last == storage.mipmapLevelCount - 1 && identity && format == storage.pixelFormat) return storage;
+    id<MTLTexture> result, view = nil;
+    if (base == 0 && last == storage.mipmapLevelCount - 1 && identity && format == storage.pixelFormat) {
+        result = storage;
+        goto selected;
+    }
     uint32_t key = (uint32_t)base | (uint32_t)last << 5 | (uint32_t)(swizzle[0] | swizzle[1] << 3 | swizzle[2] << 6 |
                                                                        swizzle[3] << 9) << 10 |
                    (uint32_t)(format != storage.pixelFormat) << 22;
-    if (t->view && t->view_storage == t->backend && t->view_key == key) return (__bridge id<MTLTexture>)t->view;
+    if (t->view && t->view_storage == t->backend && t->view_key == key) {
+        result = (__bridge id<MTLTexture>)t->view;
+        goto selected;
+    }
     static const MTLTextureSwizzle map[] = {MTLTextureSwizzleRed, MTLTextureSwizzleGreen, MTLTextureSwizzleBlue,
                                             MTLTextureSwizzleAlpha, MTLTextureSwizzleZero, MTLTextureSwizzleOne};
     NSUInteger slices = storage.textureType == MTLTextureTypeCube || storage.textureType == MTLTextureTypeCubeArray
                             ? 6 * storage.arrayLength : storage.arrayLength;
-    id<MTLTexture> view = [storage newTextureViewWithPixelFormat:format textureType:storage.textureType
+    view = [storage newTextureViewWithPixelFormat:format textureType:storage.textureType
                                                           levels:NSMakeRange(base, last - base + 1)
                                                           slices:NSMakeRange(0, slices)
                                                          swizzle:MTLTextureSwizzleChannelsMake(map[swizzle[0]], map[swizzle[1]],
@@ -1868,7 +1923,15 @@ static id<MTLTexture> sampling_view(struct glm_context *ctx, struct glm_texture 
     t->view = (__bridge_retained void *)view;
     t->view_storage = t->backend;
     t->view_key = key;
-    return view;
+    result = view;
+selected:
+    if (result) {
+        t->sampling_validation_key = validation;
+        t->sampling_validation_result = (__bridge void *)result;
+        t->sampling_validation_mipmapped = *mipmapped;
+        t->sampling_validation_valid = true;
+    }
+    return result;
 }
 
 /* Convert the selected sampling view, not the full storage: LOD zero,

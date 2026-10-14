@@ -383,6 +383,7 @@ GLM_EXPORT void glDeleteRenderbuffers(GLsizei n, const GLuint *names)
         glm_table_set(&ctx->share->renderbuffers, names[i], NULL);
         pthread_mutex_unlock(&ctx->share->lock);
         glm_detach_deleted(ctx, GL_RENDERBUFFER, names[i]);
+        glm_framebuffer_resource_changed(ctx->share);
         glm_backend_release(rb->backend);
         free(rb);
     }
@@ -502,6 +503,9 @@ GLM_EXPORT void glGenFramebuffers(GLsizei n, GLuint *names)
 GLM_EXPORT void glBindFramebuffer(GLenum target, GLuint name)
 {
     GLM_CONTEXT(ctx);
+    if (target != GL_FRAMEBUFFER && target != GL_DRAW_FRAMEBUFFER && target != GL_READ_FRAMEBUFFER)
+        return glm_error(ctx, GL_INVALID_ENUM);
+    GLuint previous = ctx->draw_framebuffer;
     if (name && !glm_table_get(&ctx->framebuffers, name)) {
         struct glm_framebuffer *fb = calloc(1, sizeof *fb);
         fb->name = name;
@@ -515,28 +519,33 @@ GLM_EXPORT void glBindFramebuffer(GLenum target, GLuint name)
     case GL_READ_FRAMEBUFFER: ctx->read_framebuffer = name; break;
     default: return glm_error(ctx, GL_INVALID_ENUM);
     }
-    glm_backend_framebuffer_changed(ctx);
+    if (ctx->draw_framebuffer != previous) glm_backend_framebuffer_changed(ctx);
 }
 
 GLM_EXPORT void glDeleteFramebuffers(GLsizei n, const GLuint *names)
 {
     GLM_CONTEXT(ctx);
     if (n < 0) return glm_error(ctx, GL_INVALID_VALUE);
+    bool changed = false;
     for (GLsizei i = 0; i < n; ++i) {
         struct glm_framebuffer *fb = glm_table_get(&ctx->framebuffers, names[i]);
         if (!fb) continue;
-        if (ctx->draw_framebuffer == names[i]) ctx->draw_framebuffer = 0;
+        if (ctx->draw_framebuffer == names[i]) { ctx->draw_framebuffer = 0; changed = true; }
         if (ctx->read_framebuffer == names[i]) ctx->read_framebuffer = 0;
         glm_table_set(&ctx->framebuffers, names[i], NULL);
         free(fb);
     }
-    glm_backend_framebuffer_changed(ctx);
+    if (changed) glm_backend_framebuffer_changed(ctx);
 }
 
 GLM_EXPORT GLboolean glIsFramebuffer(GLuint name) { GLM_CONTEXT(ctx, GL_FALSE); return name && glm_table_get(&ctx->framebuffers, name); }
 
 static struct glm_framebuffer *target_framebuffer(struct glm_context *ctx, GLenum target)
 {
+    if (target != GL_FRAMEBUFFER && target != GL_DRAW_FRAMEBUFFER && target != GL_READ_FRAMEBUFFER) {
+        glm_error(ctx, GL_INVALID_ENUM);
+        return NULL;
+    }
     GLuint name = target == GL_READ_FRAMEBUFFER ? ctx->read_framebuffer : ctx->draw_framebuffer;
     if (!name) {
         glm_error(ctx, GL_INVALID_OPERATION);
@@ -561,52 +570,54 @@ static struct glm_attachment *attachment_slot(struct glm_context *ctx, struct gl
     return NULL;
 }
 
+static bool attachment_equal(const struct glm_attachment *a, const struct glm_attachment *b)
+{
+    return a->type == b->type && a->name == b->name && a->level == b->level &&
+           a->layer == b->layer && a->face == b->face && a->layered == b->layered;
+}
+
 static void attach(struct glm_context *ctx, GLenum target, GLenum attachment, GLenum type, GLuint name, GLint level,
-                   GLint layer, GLenum face)
+                   GLint layer, GLenum face, bool layered)
 {
     struct glm_framebuffer *fb = target_framebuffer(ctx, target);
     if (!fb) return;
     struct glm_attachment *second, *slot = attachment_slot(ctx, fb, attachment, &second);
     if (!slot) return;
-    struct glm_attachment value = {name ? type : GL_NONE, name, level, layer, face};
+    struct glm_attachment value = {name ? type : GL_NONE, name, level, layer, face, layered};
+    if (attachment_equal(slot, &value) && (!second || attachment_equal(second, &value))) return;
     *slot = value;
     if (second) *second = value;
-    glm_backend_framebuffer_changed(ctx);
+    if (fb->name == ctx->draw_framebuffer) glm_backend_framebuffer_changed(ctx);
 }
 
 GLM_EXPORT void glFramebufferRenderbuffer(GLenum target, GLenum attachment, GLenum rb_target, GLuint name)
 {
     GLM_CONTEXT(ctx);
     (void)rb_target;
-    attach(ctx, target, attachment, GL_RENDERBUFFER, name, 0, 0, 0);
+    attach(ctx, target, attachment, GL_RENDERBUFFER, name, 0, 0, 0, false);
 }
 
 GLM_EXPORT void glFramebufferTexture2D(GLenum target, GLenum attachment, GLenum textarget, GLuint name, GLint level)
 {
     GLM_CONTEXT(ctx);
     GLenum face = textarget >= GL_TEXTURE_CUBE_MAP_POSITIVE_X && textarget <= GL_TEXTURE_CUBE_MAP_NEGATIVE_Z ? textarget : 0;
-    attach(ctx, target, attachment, GL_TEXTURE, name, level, 0, face);
+    attach(ctx, target, attachment, GL_TEXTURE, name, level, 0, face, false);
 }
 
 GLM_EXPORT void glFramebufferTexture1D(GLenum target, GLenum attachment, GLenum textarget, GLuint name, GLint level)
-{ (void)textarget; GLM_CONTEXT(ctx); attach(ctx, target, attachment, GL_TEXTURE, name, level, 0, 0); }
+{ (void)textarget; GLM_CONTEXT(ctx); attach(ctx, target, attachment, GL_TEXTURE, name, level, 0, 0, false); }
 GLM_EXPORT void glFramebufferTexture3D(GLenum target, GLenum attachment, GLenum textarget, GLuint name, GLint level, GLint layer)
-{ (void)textarget; GLM_CONTEXT(ctx); attach(ctx, target, attachment, GL_TEXTURE, name, level, layer, 0); }
+{ (void)textarget; GLM_CONTEXT(ctx); attach(ctx, target, attachment, GL_TEXTURE, name, level, layer, 0, false); }
 GLM_EXPORT void glFramebufferTextureLayer(GLenum target, GLenum attachment, GLuint name, GLint level, GLint layer)
-{ GLM_CONTEXT(ctx); attach(ctx, target, attachment, GL_TEXTURE, name, level, layer, 0); }
+{ GLM_CONTEXT(ctx); attach(ctx, target, attachment, GL_TEXTURE, name, level, layer, 0, false); }
 GLM_EXPORT void glFramebufferTexture(GLenum target, GLenum attachment, GLuint name, GLint level)
 {
     GLM_CONTEXT(ctx);
-    attach(ctx, target, attachment, GL_TEXTURE, name, level, 0, 0);
     struct glm_texture *t = name ? glm_texture_get(ctx, name) : NULL;
     GLenum type = t ? t->target : 0;
-    if (!(type == GL_TEXTURE_2D_ARRAY || type == GL_TEXTURE_CUBE_MAP || type == GL_TEXTURE_CUBE_MAP_ARRAY ||
-          type == GL_TEXTURE_3D || type == GL_TEXTURE_1D_ARRAY || type == GL_TEXTURE_2D_MULTISAMPLE_ARRAY))
-        return;
-    struct glm_framebuffer *fb = target_framebuffer(ctx, target);
-    struct glm_attachment *second, *slot = fb ? attachment_slot(ctx, fb, attachment, &second) : NULL;
-    if (slot) slot->layered = true;
-    if (slot && second) second->layered = true;
+    bool layered = type == GL_TEXTURE_2D_ARRAY || type == GL_TEXTURE_CUBE_MAP || type == GL_TEXTURE_CUBE_MAP_ARRAY ||
+                   type == GL_TEXTURE_3D || type == GL_TEXTURE_1D_ARRAY || type == GL_TEXTURE_2D_MULTISAMPLE_ARRAY;
+    attach(ctx, target, attachment, GL_TEXTURE, name, level, 0, 0, layered);
 }
 
 GLM_HIDDEN GLenum glm_framebuffer_status(struct glm_context *ctx, struct glm_framebuffer *fb);
@@ -807,7 +818,10 @@ GLM_EXPORT void glDrawBuffers(GLsizei n, const GLenum *buffers)
     GLenum error = glm_draw_buffers_error(ctx, ctx->draw_framebuffer != 0, n, buffers);
     if (error) return glm_error(ctx, error);
     struct glm_framebuffer *fb = glm_framebuffer_get(ctx, ctx->draw_framebuffer);
-    for (int i = 0; i < GLM_MAX_DRAW_BUFFERS; ++i) fb->draw_buffers[i] = i < n ? buffers[i] : GL_NONE;
+    GLenum values[GLM_MAX_DRAW_BUFFERS];
+    for (int i = 0; i < GLM_MAX_DRAW_BUFFERS; ++i) values[i] = i < n ? buffers[i] : GL_NONE;
+    if (!memcmp(fb->draw_buffers, values, sizeof values)) return;
+    memcpy(fb->draw_buffers, values, sizeof values);
     glm_backend_framebuffer_changed(ctx);
 }
 GLM_EXPORT void glDrawBuffersARB(GLsizei n, const GLenum *buffers) { glDrawBuffers(n, buffers); }
@@ -818,8 +832,9 @@ GLM_EXPORT void glDrawBuffer(GLenum buffer)
     GLenum error = glm_color_buffer_error(ctx, ctx->draw_framebuffer != 0, buffer, GLM_CALL_DRAW_BUFFER);
     if (error) return glm_error(ctx, error);
     struct glm_framebuffer *fb = glm_framebuffer_get(ctx, ctx->draw_framebuffer);
-    for (int i = 0; i < GLM_MAX_DRAW_BUFFERS; ++i) fb->draw_buffers[i] = GL_NONE;
-    fb->draw_buffers[0] = buffer;
+    GLenum values[GLM_MAX_DRAW_BUFFERS] = {buffer};
+    if (!memcmp(fb->draw_buffers, values, sizeof values)) return;
+    memcpy(fb->draw_buffers, values, sizeof values);
     glm_backend_framebuffer_changed(ctx);
 }
 
@@ -828,7 +843,11 @@ GLM_EXPORT void glReadBuffer(GLenum buffer)
     GLM_CONTEXT(ctx);
     GLenum error = glm_color_buffer_error(ctx, ctx->read_framebuffer != 0, buffer, GLM_CALL_READ_BUFFER);
     if (error) return glm_error(ctx, error);
-    glm_framebuffer_get(ctx, ctx->read_framebuffer)->read_buffer = buffer;
+    struct glm_framebuffer *fb = glm_framebuffer_get(ctx, ctx->read_framebuffer);
+    if (fb->read_buffer == buffer) return;
+    fb->read_buffer = buffer;
+    if (ctx->profile == GLM_PROFILE_LEGACY && ctx->draw_framebuffer && ctx->read_framebuffer == ctx->draw_framebuffer)
+        glm_backend_framebuffer_changed(ctx);
 }
 
 GLM_EXPORT void glBlitFramebuffer(GLint sx0, GLint sy0, GLint sx1, GLint sy1, GLint dx0, GLint dy0, GLint dx1, GLint dy1,

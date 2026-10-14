@@ -93,6 +93,24 @@ struct glm_texture {
     uint32_t metal_format;      /* MTLPixelFormat of the storage */
     void *backend;              /* id<MTLTexture> */
     uint64_t storage_generation;
+    /* CPU validation caches. Definitions change independently of texel data;
+       uploads/FBO writes keep the same storage and sampling decisions. */
+    uint64_t definition_generation;
+    struct glm_texture_storage_key {
+        GLenum target, internal_format;
+        GLsizei width, height, depth, samples;
+        GLint base;
+    } storage_validation_key;
+    bool storage_validation_valid;
+    struct glm_texture_sampling_key {
+        uint64_t definitions, storage;
+        GLint base, max, immutable_levels;
+        GLenum min_filter, depth_mode;
+        uint8_t swizzle[4];
+        bool immutable, core, skip_decode;
+    } sampling_validation_key;
+    bool sampling_validation_valid, sampling_validation_mipmapped;
+    void *sampling_validation_result; /* borrowed from backend or view */
     uint64_t gpu_serial;
     bool storage_dirty;         /* level layout changed: storage must be rebuilt */
     uint8_t swizzle[4];         /* GL_TEXTURE_SWIZZLE_*: 0..3 r g b a, 4 zero, 5 one */
@@ -319,8 +337,16 @@ struct glm_share_group {
     struct glm_object_table lists, list_names; /* display lists (marshal_custom.c), names from glGenLists */
     void *queue; /* id<MTLCommandQueue>: one per share group keeps cross-context order */
     volatile uint64_t program_generation; /* bumped when program/shader objects are freed */
+    volatile uint64_t framebuffer_resource_generation; /* image definitions/storage shared by contexts */
     void *app_objects;  /* marshal_custom.c: shaders and programs as the application's thread sees them */
 };
+
+/* Ordered shared-context image changes must refresh an already open pass.
+   This does not replace the GL application's synchronization of mutations. */
+static inline void glm_framebuffer_resource_changed(struct glm_share_group *share)
+{
+    __atomic_add_fetch(&share->framebuffer_resource_generation, 1, __ATOMIC_RELEASE);
+}
 
 enum glm_profile { GLM_PROFILE_LEGACY, GLM_PROFILE_CORE };
 

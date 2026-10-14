@@ -29,7 +29,11 @@ struct glm_thread {
     volatile int64_t pending[3];
     /* Commands recorded (application thread) and executed (worker). */
     uint64_t recorded;
+    /* Separate producer writes, published progress and request polling. A
+       command stream must not bounce the same cache line for every call. */
+    uint8_t progress_padding[128];
     volatile uint64_t executed;
+    uint8_t request_padding[128];
     /* glm_thread_request: run on the worker once `request_after` commands
        have executed, ahead of the rest of the stream. */
     glm_exec_fn request_fn;
@@ -59,6 +63,7 @@ static void *worker(void *argument)
     struct glm_thread *t = argument;
     pthread_setname_np("GLMetal command stream");
     glm_set_current(t->ctx);
+    uint64_t executed = 0;
     pthread_mutex_lock(&t->lock);
     for (;;) {
         while (t->completed == t->submitted && !t->quit) {
@@ -76,10 +81,16 @@ static void *worker(void *argument)
                 const struct command_header *h = (const struct command_header *)p;
                 h->exec(h + 1);
                 p += h->size;
-                __atomic_store_n(&t->executed, t->executed + 1, __ATOMIC_RELEASE);
-                if (__atomic_load_n(&t->request_state, __ATOMIC_ACQUIRE) == 1) serve_request(t, false);
+                ++executed;
+                if (__atomic_load_n(&t->request_state, __ATOMIC_ACQUIRE) == 1) {
+                    /* A request still observes the exact command boundary.
+                       Otherwise publishing once per batch is sufficient. */
+                    __atomic_store_n(&t->executed, executed, __ATOMIC_RELEASE);
+                    serve_request(t, false);
+                }
             }
         }
+        __atomic_store_n(&t->executed, executed, __ATOMIC_RELEASE);
         pthread_mutex_lock(&t->lock);
         ++t->completed;
         pthread_cond_broadcast(&t->done);
