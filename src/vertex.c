@@ -111,6 +111,9 @@ static void set_array(struct glm_context *ctx, int slot, GLint size, GLenum type
     if (ctx->immediate) return glm_error(ctx, GL_INVALID_OPERATION);
     if (stride < 0) return glm_error(ctx, GL_INVALID_VALUE);
     struct glm_array *a = &ctx->vao->arrays[slot];
+    if (a->size == size && a->type == type && a->normalized == (normalized != GL_FALSE) &&
+        a->integer == integer && a->stride == stride && a->pointer == pointer && a->buffer == ctx->array_buffer)
+        return;
     glm_vao_changed(ctx->vao);
     a->size = size;
     a->type = type;
@@ -163,6 +166,7 @@ GLM_EXPORT void glVertexAttribDivisor(GLuint index, GLuint divisor)
 {
     GLM_CONTEXT(ctx);
     if (index >= GLM_MAX_ATTRIBS) return glm_error(ctx, GL_INVALID_VALUE);
+    if (ctx->vao->arrays[index].divisor == divisor) return;
     ctx->vao->arrays[index].divisor = divisor;
     glm_vao_changed(ctx->vao);
 }
@@ -189,6 +193,7 @@ GLM_EXPORT void glEnableClientState(GLenum array)
         if (array == GL_EDGE_FLAG_ARRAY || array == GL_INDEX_ARRAY || array == GL_ELEMENT_ARRAY_APPLE) return;
         return glm_error(ctx, GL_INVALID_ENUM);
     }
+    if (ctx->vao->arrays[slot].enabled) return;
     ctx->vao->arrays[slot].enabled = true;
     glm_vao_changed(ctx->vao);
 }
@@ -201,6 +206,7 @@ GLM_EXPORT void glDisableClientState(GLenum array)
         if (array == GL_EDGE_FLAG_ARRAY || array == GL_INDEX_ARRAY || array == GL_ELEMENT_ARRAY_APPLE) return;
         return glm_error(ctx, GL_INVALID_ENUM);
     }
+    if (!ctx->vao->arrays[slot].enabled) return;
     ctx->vao->arrays[slot].enabled = false;
     glm_vao_changed(ctx->vao);
 }
@@ -209,6 +215,7 @@ GLM_EXPORT void glEnableVertexAttribArray(GLuint index)
 {
     GLM_CONTEXT(ctx);
     if (index >= GLM_MAX_ATTRIBS) return glm_error(ctx, GL_INVALID_VALUE);
+    if (ctx->vao->arrays[index].enabled) return;
     ctx->vao->arrays[index].enabled = true;
     glm_vao_changed(ctx->vao);
 }
@@ -218,6 +225,7 @@ GLM_EXPORT void glDisableVertexAttribArray(GLuint index)
 {
     GLM_CONTEXT(ctx);
     if (index >= GLM_MAX_ATTRIBS) return glm_error(ctx, GL_INVALID_VALUE);
+    if (!ctx->vao->arrays[index].enabled) return;
     ctx->vao->arrays[index].enabled = false;
     glm_vao_changed(ctx->vao);
 }

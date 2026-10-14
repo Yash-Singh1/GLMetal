@@ -497,10 +497,10 @@ GLM_HIDDEN void glm_backend_clear(struct glm_context *ctx, GLbitfield mask);
 GLM_HIDDEN uint64_t glm_now_ns(void);
 GLM_HIDDEN void glm_note_stall(const char *what, uint64_t started_ns);
 /* Array state of `vao` changed (memoized GPU vertex layouts compare the serial). */
+extern GLM_HIDDEN uint64_t glm_vao_generation;
 static inline void glm_vao_changed(struct glm_vertex_array *vao)
 {
-    static uint64_t counter;
-    vao->serial = __atomic_add_fetch(&counter, 1, __ATOMIC_RELAXED);
+    vao->serial = __atomic_add_fetch(&glm_vao_generation, 1, __ATOMIC_RELAXED);
 }
 /* A draw compiled into the display list being built: its vertices fetched
    now, replayed through the immediate path (vertex.c). */

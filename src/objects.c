@@ -6,6 +6,8 @@
 #include <string.h>
 
 volatile uint64_t glm_object_generation;
+/* One sequence for every translation unit and every VAO lifetime. */
+uint64_t glm_vao_generation;
 
 /* ---- buffers ------------------------------------------------------------- */
 

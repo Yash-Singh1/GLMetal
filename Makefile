@@ -134,6 +134,13 @@ $(OUT)/libGLMetal.dylib: $(SRC_C) $(SRC_M) $(wildcard src/*.h) $(GENERATED) $(LI
 
 glcompare: $(OUT)/glcompare $(OUT)/libglcases.dylib
 
+.PHONY: vertex-layout-bench
+vertex-layout-bench: $(OUT)/glcompare $(OUT)/libvertex_layout_bench.dylib
+
+$(OUT)/libvertex_layout_bench.dylib: tests/probes/vertex_layout_bench.c $(GLC)/glc_util.c $(GLC)/glcompare.h $(OUT)/gen/glc_gl_legacy.h
+	$(CC) $(CFLAGS) -I$(GLC) -I$(OUT)/gen -dynamiclib tests/probes/vertex_layout_bench.c $(GLC)/glc_util.c \
+		-Wl,-undefined,dynamic_lookup -o $@
+
 .PHONY: compile-budget-probe
 compile-budget-probe: $(OUT)/glm_compile_budget
 

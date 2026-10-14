@@ -3648,6 +3648,7 @@ struct gpu_layout_key {
     struct { uint8_t format, slot; uint16_t offset; } attribute[GLM_MAX_ATTRIBS];
     struct { uint32_t stride, rate; uint8_t step, pad[3]; } slot[GLM_VERTEX_SLOTS];
 };
+_Static_assert(sizeof(struct gpu_layout_key) % sizeof(uint64_t) == 0, "word-sized layout key");
 
 static uint32_t intern_layout(struct glm_backend_context *b, const struct gpu_layout_key *key, MTLVertexDescriptor **out)
 {
@@ -3657,8 +3658,30 @@ static uint32_t intern_layout(struct glm_backend_context *b, const struct gpu_la
     static __thread struct gpu_layout_key last_key;
     static __thread uint32_t last_id;
     static __thread __unsafe_unretained MTLVertexDescriptor *last_layout;
+    /* Alternating layouts are common even when the input buffers change.
+       Descriptors are immutable and the global registry retains them forever. */
+    static __thread struct {
+        struct gpu_layout_key key;
+        uint32_t id;
+        __unsafe_unretained MTLVertexDescriptor *layout;
+    } recent[32];
     (void)b;
     if (last_id && !memcmp(key, &last_key, sizeof *key)) {
+        *out = last_layout;
+        return last_id;
+    }
+    uint64_t hash = UINT64_C(0xcbf29ce484222325);
+    const uint8_t *bytes = (const uint8_t *)key;
+    for (size_t at = 0; at < sizeof *key; at += sizeof(uint64_t)) {
+        uint64_t word;
+        memcpy(&word, bytes + at, sizeof word);
+        hash = (hash ^ word) * UINT64_C(0x100000001b3);
+    }
+    unsigned slot = (unsigned)(hash ^ (hash >> 32)) & 31;
+    if (recent[slot].id && !memcmp(key, &recent[slot].key, sizeof *key)) {
+        last_key = *key;
+        last_id = recent[slot].id;
+        last_layout = recent[slot].layout;
         *out = last_layout;
         return last_id;
     }
@@ -3693,6 +3716,9 @@ static uint32_t intern_layout(struct glm_backend_context *b, const struct gpu_la
     last_key = *key;
     last_id = number.unsignedIntValue;
     last_layout = *out;
+    recent[slot].key = last_key;
+    recent[slot].id = last_id;
+    recent[slot].layout = last_layout;
     return last_id;
 }
 
@@ -3773,6 +3799,23 @@ struct gpu_layout {
     MTLVertexDescriptor *__unsafe_unretained layout; /* interned, never freed */
     uint32_t layout_id;
 };
+
+/* Array setters may restore the previous state or change inputs this shader
+   does not read. Neither changes the descriptor or its buffer bindings.
+   Compare fields rather than padding, and ignore fetch state for constants. */
+static bool layout_arrays_equal(const struct gpu_layout *L, const struct glm_vertex_array *vao, uint32_t used)
+{
+    for (uint32_t bits = used; bits; bits &= bits - 1) {
+        int i = __builtin_ctz(bits);
+        const struct glm_array *a = &L->arrays[i], *b = &vao->arrays[i];
+        if (a->enabled != b->enabled) return false;
+        if (!a->enabled) continue;
+        if (a->size != b->size || a->type != b->type || a->stride != b->stride ||
+            a->normalized != b->normalized || a->integer != b->integer || a->pointer != b->pointer ||
+            a->buffer != b->buffer || a->divisor != b->divisor) return false;
+    }
+    return true;
+}
 
 static bool fail_layout(struct gpu_layout *L, const char *reason)
 {
@@ -4090,8 +4133,11 @@ bool glm_backend_draw_gpu(struct glm_context *ctx, GLenum mode, GLint first, GLs
     static __thread struct gpu_layout cache;
     struct gpu_layout *L = &cache;
     uint64_t buffer_generation = __atomic_load_n(&glm_object_generation, __ATOMIC_ACQUIRE);
-    if (!L->valid || L->vao != ctx->vao || L->vao_serial != ctx->vao->serial || L->used != used || L->integer != integer ||
-        L->unsigned_mask != unsigned_mask || L->buffer_generation != buffer_generation) {
+    bool compatible = L->valid && L->vao == ctx->vao && L->used == used && L->integer == integer &&
+        L->unsigned_mask == unsigned_mask && L->buffer_generation == buffer_generation;
+    bool same_serial = compatible && L->vao_serial == ctx->vao->serial;
+    bool same_arrays = !same_serial && compatible && layout_arrays_equal(L, ctx->vao, used);
+    if (!same_serial && !same_arrays) {
         L->valid = false;
         L->vao_serial = ctx->vao->serial;
         memcpy(L->arrays, ctx->vao->arrays, sizeof L->arrays);
@@ -4102,6 +4148,20 @@ bool glm_backend_draw_gpu(struct glm_context *ctx, GLenum mode, GLint first, GLs
         L->buffer_generation = buffer_generation;
         build_layout(ctx, L, used, integer, unsigned_mask);
         L->valid = true;
+    } else if (same_arrays) {
+        L->vao_serial = ctx->vao->serial;
+    }
+    static __thread int layout_stats;
+    static __thread uint64_t layout_draws, layout_builds, layout_restores;
+    if (!layout_stats) layout_stats = getenv("GLMETAL_STREAM_STATS") ? 1 : -1;
+    if (layout_stats > 0) {
+        ++layout_draws;
+        layout_builds += !same_serial && !same_arrays;
+        layout_restores += same_arrays;
+        if (layout_draws % 20000 == 0)
+            fprintf(stderr, "glmetal: vertex layouts %llu draws, %llu builds, %llu restored-state reuses\n",
+                    (unsigned long long)layout_draws, (unsigned long long)layout_builds,
+                    (unsigned long long)layout_restores);
     }
     if (L->fallback) return gpu_fallback(L->fallback);
     struct vertex_slot *slots = L->slots;
