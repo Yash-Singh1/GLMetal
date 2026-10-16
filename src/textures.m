@@ -139,6 +139,7 @@ GLM_EXPORT void glGenTextures(GLsizei n, GLuint *names)
         GLuint name = glm_table_reserve(&ctx->share->textures);
         glm_table_set(&ctx->share->textures, name, new_texture(name));
         names[i] = name;
+        glm_sampling_resource_changed(ctx->share);
     }
     pthread_mutex_unlock(&ctx->share->lock);
 }
@@ -159,6 +160,7 @@ GLM_EXPORT void glBindTexture(GLenum target, GLuint name)
         if (t->target && t->target != target) return glm_error(ctx, GL_INVALID_OPERATION);
         if (!t->target) {
             t->target = target;
+            glm_sampling_resource_changed(ctx->share);
             if (target == GL_TEXTURE_RECTANGLE_ARB) {
                 t->sampler.min_filter = GL_LINEAR;
                 t->sampler.wrap_s = t->sampler.wrap_t = t->sampler.wrap_r = GL_CLAMP_TO_EDGE;
@@ -197,6 +199,7 @@ GLM_EXPORT void glDeleteTextures(GLsizei n, const GLuint *names)
         pthread_mutex_unlock(&ctx->share->lock);
         glm_detach_deleted(ctx, GL_TEXTURE, names[i]);
         glm_framebuffer_resource_changed(ctx->share);
+        glm_sampling_resource_changed(ctx->share);
         glm_texture_destroy(t);
     }
 }
@@ -217,6 +220,8 @@ static bool metal_border(const float *b)
 
 static void sampler_parameter(struct glm_context *ctx, struct glm_sampler_state *s, GLenum pname, const float *v)
 {
+    struct glm_sampler_state previous;
+    memcpy(&previous, s, sizeof previous);
     GLenum e = (GLenum)v[0];
     if ((pname == GL_TEXTURE_BORDER_COLOR && !metal_border(v)) ||
         ((pname == GL_TEXTURE_WRAP_S || pname == GL_TEXTURE_WRAP_T || pname == GL_TEXTURE_WRAP_R) && e == GL_CLAMP))
@@ -240,8 +245,9 @@ static void sampler_parameter(struct glm_context *ctx, struct glm_sampler_state 
         break;
     default:
         glm_log("texture/sampler parameter 0x%04x not supported", pname);
-        glm_error(ctx, GL_INVALID_ENUM);
+        return glm_error(ctx, GL_INVALID_ENUM);
     }
+    if (memcmp(&previous, s, sizeof previous)) glm_sampling_resource_changed(ctx->share);
 }
 
 /* Texture parameters only one profile has (Apple's: build/probes/texparam.c):
@@ -279,23 +285,27 @@ static void texture_parameter(GLenum target, GLenum pname, const float *v)
         return glm_error(ctx, GL_INVALID_ENUM);
     }
     if (!glm_texture_pname_in_profile(ctx, pname)) return glm_error(ctx, GL_INVALID_ENUM);
+#define SET_TEXTURE_PARAMETER(field, value) do { \
+    __typeof__(t->field) next = (value); \
+    if (memcmp(&t->field, &next, sizeof next)) { t->field = next; glm_sampling_resource_changed(ctx->share); } \
+    return; \
+} while (0)
     switch (pname) {
-    case GL_TEXTURE_BASE_LEVEL: t->base_level = (GLint)v[0]; return;
-    case GL_TEXTURE_MAX_LEVEL: t->max_level = (GLint)v[0]; return;
-    case GL_GENERATE_MIPMAP: t->generate_mipmap = v[0] != 0; return;
-    case GL_DEPTH_TEXTURE_MODE: t->depth_texture_mode = (GLenum)v[0]; return;
-    case GL_TEXTURE_PRIORITY: t->priority = v[0] < 0 ? 0 : v[0] > 1 ? 1 : v[0]; return;
-    case GL_TEXTURE_COMPARE_FAIL_VALUE_ARB: t->compare_fail_value = v[0]; return;
-    case 0x8A4B: t->apple_private[0] = (GLint)v[0]; return;
-    case 0x8A7F: t->apple_private[1] = (GLint)v[0]; return;
+    case GL_TEXTURE_BASE_LEVEL: SET_TEXTURE_PARAMETER(base_level, (GLint)v[0]);
+    case GL_TEXTURE_MAX_LEVEL: SET_TEXTURE_PARAMETER(max_level, (GLint)v[0]);
+    case GL_GENERATE_MIPMAP: SET_TEXTURE_PARAMETER(generate_mipmap, v[0] != 0);
+    case GL_DEPTH_TEXTURE_MODE: SET_TEXTURE_PARAMETER(depth_texture_mode, (GLenum)v[0]);
+    case GL_TEXTURE_PRIORITY: SET_TEXTURE_PARAMETER(priority, v[0] < 0 ? 0 : v[0] > 1 ? 1 : v[0]);
+    case GL_TEXTURE_COMPARE_FAIL_VALUE_ARB: SET_TEXTURE_PARAMETER(compare_fail_value, v[0]);
+    case 0x8A4B: SET_TEXTURE_PARAMETER(apple_private[0], (GLint)v[0]);
+    case 0x8A7F: SET_TEXTURE_PARAMETER(apple_private[1], (GLint)v[0]);
     /* Apple keeps both (Source's togl sets them on every texture). */
     case GL_TEXTURE_STORAGE_HINT_APPLE:
         if ((GLenum)v[0] != GL_STORAGE_PRIVATE_APPLE && (GLenum)v[0] != GL_STORAGE_CACHED_APPLE &&
             (GLenum)v[0] != GL_STORAGE_SHARED_APPLE)
             return glm_error(ctx, GL_INVALID_ENUM);
-        t->storage_hint = (GLenum)v[0];
-        return;
-    case GL_TEXTURE_MINIMIZE_STORAGE_APPLE: t->minimize_storage = v[0] != 0; return;
+        SET_TEXTURE_PARAMETER(storage_hint, (GLenum)v[0]);
+    case GL_TEXTURE_MINIMIZE_STORAGE_APPLE: SET_TEXTURE_PARAMETER(minimize_storage, v[0] != 0);
     case GL_TEXTURE_SWIZZLE_R: case GL_TEXTURE_SWIZZLE_G: case GL_TEXTURE_SWIZZLE_B: case GL_TEXTURE_SWIZZLE_A:
     case GL_TEXTURE_SWIZZLE_RGBA: {
         int first = pname == GL_TEXTURE_SWIZZLE_RGBA ? 0 : (int)(pname - GL_TEXTURE_SWIZZLE_R);
@@ -317,11 +327,15 @@ static void texture_parameter(GLenum target, GLenum pname, const float *v)
             default: return glm_error(ctx, GL_INVALID_ENUM);
             }
         }
-        memcpy(t->swizzle + first, values, (size_t)count);
+        if (memcmp(t->swizzle + first, values, (size_t)count)) {
+            memcpy(t->swizzle + first, values, (size_t)count);
+            glm_sampling_resource_changed(ctx->share);
+        }
         return;
     }
     default: sampler_parameter(ctx, &t->sampler, pname, v);
     }
+#undef SET_TEXTURE_PARAMETER
 }
 
 GLM_EXPORT void glTexParameterf(GLenum target, GLenum pname, GLfloat param) { texture_parameter(target, pname, &param); }
@@ -533,6 +547,7 @@ GLM_EXPORT void glGenSamplers(GLsizei n, GLuint *names)
         s->state = (struct glm_sampler_state){GL_NEAREST_MIPMAP_LINEAR, GL_LINEAR, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_NONE,
                                               GL_LEQUAL, {0}, -1000, 1000, 0, 1};
         glm_table_set(&ctx->share->samplers, s->name, s);
+        glm_sampling_resource_changed(ctx->share);
     }
     pthread_mutex_unlock(&ctx->share->lock);
 }
@@ -549,6 +564,7 @@ GLM_EXPORT void glDeleteSamplers(GLsizei n, const GLuint *names)
         pthread_mutex_lock(&ctx->share->lock);
         glm_table_set(&ctx->share->samplers, names[i], NULL);
         pthread_mutex_unlock(&ctx->share->lock);
+        glm_sampling_resource_changed(ctx->share);
         free(s);
     }
 }
@@ -757,6 +773,7 @@ bool glm_backend_texture_ensure_storage(struct glm_context *ctx, struct glm_text
     t->storage_dirty = false;
     ++t->storage_generation;
     glm_framebuffer_resource_changed(ctx->share);
+    glm_sampling_resource_changed(ctx->share);
     t->storage_validation_key = validation;
     t->storage_validation_valid = true;
     glm_backend_framebuffer_changed(ctx);
@@ -1035,6 +1052,7 @@ void glm_backend_generate_mipmaps(struct glm_context *ctx, struct glm_texture *t
        paths that upload each generated image before returning. */
     ++t->definition_generation;
     glm_framebuffer_resource_changed(ctx->share);
+    glm_sampling_resource_changed(ctx->share);
     if (!glm_backend_texture_ensure_storage(ctx, t)) return;
     id<MTLTexture> storage = (__bridge id<MTLTexture>)t->backend;
     if (storage.mipmapLevelCount < 2) return;
@@ -1102,6 +1120,7 @@ static bool define_level(struct glm_context *ctx, struct glm_texture *t, GLenum 
     if (changed) {
         ++t->definition_generation;
         glm_framebuffer_resource_changed(ctx->share);
+        glm_sampling_resource_changed(ctx->share);
         /* Rebuild storage only if this level no longer fits it. */
         id<MTLTexture> storage = (__bridge id<MTLTexture>)t->backend;
         if (!storage || storage.pixelFormat != (MTLPixelFormat)info.metal_format ||
@@ -1286,6 +1305,7 @@ static void storage(GLenum target, GLsizei levels, GLenum internal, GLsizei w, G
             if (!define_level(ctx, t, face, level, internal, lw, lh, ld)) return;
         }
     }
+    glm_sampling_resource_changed(ctx->share);
     t->immutable = true;
     t->immutable_levels = levels;
     glm_backend_texture_ensure_storage(ctx, t);
@@ -1721,12 +1741,37 @@ static bool native_cube_seams(struct glm_context *ctx, const struct glm_sampler_
            s->wrap_t == GL_CLAMP_TO_EDGE && native_cube_seams_supported();
 }
 
+struct sampler_cache_key {
+    struct glm_sampler_state s;
+    float bias;
+    uint8_t mip, rect, cube_seams;
+};
+
+static unsigned sampler_hot_bucket(const struct sampler_cache_key *key)
+{
+    uint64_t hash = UINT64_C(0xcbf29ce484222325), word;
+    const unsigned char *bytes = (const unsigned char *)key;
+    size_t at = 0;
+    for (; at + sizeof word <= sizeof *key; at += sizeof word) {
+        memcpy(&word, bytes + at, sizeof word);
+        hash = (hash ^ word) * UINT64_C(0x100000001b3);
+    }
+    word = 0;
+    memcpy(&word, bytes + at, sizeof *key - at);
+    hash ^= word;
+    hash ^= hash >> 30;
+    hash *= UINT64_C(0xbf58476d1ce4e5b9);
+    hash ^= hash >> 27;
+    hash *= UINT64_C(0x94d049bb133111eb);
+    return (unsigned)(hash ^ (hash >> 31)) & 127u;
+}
+
 static id<MTLSamplerState> sampler_for(const struct glm_sampler_state *s, float unit_bias, bool mipmapped, bool rect,
                                      bool cube_seams)
 {
     static NSMutableDictionary<NSData *, id<MTLSamplerState>> *cache;
     static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-    struct { struct glm_sampler_state s; float bias; uint8_t mip, rect, cube_seams; } key;
+    struct sampler_cache_key key;
     memset(&key, 0, sizeof key);
     key.s = *s;
     key.s.skip_srgb_decode = false; /* a view format, not sampler state */
@@ -1738,16 +1783,16 @@ static id<MTLSamplerState> sampler_for(const struct glm_sampler_state *s, float 
        working set per thread, avoiding NSData allocation and the shared
        dictionary lock on every texture binding. The dictionary owns the
        immutable Metal states for the lifetime of the process. */
-    enum { HOT_SAMPLERS = 64 };
+    enum { HOT_BUCKETS = 128, HOT_WAYS = 2 };
     static __thread struct {
-        __typeof__(key) key;
+        struct sampler_cache_key key;
         __unsafe_unretained id<MTLSamplerState> state;
-    } hot[HOT_SAMPLERS];
-    uint32_t hash = 2166136261u;
-    const unsigned char *bytes = (const unsigned char *)&key;
-    for (size_t i = 0; i < sizeof key; ++i) hash = (hash ^ bytes[i]) * 16777619u;
-    unsigned slot = hash & (HOT_SAMPLERS - 1);
-    if (hot[slot].state && !memcmp(&key, &hot[slot].key, sizeof key)) return hot[slot].state;
+    } hot[HOT_BUCKETS][HOT_WAYS];
+    static __thread uint8_t victim[HOT_BUCKETS];
+    unsigned bucket = sampler_hot_bucket(&key);
+    for (unsigned way = 0; way < HOT_WAYS; ++way)
+        if (hot[bucket][way].state && !memcmp(&key, &hot[bucket][way].key, sizeof key))
+            return hot[bucket][way].state;
     NSData *data = [NSData dataWithBytes:&key length:sizeof key];
     pthread_mutex_lock(&lock);
     if (!cache) cache = [NSMutableDictionary dictionary];
@@ -1798,8 +1843,12 @@ static id<MTLSamplerState> sampler_for(const struct glm_sampler_state *s, float 
         cache[data] = state;
     }
     pthread_mutex_unlock(&lock);
-    hot[slot].key = key;
-    hot[slot].state = state;
+    if (state) {
+        unsigned way = victim[bucket];
+        victim[bucket] ^= 1u;
+        hot[bucket][way].key = key;
+        hot[bucket][way].state = state;
+    }
     return state;
 }
 
@@ -2031,6 +2080,7 @@ GLM_EXPORT void glTexBuffer(GLenum target, GLenum internal_format, GLuint buffer
     if (buffer && !glm_buffer_get(ctx, buffer)) return glm_error(ctx, GL_INVALID_OPERATION);
     struct glm_texture *t = glm_texture_bound(ctx, GL_TEXTURE_BUFFER);
     if (!t) return;
+    glm_sampling_resource_changed(ctx->share);
     t->buffer = buffer;
     t->buffer_format = internal_format;
     glm_backend_release(t->view);
@@ -2229,7 +2279,7 @@ static float fixed_depth_reference(const struct glm_texture *texture)
 
 bool glm_bind_program_textures(struct glm_context *ctx, id<MTLRenderCommandEncoder> encoder,
                                const struct glm_program *program, unsigned stages, uint32_t border_mask,
-                               float (*lod_bias)[4])
+                               float (*lod_bias)[4], bool *reusable)
 {
     uint32_t shadow_mask = border_mask ? border_mask & program_shadow_sampler_mask(program) : 0;
     static __thread struct glm_sampler_plan_cache sampler_plans;
@@ -2251,7 +2301,11 @@ bool glm_bind_program_textures(struct glm_context *ctx, id<MTLRenderCommandEncod
                                         GLM_TEX_2D, GLM_TEX_RECT};
             slot = slots[arb_target & 7];
             type = slot == GLM_TEX_3D ? MTLTextureType3D : slot == GLM_TEX_CUBE ? MTLTextureTypeCube : MTLTextureType2D;
-            if (uniform->sampler_slot < 64) ((struct glm_program *)program)->sampler_units[uniform->sampler_slot] = arb_unit;
+            if (uniform->sampler_slot < 64 && program->sampler_units[uniform->sampler_slot] != arb_unit) {
+                struct glm_program *mutable = (struct glm_program *)program;
+                mutable->sampler_units[uniform->sampler_slot] = arb_unit;
+                __atomic_add_fetch(&mutable->sampler_serial, 1, __ATOMIC_RELEASE);
+            }
         } else {
             slot = glm_sampler_binding(uniform->type);
             static const MTLTextureType types[GLM_TEX_SLOTS] = {
@@ -2278,7 +2332,11 @@ bool glm_bind_program_textures(struct glm_context *ctx, id<MTLRenderCommandEncod
                 if (!view) view = empty_buffer_texture();
             } else {
                 view = t ? sampling_view(ctx, t, state && state->skip_srgb_decode, &mipmapped) : nil;
-                if (!view) view = incomplete_texture(type);
+                if (!view) {
+                    /* A storage/view allocation failure must be retried next draw. */
+                    *reusable = false;
+                    view = incomplete_texture(type);
+                }
             }
             struct glm_sampler_state fallback = {GL_NEAREST, GL_NEAREST, GL_REPEAT, GL_REPEAT, GL_REPEAT, GL_NONE, GL_LEQUAL, {0}, 0, 0, 0, 1};
             if (!state) state = &fallback;
@@ -2305,6 +2363,7 @@ bool glm_bind_program_textures(struct glm_context *ctx, id<MTLRenderCommandEncod
                     if (*wraps[a] == GL_CLAMP) *wraps[a] = GL_CLAMP_TO_BORDER;
                 memset(emulated.border_color, 0, sizeof emulated.border_color);
                 id<MTLSamplerState> black = sampler_for(&emulated, bias, mipmapped, slot == GLM_TEX_RECT, cube_seams);
+                if (!black) *reusable = false;
                 uint32_t preceding = (1u << metal_slot) - 1;
                 int white_slot = program->result.sampler_count + __builtin_popcount(border_mask & preceding) +
                                  __builtin_popcount(shadow_mask & preceding);
@@ -2312,12 +2371,14 @@ bool glm_bind_program_textures(struct glm_context *ctx, id<MTLRenderCommandEncod
                     // Raw depth samples measure only the border's filter weight.
                     emulated.compare_mode = GL_NONE;
                     id<MTLSamplerState> raw_black = sampler_for(&emulated, bias, mipmapped, false, cube_seams);
+                    if (!raw_black) *reusable = false;
                     lod_bias[white_slot][0] = state->lod_bias;
                     sampling_lod_metadata(lod_bias, white_slot, state, mipmapped);
                     glm_encoder_texture(ctx, stages, (__bridge void *)view, (__bridge void *)raw_black, (NSUInteger)white_slot++);
                 }
                 for (int c = 0; c < 4; ++c) emulated.border_color[c] = 1;
                 id<MTLSamplerState> white = sampler_for(&emulated, bias, mipmapped, slot == GLM_TEX_RECT, cube_seams);
+                if (!white) *reusable = false;
                 if (white_slot < 64) {
                     lod_bias[white_slot][0] = state->lod_bias;
                     lod_bias[GLM_DEPTH_METADATA_BASE + white_slot][0] = fixed_depth_reference(t);
@@ -2328,6 +2389,7 @@ bool glm_bind_program_textures(struct glm_context *ctx, id<MTLRenderCommandEncod
                 continue;
             }
             id<MTLSamplerState> sampler = sampler_for(state, bias, mipmapped, slot == GLM_TEX_RECT, cube_seams);
+            if (!sampler) *reusable = false;
             glm_encoder_texture(ctx, stages, (__bridge void *)view, (__bridge void *)sampler, (NSUInteger)metal_slot);
         }
     }

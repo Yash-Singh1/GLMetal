@@ -40,6 +40,36 @@ verified equivalent fast-path build retains its predecessor's identity through
 that exception. This avoids discarding installed caches for an optimization
 that produces the same results.
 
+## Sampling bindings
+
+Programmable draws reuse their texture, sampler and LOD bindings while the
+program, sampler mappings and sampling resources remain unchanged on the same
+encoder. Shared texture or sampler metadata changes invalidate this reuse.
+Repeated raster changes and ordinary uniform updates can reuse sampling bindings.
+Program switches start with a short snapshot; repeated programs can promote
+to a full sampling dependency key.
+Buffer textures stay on the live binding path, and failed texture selections
+remain retryable. Set `GLMETAL_NO_SAMPLING_BINDING_CACHE=1` to disable reuse for
+comparisons. `GLMETAL_STREAM_STATS=1` reports sampling calls and cache reuse.
+Sampler-state lookups use a two-way thread-local cache with full-key equality
+checks before a hit.
+
+The CPU probes use the production metadata setters and binding decisions with
+UBSan on arm64 and x86_64, without a GPU workload:
+
+```sh
+python3 tests/probes/run_sampling_state_cpu.py
+python3 tests/probes/run_resource_binding_cpu.py
+python3 tests/probes/run_inline_bytes_cpu.py
+```
+
+`make sampling-bindings-bench` builds a separate glcompare case library at
+`build/libsampling_bindings_bench.dylib`. It measures completed draw batches
+with changing raster state and stable sampling in a one-pixel viewport.
+Its timings measure that workload, not gameplay FPS. The pixel suite includes
+`core_shared_sampling_state` for shared sampler and texture metadata edits,
+and program sampler-unit remapping while the consumer keeps its bindings.
+
 ## Offline shader preparation
 
 Set `GLMETAL_DUMP_REQUESTS=/absolute/existing/parent/requests` while running an

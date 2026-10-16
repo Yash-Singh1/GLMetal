@@ -275,7 +275,10 @@ static void sync_uniforms(struct glm_context *ctx, struct glm_pipeline *pl, bool
         }
     for (int s = 0; s < GLM_STAGE_COUNT; ++s) pl->owner_uniform_serial[s] = pl->owners[s] ? pl->owners[s]->uniform_serial : 0;
     c->globals_dirty = true;
-    if (samplers_changed) __atomic_add_fetch(&ctx->state_serial, 1, __ATOMIC_RELAXED);
+    if (samplers_changed) {
+        __atomic_add_fetch(&c->sampler_serial, 1, __ATOMIC_RELEASE);
+        __atomic_add_fetch(&ctx->state_serial, 1, __ATOMIC_RELAXED);
+    }
 }
 
 struct glm_program *glm_pipeline_program(struct glm_context *ctx)

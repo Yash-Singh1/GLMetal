@@ -61,6 +61,7 @@ struct glm_program {
     struct glm_location *locations;
     int location_count;
     int sampler_units[64];           /* texture unit per sampler slot */
+    uint64_t sampler_serial;         /* sampler mappings, independent of ordinary uniforms */
     GLuint block_bindings[GLM_SLOT_UBO_COUNT];
     void *functions[GLM_STAGE_COUNT]; /* id<MTLFunction> */
     void *functions_capture;          /* vertex stage writing feedback varyings */

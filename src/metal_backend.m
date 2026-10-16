@@ -41,6 +41,7 @@ enum { GLM_VARIANT_FLAT_COLORS = 0x100, GLM_VARIANT_DYNAMIC_ALPHA = 0x200 };
 #include "arb_program.h"
 #include "queries.h"
 #include "client.h"
+#include "sampler_plan.h"
 
 #include <stdlib.h>
 #include <sys/mman.h>
@@ -206,6 +207,24 @@ struct draw_stages {
     bool ff_vertex, ff_fragment, core;
 };
 
+struct program_sampling_key {
+    const struct glm_program *program;
+    uint64_t link, generation;
+    uint32_t border_mask, count;
+    bool seamless, overflow;
+    struct { int unit; GLuint texture, sampler; float bias; } items[64];
+};
+
+static size_t program_sampling_key_size(const struct program_sampling_key *key)
+{
+    return offsetof(struct program_sampling_key, items) + key->count * sizeof key->items[0];
+}
+
+static bool program_sampling_equal(const struct program_sampling_key *a, const struct program_sampling_key *b)
+{
+    return a->count == b->count && !memcmp(a, b, program_sampling_key_size(a));
+}
+
 struct glm_backend_context {
     struct glm_context *ctx;
     id<MTLCommandQueue> queue;
@@ -275,6 +294,7 @@ struct glm_backend_context {
         __unsafe_unretained id buffers[2][31];
         NSUInteger offsets[2][31];
         __unsafe_unretained id textures[2][96], samplers[2][16];
+        uint64_t resource_serial[2];
     } cache;
     /* Inline uniforms remain bound until that slot receives another binding
        or the encoder ends. Keep their snapshots outside the reset cache. */
@@ -285,6 +305,14 @@ struct glm_backend_context {
     } inline_bytes[2][31];
     bool inline_bytes_enabled, inline_bytes_stats;
     uint64_t inline_bytes_calls, inline_bytes_skipped, inline_bytes_saved;
+    struct {
+        bool valid, quick_only;
+        uint64_t encoder, resource_serial, state_serial;
+        int units[64];
+        struct program_sampling_key key;
+    } sampling[2];
+    bool sampling_cache_enabled;
+    uint64_t sampling_calls, sampling_reused;
     uint64_t encoder_serial; /* bumped for every new render encoder */
     uint32_t vertex_id_base; /* fourth word of GLMPoint, independent of state serial */
     uint32_t vertex_id_offset, vertex_id_mapped;
@@ -315,8 +343,8 @@ struct glm_backend_context {
     id<MTLFunction> image_vertex, image_fragment, bitmap_fragment;
     /* The last full draw setup, reused while nothing it depends on changed. */
     struct {
-        bool valid;
-        uint64_t serial, encoder_serial;
+        bool valid, live_sampling;
+        uint64_t serial, encoder_serial, sampling_generation, links[2], sampler_serials[2];
         uint32_t layout_id;
         __unsafe_unretained id vertex_override, fragment_override;
         struct draw_stages st;
@@ -363,6 +391,8 @@ static void enc_buffer(struct glm_backend_context *b, unsigned stages, __unsafe_
         } else {
             [b->encoder setFragmentBuffer:buffer offset:offset atIndex:slot];
         }
+        if (slot == GLM_SLOT_LOD_BIAS || slot == GLM_SLOT_BORDER || slot == GLM_SLOT_FF_CUBE_LOD)
+            ++c->resource_serial[stage];
         c->buffers[stage][slot] = buffer;
         c->offsets[stage][slot] = offset;
     }
@@ -393,6 +423,8 @@ static void enc_bytes(struct glm_backend_context *b, unsigned stages, const void
                     entry->length = length;
                 }
             }
+            if (slot == GLM_SLOT_LOD_BIAS || slot == GLM_SLOT_BORDER || slot == GLM_SLOT_FF_CUBE_LOD)
+                ++b->cache.resource_serial[stage];
             b->cache.buffers[stage][slot] = nil;
         }
         if (b->inline_bytes_stats) {
@@ -420,11 +452,13 @@ GLM_HIDDEN void glm_encoder_texture(struct glm_context *ctx, unsigned stages, vo
             if (stage == 0) [b->encoder setVertexTexture:texture atIndex:slot];
             else [b->encoder setFragmentTexture:texture atIndex:slot];
             c->textures[stage][slot] = texture;
+            ++c->resource_serial[stage];
         }
         if (slot < 16 && c->samplers[stage][slot] != sampler) {
             if (stage == 0) [b->encoder setVertexSamplerState:sampler atIndex:slot];
             else [b->encoder setFragmentSamplerState:sampler atIndex:slot];
             c->samplers[stage][slot] = sampler;
+            ++c->resource_serial[stage];
         }
     }
 }
@@ -477,6 +511,7 @@ struct glm_backend_context *glm_backend_context_create(struct glm_context *ctx)
     b->ctx = ctx;
     b->inline_bytes_enabled = getenv("GLMETAL_NO_INLINE_BYTES_CACHE") == NULL;
     b->inline_bytes_stats = getenv("GLMETAL_STREAM_STATS") != NULL;
+    b->sampling_cache_enabled = getenv("GLMETAL_NO_SAMPLING_BINDING_CACHE") == NULL;
     b->queue = (__bridge id<MTLCommandQueue>)ctx->share->queue;
     b->completions = dispatch_group_create();
     b->transients = [NSMutableArray array];
@@ -1873,7 +1908,7 @@ static void ff_functions(struct glm_backend_context *b, const struct glm_ff_key 
 
 GLM_HIDDEN bool glm_bind_program_textures(struct glm_context *ctx, id<MTLRenderCommandEncoder> encoder,
                                           const struct glm_program *program, unsigned stages, uint32_t border_mask,
-                                          float (*lod_bias)[4]);
+                                          float (*lod_bias)[4], bool *reusable);
 GLM_HIDDEN uint32_t glm_program_border_mask(struct glm_context *ctx, const struct glm_program *program, float (*data)[4]);
 GLM_HIDDEN extern int glm_custom_borders;
 GLM_HIDDEN void glm_legacy_block_build(struct glm_context *ctx, uint32_t parts, struct glm_legacy_block *b);
@@ -2531,6 +2566,58 @@ static void vertex_id_base(struct glm_backend_context *b, uint32_t base)
     vertex_id_mapping(b, base, 0, false);
 }
 
+/* The key contains only sampling dependencies. Raster changes and uniform
+   data uploads do not invalidate textures that remain bound on this encoder. */
+static void program_sampling_key(struct glm_context *ctx, const struct glm_program *p,
+                                  uint32_t border_mask, struct program_sampling_key *key)
+{
+    memset(key, 0, offsetof(struct program_sampling_key, items));
+    key->program = p;
+    key->link = p->link_serial;
+    key->generation = __atomic_load_n(&ctx->share->sampling_generation, __ATOMIC_ACQUIRE);
+    key->border_mask = border_mask;
+    key->seamless = ctx->state.texture_cube_seamless;
+    static __thread struct glm_sampler_plan_cache plans;
+    const struct glm_sampler_plan *plan = glm_sampler_plan_get(&plans, p, p->link_serial,
+        p->result.uniforms, p->result.uniform_count);
+    int count = plan ? plan->count : p->result.uniform_count;
+    for (int at = 0; at < count; ++at) {
+        const struct glm_sampler_plan_item *item = plan ? &plan->items[at] : NULL;
+        const struct glm_uniform_info *uniform = &p->result.uniforms[item ? item->uniform_index : at];
+        if (uniform->sampler_slot < 0 || uniform->offset >= 0) continue;
+        int arb_unit = item ? item->arb_unit : 0, arb_target = item ? item->arb_target : 0;
+        bool arb = item ? item->arb : glm_sampler_arb_name(uniform->name, &arb_unit, &arb_target);
+        static const int slots[] = {GLM_TEX_1D, GLM_TEX_2D, GLM_TEX_3D, GLM_TEX_CUBE, GLM_TEX_RECT,
+                                    GLM_TEX_1D, GLM_TEX_2D, GLM_TEX_RECT};
+        int target = arb ? slots[arb_target & 7] : glm_sampler_binding(uniform->type);
+        if (target < 0 || target >= GLM_TEX_SLOTS) continue;
+        for (int e = 0; e < uniform->array_size; ++e) {
+            int slot = uniform->sampler_slot + e;
+            if (slot >= 64) break;
+            int unit = arb && !e ? arb_unit : p->sampler_units[slot];
+            if (key->count == 64) { key->overflow = true; return; }
+            __typeof__(key->items[0]) *binding = &key->items[key->count++];
+            binding->unit = unit;
+            if (unit < 0 || unit >= GLM_MAX_TEXTURE_UNITS) unit = 0;
+            binding->texture = ctx->state.units[unit].bound[target];
+            binding->sampler = ctx->state.units[unit].sampler;
+            binding->bias = ctx->state.units[unit].env.lod_bias;
+        }
+    }
+}
+
+/* Buffer textures follow buffer storage replacements independently of texture
+   metadata. Keep them on the live binding path. */
+static bool program_sampling_cacheable(const struct glm_program *p)
+{
+    for (int i = 0; i < p->result.uniform_count; ++i) {
+        const struct glm_uniform_info *uniform = &p->result.uniforms[i];
+        if (uniform->sampler_slot >= 0 && uniform->offset < 0 &&
+            glm_sampler_binding(uniform->type) == GLM_TEX_BUFFER) return false;
+    }
+    return true;
+}
+
 static bool bind_program_state(struct glm_context *ctx, struct glm_program *p, unsigned stages)
 {
     struct glm_backend_context *b = ctx->backend;
@@ -2539,11 +2626,85 @@ static bool bind_program_state(struct glm_context *ctx, struct glm_program *p, u
         ctx->point_sprite_origin == GL_UPPER_LEFT ? 1.0f : 0.0f, b->vertex_id_base,
         b->vertex_id_offset, b->vertex_id_mapped, {0, 0}};
     enc_bytes(b, stages, &point, sizeof point, GLM_SLOT_POINT);
+    if (!p->result.sampler_count) return true;
     uint32_t border_mask = (stages & STAGE_FRAGMENT) ? b->border_mask : 0;
-    if (border_mask) enc_bytes(b, STAGE_FRAGMENT, b->border_data, sizeof b->border_data, GLM_SLOT_BORDER);
+    uint64_t state_serial = __atomic_load_n(&ctx->state_serial, __ATOMIC_RELAXED);
+    uint64_t generation = __atomic_load_n(&ctx->share->sampling_generation, __ATOMIC_ACQUIRE);
+    struct program_sampling_key key;
+    bool have_key = false;
+    unsigned needed = stages;
+    for (int stage = 0; stage < 2; ++stage) {
+        if (!(stages & (1u << stage))) continue;
+        __typeof__(b->sampling[0]) *entry = &b->sampling[stage];
+        if (!b->sampling_cache_enabled || !entry->valid || entry->encoder != b->encoder_serial ||
+            entry->resource_serial != b->cache.resource_serial[stage] || entry->key.program != p ||
+            entry->key.link != p->link_serial || entry->key.generation != generation ||
+            entry->key.border_mask != border_mask) continue;
+        /* The local serial covers raster and binding edits. Sampler units can
+           also change through a shared program without touching this context. */
+        bool quick = entry->state_serial == state_serial && entry->key.program == p &&
+            entry->key.link == p->link_serial && entry->key.generation == generation &&
+            entry->key.border_mask == border_mask &&
+            !memcmp(entry->units, p->sampler_units, sizeof entry->units);
+        if (!quick && entry->quick_only) continue;
+        if (!quick && !have_key) {
+            program_sampling_key(ctx, p, border_mask, &key);
+            have_key = true;
+        }
+        if (quick || program_sampling_equal(&key, &entry->key)) {
+            needed &= ~(1u << stage);
+            if (!quick) {
+                entry->state_serial = state_serial;
+                memcpy(entry->units, p->sampler_units, sizeof entry->units);
+            }
+        }
+    }
+    if (b->inline_bytes_stats) {
+        ++b->sampling_calls;
+        if (!needed) ++b->sampling_reused;
+        if (b->sampling_calls % 20000 == 0)
+            fprintf(stderr, "glmetal: sampling bindings %llu calls, %llu reused\n",
+                    (unsigned long long)b->sampling_calls, (unsigned long long)b->sampling_reused);
+    }
+    if (!needed) return true;
+    if (border_mask && (needed & STAGE_FRAGMENT))
+        enc_bytes(b, STAGE_FRAGMENT, b->border_data, sizeof b->border_data, GLM_SLOT_BORDER);
     float lod_bias[GLM_LOD_ROW_COUNT][4] = {{0}};
-    bool ok = glm_bind_program_textures(ctx, b->encoder, p, stages, border_mask, lod_bias);
-    if (p->result.sampler_count) enc_bytes(b, stages, lod_bias, sizeof lod_bias, GLM_SLOT_LOD_BIAS);
+    bool cacheable = program_sampling_cacheable(p);
+    if (!cacheable) b->fast.live_sampling = true;
+    cacheable = cacheable && b->sampling_cache_enabled;
+    bool reusable = true;
+    bool ok = glm_bind_program_textures(ctx, b->encoder, p, needed, border_mask, lod_bias, &reusable);
+    if (p->result.sampler_count) enc_bytes(b, needed, lod_bias, sizeof lod_bias, GLM_SLOT_LOD_BIAS);
+    if (!ok || !reusable || !b->encoder) b->fast.live_sampling = true;
+    /* A program switch usually changes sampling too. Capture the short
+       unchanged-state snapshot first; build a full key only after a repeat. */
+    bool full = false;
+    for (int stage = 0; stage < 2; ++stage)
+        if ((needed & (1u << stage)) && b->sampling[stage].key.program == p &&
+            b->sampling[stage].key.link == p->link_serial) full = true;
+    if (full) {
+        /* ARB reflection may initialize sampler units on the first bind. */
+        program_sampling_key(ctx, p, border_mask, &key);
+    } else {
+        memset(&key, 0, offsetof(struct program_sampling_key, items));
+        key.program = p;
+        key.link = p->link_serial;
+        key.generation = __atomic_load_n(&ctx->share->sampling_generation, __ATOMIC_ACQUIRE);
+        key.border_mask = border_mask;
+        key.seamless = ctx->state.texture_cube_seamless;
+    }
+    for (int stage = 0; stage < 2; ++stage) {
+        if (!(needed & (1u << stage))) continue;
+        b->sampling[stage].valid = cacheable && reusable && ok && b->encoder && !key.overflow;
+        if (!b->sampling[stage].valid) continue;
+        b->sampling[stage].quick_only = !full;
+        b->sampling[stage].encoder = b->encoder_serial;
+        b->sampling[stage].resource_serial = b->cache.resource_serial[stage];
+        b->sampling[stage].state_serial = state_serial;
+        memcpy(b->sampling[stage].units, p->sampler_units, sizeof b->sampling[stage].units);
+        memcpy(&b->sampling[stage].key, &key, program_sampling_key_size(&key));
+    }
     return ok;
 }
 
@@ -2661,7 +2822,15 @@ static void *prepare_draw_once(struct glm_context *ctx, const struct draw_stages
     uint64_t serial = __atomic_load_n(&ctx->state_serial, __ATOMIC_RELAXED);
     /* Nothing but uniforms, current attributes or matrices changed since
        the last draw on this encoder: only uniform data is re-bound. */
+    uint64_t sampling_generation = __atomic_load_n(&ctx->share->sampling_generation, __ATOMIC_ACQUIRE);
+    uint64_t vertex_link = st->vertex_program ? st->vertex_program->link_serial : 0;
+    uint64_t fragment_link = st->fragment_program ? st->fragment_program->link_serial : 0;
+    uint64_t vertex_samplers = st->vertex_program ? __atomic_load_n(&st->vertex_program->sampler_serial, __ATOMIC_ACQUIRE) : 0;
+    uint64_t fragment_samplers = st->fragment_program ? __atomic_load_n(&st->fragment_program->sampler_serial, __ATOMIC_ACQUIRE) : 0;
     bool fast = !capture && b->fast.valid && b->fast.serial == serial && b->fast.encoder_serial == b->encoder_serial &&
+                b->fast.sampling_generation == sampling_generation &&
+                b->fast.links[0] == vertex_link && b->fast.links[1] == fragment_link &&
+                b->fast.sampler_serials[0] == vertex_samplers && b->fast.sampler_serials[1] == fragment_samplers &&
                 b->fast.layout_id == layout_id && b->fast.vertex_override == b->vertex_override &&
                 b->fast.fragment_override == b->fragment_override &&
                 b->fast.st.vertex_program == st->vertex_program &&
@@ -2723,12 +2892,6 @@ static void *prepare_draw_once(struct glm_context *ctx, const struct draw_stages
                    offset_factor, s->depth_clamp ? MTLDepthClipModeClamp : MTLDepthClipModeClip,
                    (uint32_t)s->stencil[0].ref & 0xff, (uint32_t)glm_stencil_back(s)->ref & 0xff, s->blend_color);
         apply_viewport_scissor(b, s, false);
-        if (st->vertex_program == st->fragment_program && st->program) {
-            if (!bind_program_state(ctx, st->program, STAGE_BOTH)) return NULL;
-        } else {
-            if (st->vertex_program && !bind_program_state(ctx, st->vertex_program, STAGE_VERTEX)) return NULL;
-            if (st->fragment_program && !bind_program_state(ctx, st->fragment_program, STAGE_FRAGMENT)) return NULL;
-        }
         if (st->ff_fragment) {
             float cube_lod[GLM_LOD_ROW_COUNT][4] = {{0}};
             if (!glm_bind_textures(ctx, e, &key, b->border_data, cube_lod)) return NULL;
@@ -2741,11 +2904,26 @@ static void *prepare_draw_once(struct glm_context *ctx, const struct draw_stages
         }
         b->fast.valid = !capture;
         b->fast.serial = serial;
+        b->fast.sampling_generation = sampling_generation;
+        b->fast.links[0] = vertex_link;
+        b->fast.links[1] = fragment_link;
         b->fast.encoder_serial = b->encoder_serial;
         b->fast.layout_id = layout_id;
         b->fast.vertex_override = b->vertex_override;
         b->fast.fragment_override = b->fragment_override;
         b->fast.st = *st;
+    }
+
+    if (!fast || b->fast.live_sampling) {
+        b->fast.live_sampling = false;
+        if (st->vertex_program == st->fragment_program && st->program) {
+            if (!bind_program_state(ctx, st->program, STAGE_BOTH)) return NULL;
+        } else {
+            if (st->vertex_program && !bind_program_state(ctx, st->vertex_program, STAGE_VERTEX)) return NULL;
+            if (st->fragment_program && !bind_program_state(ctx, st->fragment_program, STAGE_FRAGMENT)) return NULL;
+        }
+        b->fast.sampler_serials[0] = st->vertex_program ? __atomic_load_n(&st->vertex_program->sampler_serial, __ATOMIC_ACQUIRE) : 0;
+        b->fast.sampler_serials[1] = st->fragment_program ? __atomic_load_n(&st->fragment_program->sampler_serial, __ATOMIC_ACQUIRE) : 0;
     }
 
     if (st->vertex_program || st->fragment_program) {
@@ -2841,8 +3019,9 @@ static void remap_uniform_block_bindings(const struct glm_program *source, struc
 /* Copies uniform values by name from `source` into another compile's block,
    and sampler units likewise. */
 static void remap_uniforms(const struct glm_program *source, const struct glm_compile_result *target, uint8_t *globals,
-                           int *sampler_units)
+                           int *sampler_units, uint64_t *sampler_serial)
 {
+    bool changed = false;
     for (int i = 0; i < target->uniform_count; ++i) {
         const struct glm_uniform_info *t = &target->uniforms[i];
         for (int k = 0; k < source->result.uniform_count; ++k) {
@@ -2850,8 +3029,11 @@ static void remap_uniforms(const struct glm_program *source, const struct glm_co
             if (strcmp(u->name, t->name)) continue;
             if (t->sampler_slot >= 0 && u->sampler_slot >= 0) {
                 if (sampler_units)
-                    for (int e = 0; e < t->array_size && t->sampler_slot + e < 64 && u->sampler_slot + e < 64; ++e)
-                        sampler_units[t->sampler_slot + e] = source->sampler_units[u->sampler_slot + e];
+                    for (int e = 0; e < t->array_size && t->sampler_slot + e < 64 && u->sampler_slot + e < 64; ++e) {
+                        int unit = source->sampler_units[u->sampler_slot + e];
+                        if (sampler_serial && sampler_units[t->sampler_slot + e] != unit) changed = true;
+                        sampler_units[t->sampler_slot + e] = unit;
+                    }
             } else if (t->offset >= 0 && u->offset >= 0) {
                 size_t bytes = uniform_bytes(t), from = uniform_bytes(u);
                 if (t->offset >= target->global_size || u->offset >= source->result.global_size) break;
@@ -2862,6 +3044,7 @@ static void remap_uniforms(const struct glm_program *source, const struct glm_co
             break;
         }
     }
+    if (changed) __atomic_add_fetch(sampler_serial, 1, __ATOMIC_RELEASE);
 }
 
 /* Geometry stage emulation (shader_compiler.h): capture the vertex stage,
@@ -2921,7 +3104,7 @@ static void draw_geometry(struct glm_context *ctx, const struct glm_draw *draw, 
     [compute setBytes:gs_info length:sizeof gs_info atIndex:GLM_SLOT_GS_INFO];
     if (g->kernel->global_size > 0) {
         int units[64] = {0};
-        remap_uniforms(p, g->kernel, gs->kernel_globals, units);
+        remap_uniforms(p, g->kernel, gs->kernel_globals, units, NULL);
         [compute setBytes:gs->kernel_globals length:(NSUInteger)g->kernel->global_size atIndex:GLM_SLOT_GLOBALS];
     }
     bind_compute_uniform_blocks(ctx, compute, g->kernel, p);
@@ -3011,7 +3194,7 @@ static void draw_geometry(struct glm_context *ctx, const struct glm_draw *draw, 
     /* 3. The emitted primitives, with the program's fragment stage. */
     struct glm_program *pull = gs->pull;
     remap_uniform_block_bindings(p, pull);
-    remap_uniforms(p, &pull->result, pull->globals, pull->sampler_units);
+    remap_uniforms(p, &pull->result, pull->globals, pull->sampler_units, &pull->sampler_serial);
     pull->globals_dirty = true;
     struct draw_stages st = {pull, pull, pull, NULL, NULL, false, false, ctx->profile == GLM_PROFILE_CORE};
     b->viewport_array = g->writes_viewport;
@@ -3094,7 +3277,7 @@ static void draw_tessellation(struct glm_context *ctx, const struct glm_draw *dr
     [compute setBytes:info length:sizeof info atIndex:GLM_SLOT_GS_INFO];
     if (t->kernel->global_size > 0) {
         int units[64] = {0};
-        remap_uniforms(p, t->kernel, tess->kernel_globals, units);
+        remap_uniforms(p, t->kernel, tess->kernel_globals, units, NULL);
         [compute setBytes:tess->kernel_globals length:(NSUInteger)t->kernel->global_size atIndex:GLM_SLOT_GLOBALS];
     }
     bind_compute_uniform_blocks(ctx, compute, t->kernel, p);
@@ -3107,7 +3290,7 @@ static void draw_tessellation(struct glm_context *ctx, const struct glm_draw *dr
     /* 3. Tessellation, the evaluation shader and the fragment stage. */
     struct glm_program *eval = tess->eval;
     remap_uniform_block_bindings(p, eval);
-    remap_uniforms(p, &eval->result, eval->globals, eval->sampler_units);
+    remap_uniforms(p, &eval->result, eval->globals, eval->sampler_units, &eval->sampler_serial);
     eval->globals_dirty = true;
     struct draw_stages st = {eval, eval, eval, NULL, NULL, false, false, ctx->profile == GLM_PROFILE_CORE};
     b->tess_mode = 1u | (uint32_t)t->partition << 1 | (t->cw ? 1u << 4 : 0);
@@ -3166,7 +3349,7 @@ static bool draw_user_clipped(struct glm_context *ctx, const struct glm_draw *dr
     for (int i = 0; i < g->clip_count; ++i)
         if (ctx->state.clip_plane_enabled[i]) mask |= 1u << i;
     struct glm_program *pull = p->clip->pull;
-    remap_uniforms(p, &pull->result, pull->globals, pull->sampler_units);
+    remap_uniforms(p, &pull->result, pull->globals, pull->sampler_units, &pull->sampler_serial);
     remap_uniform_block_bindings(p, pull);
     memcpy(pull->subroutine_values, p->subroutine_values, sizeof pull->subroutine_values);
     pull->globals_dirty = true;

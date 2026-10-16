@@ -141,6 +141,13 @@ $(OUT)/libvertex_layout_bench.dylib: tests/probes/vertex_layout_bench.c $(GLC)/g
 	$(CC) $(CFLAGS) -I$(GLC) -I$(OUT)/gen -dynamiclib tests/probes/vertex_layout_bench.c $(GLC)/glc_util.c \
 		-Wl,-undefined,dynamic_lookup -o $@
 
+.PHONY: sampling-bindings-bench
+sampling-bindings-bench: $(OUT)/glcompare $(OUT)/libsampling_bindings_bench.dylib
+
+$(OUT)/libsampling_bindings_bench.dylib: tests/probes/sampling_bindings_bench.c $(GLC)/glc_util.c $(GLC)/glcompare.h $(OUT)/gen/glc_gl_core.h
+	$(CC) $(CFLAGS) -I$(GLC) -I$(OUT)/gen -dynamiclib tests/probes/sampling_bindings_bench.c $(GLC)/glc_util.c \
+		-Wl,-undefined,dynamic_lookup -o $@
+
 .PHONY: compile-budget-probe
 compile-budget-probe: $(OUT)/glm_compile_budget
 

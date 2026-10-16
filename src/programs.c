@@ -923,9 +923,16 @@ static void set_uniform_in(struct glm_context *ctx, struct glm_program *p, GLint
     const struct glm_uniform_info *u = &p->result.uniforms[loc.uniform];
     if (is_sampler(u->type)) {
         if (kind != VALUE_INT || n != 1) return glm_error(ctx, GL_INVALID_OPERATION);
-        for (GLsizei i = 0; i < count && loc.element + i < u->array_size; ++i)
-            if (u->sampler_slot + loc.element + i < 64) p->sampler_units[u->sampler_slot + loc.element + i] = ((const GLint *)values)[i];
+        bool changed = false;
+        for (GLsizei i = 0; i < count && loc.element + i < u->array_size; ++i) {
+            int slot = u->sampler_slot + loc.element + i;
+            if (slot >= 64) continue;
+            GLint unit = ((const GLint *)values)[i];
+            if (p->sampler_units[slot] != unit) changed = true;
+            p->sampler_units[slot] = unit;
+        }
         /* Sampler units are draw state, not uniform data. */
+        if (changed) __atomic_add_fetch(&p->sampler_serial, 1, __ATOMIC_RELEASE);
         __atomic_add_fetch(&ctx->state_serial, 1, __ATOMIC_RELAXED);
         ++p->uniform_serial;
         return;

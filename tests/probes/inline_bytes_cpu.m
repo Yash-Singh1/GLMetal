@@ -30,7 +30,7 @@ enum { STAGE_VERTEX=1, STAGE_FRAGMENT=2, STAGE_BOTH=3 };
 @protocol MTLBuffer @end
 struct glm_backend_context {
     MockEncoder *encoder;
-    struct encoder_cache { __unsafe_unretained id buffers[2][31]; NSUInteger offsets[2][31]; } cache;
+    struct encoder_cache { __unsafe_unretained id buffers[2][31]; NSUInteger offsets[2][31]; uint64_t resource_serial[2]; } cache;
     struct inline_byte_binding { uint64_t encoder; NSUInteger length,capacity; uint8_t *data; } inline_bytes[2][31];
     uint64_t encoder_serial;
     bool inline_bytes_enabled,inline_bytes_stats;
@@ -38,6 +38,9 @@ struct glm_backend_context {
 };
 static int fail_allocation;
 static void *test_realloc(void *p, size_t n) { if(fail_allocation){fail_allocation=0;return NULL;}return realloc(p,n); }
+#define GLM_SLOT_LOD_BIAS 16
+#define GLM_SLOT_BORDER 22
+#define GLM_SLOT_FF_CUBE_LOD 25
 #define realloc test_realloc
 /* PRODUCTION_FUNCTIONS */
 #undef realloc

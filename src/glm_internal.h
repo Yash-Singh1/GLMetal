@@ -338,6 +338,7 @@ struct glm_share_group {
     void *queue; /* id<MTLCommandQueue>: one per share group keeps cross-context order */
     volatile uint64_t program_generation; /* bumped when program/shader objects are freed */
     volatile uint64_t framebuffer_resource_generation; /* image definitions/storage shared by contexts */
+    volatile uint64_t sampling_generation; /* shared texture and sampler metadata/storage */
     void *app_objects;  /* marshal_custom.c: shaders and programs as the application's thread sees them */
 };
 
@@ -346,6 +347,11 @@ struct glm_share_group {
 static inline void glm_framebuffer_resource_changed(struct glm_share_group *share)
 {
     __atomic_add_fetch(&share->framebuffer_resource_generation, 1, __ATOMIC_RELEASE);
+}
+
+static inline void glm_sampling_resource_changed(struct glm_share_group *share)
+{
+    __atomic_add_fetch(&share->sampling_generation, 1, __ATOMIC_RELEASE);
 }
 
 enum glm_profile { GLM_PROFILE_LEGACY, GLM_PROFILE_CORE };
