@@ -156,6 +156,15 @@ static void default_state(struct glm_context *ctx)
     for (int f = 0; f < 3; ++f)
         s->stencil[f] = (struct glm_stencil_face){GL_ALWAYS, GL_KEEP, GL_KEEP, GL_KEEP, 0, ~0u, ~0u};
     s->clear_depth = 1;
+    memset(s->polygon_stipple_pattern, 0xff, sizeof s->polygon_stipple_pattern);
+    s->line_stipple_factor = 1;
+    s->edge_flag = true;
+    s->line_stipple_pattern = 0xffff;
+    s->current_index = 1;
+    s->index_mask = ~0u;
+    s->current_weight[0] = 1;
+    s->active_vertex_units = 1;
+    s->current_point_size = 1;
     for (int i = 0; i < GLM_MAX_ATTRIBS; ++i) s->current[i][3] = 1;
     s->current[GLM_ATTR_COLOR][0] = s->current[GLM_ATTR_COLOR][1] = s->current[GLM_ATTR_COLOR][2] = 1;
     s->current[GLM_ATTR_NORMAL][2] = 1;
@@ -172,6 +181,7 @@ static void default_state(struct glm_context *ctx)
     glm_mat4_identity(s->modelview.m[0]);
     glm_mat4_identity(s->projection.m[0]);
     glm_mat4_identity(s->color.m[0]);
+    for (int i = 0; i < 3; ++i) glm_mat4_identity(s->vertex_units[i].m[0]);
     for (int i = 0; i < GLM_MAX_TEXTURE_UNITS; ++i) glm_mat4_identity(s->texture[i].m[0]);
 
     for (int i = 0; i < GLM_MAX_LIGHTS; ++i) {
@@ -249,6 +259,11 @@ struct glm_context *glm_context_create(enum glm_profile profile, struct glm_cont
     /* GL_NONE until a drawable is attached (cgl.m), as Apple's. */
     ctx->default_framebuffer.read_buffer = GL_NONE;
     ctx->arb_error_position = -1;
+    ctx->render_modes.mode = GL_RENDER;
+    glm_eval_init(ctx);
+    glm_imaging_init(ctx);
+    ctx->render_modes.feedback_type = GL_2D;
+    ctx->render_modes.hit_min = 1;
     ctx->backend = glm_backend_context_create(ctx);
     return ctx;
 }
@@ -261,6 +276,8 @@ void glm_context_destroy(struct glm_context *ctx)
     glm_backend_context_destroy(ctx->backend);
     glm_queries_destroy(ctx);
     glm_arb_context_destroy(ctx);
+    glm_eval_destroy(ctx);
+    glm_imaging_destroy(ctx);
     for (int i = 0; i < GLM_TEX_SLOTS; ++i) glm_texture_destroy(ctx->default_textures[i]);
     pthread_mutex_lock(&ctx->share->lock);
     bool last = --ctx->share->refcount == 0;
@@ -295,12 +312,14 @@ GLM_EXPORT GLenum glGetError(void)
 GLM_EXPORT void glFlush(void)
 {
     GLM_CONTEXT(ctx);
+    glm_cgl_present_front(ctx);
     glm_backend_flush(ctx, false);
 }
 
 GLM_EXPORT void glFinish(void)
 {
     GLM_CONTEXT(ctx);
+    glm_cgl_present_front(ctx);
     glm_backend_flush(ctx, true);
 }
 
@@ -338,12 +357,17 @@ static bool *capability(struct glm_context *ctx, GLenum cap, GLuint index)
     case GL_FOG: return &s->fog;
     case GL_POINT_SPRITE: return &s->point_sprite;
     case GL_LINE_SMOOTH: return &s->line_smooth;
+    case GL_POLYGON_STIPPLE: return &s->polygon_stipple;
+    case GL_LINE_STIPPLE: return &s->line_stipple;
     case GL_POLYGON_SMOOTH: return &s->polygon_smooth;
     case GL_VERTEX_PROGRAM_ARB: return &s->vertex_program;
     case GL_FRAGMENT_PROGRAM_ARB: return &s->fragment_program;
     case GL_VERTEX_PROGRAM_TWO_SIDE_ARB: return &s->vertex_program_two_side;
     case GL_STENCIL_TEST_TWO_SIDE_EXT: return &s->stencil_two_side;
     case GL_TEXTURE_CUBE_MAP_SEAMLESS: return &s->texture_cube_seamless;
+    case GL_VERTEX_BLEND_ARB: return &s->vertex_blend;
+    case GL_WEIGHT_SUM_UNITY_ARB: return &s->weight_sum_unity;
+    case GL_VERTEX_POINT_SIZE_APPLE: return &s->vertex_point_size;
     case GL_TEXTURE_1D: return &unit->enabled_1d;
     case GL_TEXTURE_2D: return &unit->enabled_2d;
     case GL_TEXTURE_3D: return &unit->enabled_3d;
@@ -357,7 +381,8 @@ static bool *capability(struct glm_context *ctx, GLenum cap, GLuint index)
     }
     if (cap >= GL_CLIP_PLANE0 && cap < GL_CLIP_PLANE0 + GLM_MAX_CLIP_PLANES) return &s->clip_plane_enabled[cap - GL_CLIP_PLANE0];
     if (cap >= GL_LIGHT0 && cap < GL_LIGHT0 + GLM_MAX_LIGHTS) return &s->lights[cap - GL_LIGHT0].enabled;
-    return NULL;
+    bool *eval = glm_eval_capability(ctx, cap);
+    return eval ? eval : glm_imaging_capability(ctx, cap);
 }
 
 /* What Apple's implementation answers in this profile (glGet pnames and
@@ -413,10 +438,12 @@ static bool client_array_enabled(struct glm_context *ctx, GLenum cap, bool *enab
         *enabled = slot >= 0 && ctx->vao->arrays[slot].enabled;
         return true;
     }
-    case GL_INDEX_ARRAY: case GL_EDGE_FLAG_ARRAY: case GL_WEIGHT_ARRAY_ARB: case GL_VERTEX_ARRAY_RANGE_APPLE:
-    case GL_ELEMENT_ARRAY_APPLE: case GL_POINT_SIZE_ARRAY_APPLE:
-        *enabled = false;
-        return true;
+    case GL_EDGE_FLAG_ARRAY: *enabled = ctx->vao->legacy[GLM_LEGACY_EDGE_FLAG].enabled; return true;
+    case GL_INDEX_ARRAY: *enabled = ctx->vao->legacy[GLM_LEGACY_INDEX].enabled; return true;
+    case GL_WEIGHT_ARRAY_ARB: *enabled = ctx->vao->legacy[GLM_LEGACY_WEIGHT].enabled; return true;
+    case GL_POINT_SIZE_ARRAY_APPLE: *enabled = ctx->vao->legacy[GLM_LEGACY_POINT_SIZE].enabled; return true;
+    case GL_VERTEX_ARRAY_RANGE_APPLE: *enabled = false; return true;
+    case GL_ELEMENT_ARRAY_APPLE: *enabled = ctx->apple_element_enabled; return true;
     }
     return false;
 }
@@ -441,7 +468,10 @@ static void set_capability(struct glm_context *ctx, GLenum cap, GLuint index, bo
 GLM_EXPORT void glEnable(GLenum cap)
 {
     GLM_CONTEXT(ctx);
-    if (!apple_cap(ctx, cap)) return glm_error(ctx, GL_INVALID_ENUM);
+    if (!apple_cap(ctx, cap)) {
+        glm_log("%s: capability 0x%04x not accepted in this profile", __func__, cap);
+        return glm_error(ctx, GL_INVALID_ENUM);
+    }
     if (cap == GL_BLEND) {
         for (int i = 0; i < GLM_MAX_DRAW_BUFFERS; ++i) ctx->state.blend[i].enabled = true;
         return;
@@ -454,7 +484,10 @@ GLM_EXPORT void glEnable(GLenum cap)
 GLM_EXPORT void glDisable(GLenum cap)
 {
     GLM_CONTEXT(ctx);
-    if (!apple_cap(ctx, cap)) return glm_error(ctx, GL_INVALID_ENUM);
+    if (!apple_cap(ctx, cap)) {
+        glm_log("%s: capability 0x%04x not accepted in this profile", __func__, cap);
+        return glm_error(ctx, GL_INVALID_ENUM);
+    }
     if (cap == GL_BLEND) {
         for (int i = 0; i < GLM_MAX_DRAW_BUFFERS; ++i) ctx->state.blend[i].enabled = false;
         return;
@@ -911,7 +944,32 @@ GLM_EXPORT void glClear(GLbitfield mask)
         return glm_error(ctx, GL_INVALID_VALUE);
     if (ctx->immediate) return glm_error(ctx, GL_INVALID_OPERATION);
     if (ctx->conditional_discard) return;
-    glm_backend_clear(ctx, mask);
+    /* Framebuffer objects and pixel formats without one have no
+       accumulation buffer; Apple ignores the bit there. */
+    if ((mask & GL_ACCUM_BUFFER_BIT) && !ctx->draw_framebuffer && ctx->default_accum_bits)
+        glm_backend_accum(ctx, 0, 0, ctx->state.clear_accum);
+    mask &= ~(GLbitfield)GL_ACCUM_BUFFER_BIT;
+    if (mask) glm_backend_clear(ctx, mask);
+}
+
+GLM_EXPORT void glClearAccum(GLfloat r, GLfloat g, GLfloat b, GLfloat a)
+{
+    GLM_CONTEXT(ctx);
+    const float v[4] = {r, g, b, a};
+    for (int i = 0; i < 4; ++i) ctx->state.clear_accum[i] = v[i] < -1 ? -1 : v[i] > 1 ? 1 : v[i];
+}
+
+/* The accumulation buffer (GL 2.1 4.2.4): a 32-bit float RGBA image of
+   the window, as Apple's legacy pixel formats have. */
+GLM_EXPORT void glAccum(GLenum op, GLfloat value)
+{
+    GLM_CONTEXT(ctx);
+    if (ctx->immediate || ctx->draw_framebuffer || !ctx->default_accum_bits) return glm_error(ctx, GL_INVALID_OPERATION);
+    switch (op) {
+    case GL_ACCUM: case GL_LOAD: case GL_RETURN: case GL_MULT: case GL_ADD: break;
+    default: return; /* Apple ignores other operations without an error */
+    }
+    glm_backend_accum(ctx, op, value, NULL);
 }
 
 /* Depth and stencil through glClear with the clear values swapped in. */
@@ -1082,6 +1140,10 @@ static int query(struct glm_context *ctx, GLenum pname, double *v, bool *is_colo
             for (int k = 0; k < limits[i].count; ++k) v[k] = limits[i].values[k];
             return limits[i].count;
         }
+    int eval = ctx->profile == GLM_PROFILE_LEGACY ? glm_eval_query(ctx, pname, v) : 0;
+    if (eval) return eval;
+    int imaging = ctx->profile == GLM_PROFILE_LEGACY ? glm_imaging_query(ctx, pname, v) : 0;
+    if (imaging) return imaging;
     bool *cap = capability(ctx, pname, 0);
     if (cap) {
         v[0] = *cap;
@@ -1089,7 +1151,7 @@ static int query(struct glm_context *ctx, GLenum pname, double *v, bool *is_colo
     }
     switch (pname) {
     case GL_VIEWPORT: for (int i = 0; i < 4; ++i) v[i] = s->viewport[i]; return 4;
-    case GL_AUX_BUFFERS: if (ctx->profile == GLM_PROFILE_CORE) return 0; v[0] = 0; return 1;
+    case GL_AUX_BUFFERS: if (ctx->profile == GLM_PROFILE_CORE) return 0; v[0] = ctx->default_aux_buffers; return 1;
     case GL_PACK_SWAP_BYTES: v[0] = s->pack_swap_bytes; return 1;
     case GL_UNPACK_SWAP_BYTES: case GL_UNPACK_LSB_FIRST: case GL_PACK_LSB_FIRST: v[0] = 0; return 1;
     case GL_PROVOKING_VERTEX: v[0] = s->provoking_vertex; return 1;
@@ -1103,6 +1165,21 @@ static int query(struct glm_context *ctx, GLenum pname, double *v, bool *is_colo
     case GL_SCISSOR_BOX: for (int i = 0; i < 4; ++i) v[i] = s->scissor[i]; return 4;
     case GL_DEPTH_RANGE: v[0] = s->depth_range[0]; v[1] = s->depth_range[1]; return 2;
     case GL_COLOR_CLEAR_VALUE: *is_color = true; for (int i = 0; i < 4; ++i) v[i] = s->clear_color[i]; return 4;
+    case GL_ACCUM_CLEAR_VALUE: for (int i = 0; i < 4; ++i) v[i] = s->clear_accum[i]; return 4;
+    case GL_LINE_STIPPLE_PATTERN: v[0] = s->line_stipple_pattern; return 1;
+    case GL_CURRENT_INDEX: v[0] = s->current_index; return 1;
+    case GL_INDEX_CLEAR_VALUE: v[0] = s->clear_index; return 1;
+    case GL_INDEX_WRITEMASK: v[0] = (GLint)s->index_mask; return 1;
+    case GL_CURRENT_WEIGHT_ARB: for (int i = 0; i < 4; ++i) v[i] = s->current_weight[i]; return 4;
+    case GL_ACTIVE_VERTEX_UNITS_ARB: v[0] = s->active_vertex_units; return 1;
+    case GL_LINE_STIPPLE_REPEAT: v[0] = s->line_stipple_factor; return 1;
+    case GL_EDGE_FLAG: v[0] = s->edge_flag; return 1;
+    case GL_RENDER_MODE: v[0] = ctx->render_modes.mode; return 1;
+    case GL_NAME_STACK_DEPTH: v[0] = ctx->render_modes.name_depth; return 1;
+    case GL_MAX_NAME_STACK_DEPTH: v[0] = GLM_MAX_NAME_STACK; return 1;
+    case GL_SELECTION_BUFFER_SIZE: v[0] = ctx->render_modes.select_size; return 1;
+    case GL_FEEDBACK_BUFFER_SIZE: v[0] = ctx->render_modes.feedback_size; return 1;
+    case GL_FEEDBACK_BUFFER_TYPE: v[0] = ctx->render_modes.feedback_type; return 1;
     case GL_BLEND_COLOR: *is_color = true; for (int i = 0; i < 4; ++i) v[i] = s->blend_color[i]; return 4;
     case GL_CURRENT_COLOR: *is_color = true; for (int i = 0; i < 4; ++i) v[i] = s->current[GLM_ATTR_COLOR][i]; return 4;
     case GL_CURRENT_NORMAL: for (int i = 0; i < 3; ++i) v[i] = s->current[GLM_ATTR_NORMAL][i]; return 3;
@@ -1149,7 +1226,13 @@ static int query(struct glm_context *ctx, GLenum pname, double *v, bool *is_colo
     case GL_POINT_SIZE_RANGE: case GL_ALIASED_POINT_SIZE_RANGE: v[0] = 1; v[1] = 511; return 2;
     case GL_LINE_WIDTH_RANGE: case GL_ALIASED_LINE_WIDTH_RANGE: v[0] = 1; v[1] = ctx->profile == GLM_PROFILE_CORE ? 1 : 16; return 2;
     case GL_MATRIX_MODE: v[0] = s->matrix_mode; return 1;
+    case GL_ELEMENT_ARRAY_TYPE_APPLE: v[0] = ctx->apple_element_type ? ctx->apple_element_type : GL_UNSIGNED_INT; return 1;
     case GL_MODELVIEW_MATRIX: for (int i = 0; i < 16; ++i) v[i] = s->modelview.m[s->modelview.depth][i]; return 16;
+    case GL_MODELVIEW1_ARB: case GL_MODELVIEW2_ARB: case GL_MODELVIEW3_ARB: {
+        const struct glm_matrix_stack *u = &s->vertex_units[pname == GL_MODELVIEW1_ARB ? 0 : (int)(pname - GL_MODELVIEW2_ARB) + 1];
+        for (int i = 0; i < 16; ++i) v[i] = u->m[u->depth][i];
+        return 16;
+    }
     case GL_PROJECTION_MATRIX: for (int i = 0; i < 16; ++i) v[i] = s->projection.m[s->projection.depth][i]; return 16;
     case GL_TEXTURE_MATRIX: {
         struct glm_matrix_stack *t = &s->texture[s->active_texture - GL_TEXTURE0];
@@ -1386,6 +1469,27 @@ static int state_query(struct glm_context *ctx, GLenum pname, double *v, bool *i
     case GL_TEXTURE_COORD_ARRAY_BUFFER_BINDING:
         array = GL_TEXTURE_COORD_ARRAY; break;
     }
+    /* The arrays outside the attribute slots. */
+    int legacy = -1;
+    switch (pname) {
+    case GL_EDGE_FLAG_ARRAY_STRIDE: case GL_EDGE_FLAG_ARRAY_BUFFER_BINDING: legacy = GLM_LEGACY_EDGE_FLAG; break;
+    case GL_INDEX_ARRAY_TYPE: case GL_INDEX_ARRAY_STRIDE: case GL_INDEX_ARRAY_BUFFER_BINDING: legacy = GLM_LEGACY_INDEX; break;
+    case GL_WEIGHT_ARRAY_SIZE_ARB: case GL_WEIGHT_ARRAY_TYPE_ARB: case GL_WEIGHT_ARRAY_STRIDE_ARB:
+    case GL_WEIGHT_ARRAY_BUFFER_BINDING_ARB: legacy = GLM_LEGACY_WEIGHT; break;
+    case GL_POINT_SIZE_ARRAY_TYPE_APPLE: case GL_POINT_SIZE_ARRAY_STRIDE_APPLE: case GL_POINT_SIZE_ARRAY_BUFFER_BINDING_APPLE:
+        legacy = GLM_LEGACY_POINT_SIZE; break;
+    }
+    if (legacy >= 0) {
+        const struct glm_array *a = &ctx->vao->legacy[legacy];
+        switch (pname) {
+        case GL_EDGE_FLAG_ARRAY_STRIDE: case GL_INDEX_ARRAY_STRIDE: case GL_WEIGHT_ARRAY_STRIDE_ARB:
+        case GL_POINT_SIZE_ARRAY_STRIDE_APPLE: v[0] = a->stride; return 1;
+        case GL_EDGE_FLAG_ARRAY_BUFFER_BINDING: case GL_INDEX_ARRAY_BUFFER_BINDING: case GL_WEIGHT_ARRAY_BUFFER_BINDING_ARB:
+        case GL_POINT_SIZE_ARRAY_BUFFER_BINDING_APPLE: v[0] = a->buffer; return 1;
+        case GL_WEIGHT_ARRAY_SIZE_ARB: v[0] = a->size ? a->size : 1; return 1; /* initially 1, as Apple's */
+        default: v[0] = a->type ? a->type : GL_FLOAT; return 1;
+        }
+    }
     if (array) {
         int slot = glm_client_array_slot(ctx, array);
         if (slot < 0) return 0;
@@ -1458,6 +1562,10 @@ static int state_query(struct glm_context *ctx, GLenum pname, double *v, bool *i
     case GL_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION: v[0] = 0; return 1;
     case GL_MAX_SERVER_WAIT_TIMEOUT: v[0] = -1; return 1; /* Apple: -1 from every getter */
     case GL_TIMESTAMP: v[0] = 0; return 1;                /* Apple has no timestamps */
+    case GL_ACCUM_RED_BITS: case GL_ACCUM_GREEN_BITS: case GL_ACCUM_BLUE_BITS: case GL_ACCUM_ALPHA_BITS:
+        if (ctx->draw_framebuffer || !ctx->default_bits_known) return 0;
+        v[0] = ctx->default_accum_bits;
+        return 1;
     case GL_DEPTH_BITS: case GL_STENCIL_BITS:
         if (ctx->draw_framebuffer || !ctx->default_bits_known) return 0;
         v[0] = pname == GL_DEPTH_BITS ? ctx->default_depth_bits : ctx->default_stencil_bits;

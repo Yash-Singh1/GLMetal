@@ -72,6 +72,7 @@ int glm_cheap_pname(unsigned pname)
     if (pname >= 0x0BA0 && pname <= 0x0BA8) return 1;   /* matrix mode, stack depths, matrices */
     if (pname >= 0x84E3 && pname <= 0x84E6) return 1;   /* transpose matrices */
     if (pname == 0x80B1 || pname == 0x80B2) return 1;   /* color matrix */
+    if (pname == 0x850A || (pname >= 0x8722 && pname <= 0x873F)) return 1; /* vertex unit matrices */
     if (pname >= 0x8074 && pname <= 0x809A) return 1;   /* client arrays */
     if (pname >= 0x8450 && pname <= 0x845E) return 1;   /* fog coord / secondary color arrays and current */
     if (pname >= 0x8889 && pname <= 0x889F) return 1;   /* buffer bindings */
@@ -84,6 +85,11 @@ int glm_cheap_pname(unsigned pname)
 struct shadow_vao {
     GLuint name, element_buffer;
     uint32_t enabled;       /* attribute arrays enabled */
+    /* Edge flag, index, weight and point size arrays (glm_vertex_array.legacy):
+       enabled, and their buffers. Draws reading one from client memory run
+       synchronously. */
+    uint8_t legacy_enabled;
+    GLuint legacy_buffer[GLM_LEGACY_ARRAYS];
     GLuint buffer[GLM_MAX_ATTRIBS];
     struct glm_array arrays[GLM_MAX_ATTRIBS];
     uint32_t arrays_known;
@@ -128,6 +134,9 @@ struct glm_shadow {
        (draw buffer 0), seeded when the shadow is refreshed. */
     uint32_t caps, caps_known;
     bool primitive_restart, immediate;
+    /* GL_CONVOLUTION_1D, GL_CONVOLUTION_2D, GL_SEPARABLE_2D enabled (bits 0-2):
+       convolution can resize texture images, so their levels are not predicted. */
+    uint8_t convolution;
     GLboolean color_mask[4];
     bool color_mask_known;
     /* GL_DRAW_BUFFER (draw buffer 0) per draw framebuffer. */
@@ -262,6 +271,8 @@ static void shadow_set_cap(struct glm_context *ctx, GLenum cap, bool value)
 {
     struct glm_shadow *s = shadow(ctx);
     if (cap == GL_PRIMITIVE_RESTART) s->primitive_restart = value;
+    int filter = cap == GL_CONVOLUTION_1D ? 0 : cap == GL_CONVOLUTION_2D ? 1 : cap == GL_SEPARABLE_2D ? 2 : -1;
+    if (filter >= 0) s->convolution = (uint8_t)(value ? s->convolution | 1u << filter : s->convolution & ~(1u << filter));
     int slot = shadow_cap_slot(cap);
     if (slot < 0) return;
     if (value) s->caps |= 1u << slot;
@@ -331,6 +342,9 @@ void glm_shadow_refresh(struct glm_context *ctx)
     shadow_queries_invalidate_all(s);
     const struct glm_state *st = &ctx->state;
     s->primitive_restart = st->primitive_restart;
+    s->convolution = (uint8_t)(st->imaging.enabled[GLM_IMAGING_CONVOLUTION_1D] |
+                               st->imaging.enabled[GLM_IMAGING_CONVOLUTION_2D] << 1 |
+                               st->imaging.enabled[GLM_IMAGING_SEPARABLE_2D] << 2);
     s->immediate = ctx->immediate != NULL;
     s->array_buffer = ctx->array_buffer;
     s->pixel_pack = ctx->pixel_pack_buffer;
@@ -395,12 +409,36 @@ void glm_shadow_refresh(struct glm_context *ctx)
         v->buffer[i] = ctx->vao->arrays[i].buffer;
         v->arrays[i] = ctx->vao->arrays[i];
     }
+    v->legacy_enabled = 0;
+    for (int i = 0; i < GLM_LEGACY_ARRAYS; ++i) {
+        if (ctx->vao->legacy[i].enabled) v->legacy_enabled |= (uint8_t)(1u << i);
+        v->legacy_buffer[i] = ctx->vao->legacy[i].buffer;
+    }
     v->arrays_known = UINT32_MAX;
     s->vao = v;
 }
 
 /* Every enabled array (and the indices, if `indexed`) in a buffer object:
    the draw reads no client memory and can be recorded. */
+static int legacy_array_index(GLenum array)
+{
+    switch (array) {
+    case GL_EDGE_FLAG_ARRAY: return GLM_LEGACY_EDGE_FLAG;
+    case GL_INDEX_ARRAY: return GLM_LEGACY_INDEX;
+    case GL_WEIGHT_ARRAY_ARB: return GLM_LEGACY_WEIGHT;
+    case GL_POINT_SIZE_ARRAY_APPLE: return GLM_LEGACY_POINT_SIZE;
+    default: return -1;
+    }
+}
+
+/* An enabled edge flag, index, weight or point size array in client memory. */
+static bool legacy_client_arrays(struct glm_shadow *s)
+{
+    for (int i = 0; i < GLM_LEGACY_ARRAYS; ++i)
+        if ((s->vao->legacy_enabled >> i & 1) && !s->vao->legacy_buffer[i]) return true;
+    return false;
+}
+
 static bool draw_recordable(struct glm_context *ctx, bool indexed)
 {
     struct glm_shadow *s = shadow(ctx);
@@ -408,7 +446,7 @@ static bool draw_recordable(struct glm_context *ctx, bool indexed)
     if (indexed && !v->element_buffer) return false;
     for (uint32_t bits = v->enabled; bits; bits &= bits - 1)
         if (!v->buffer[__builtin_ctz(bits)]) return false;
-    return true;
+    return !legacy_client_arrays(s);
 }
 
 static int legacy_array_slot(struct glm_shadow *s, GLenum array)
@@ -553,13 +591,32 @@ void glm_shadow_glDisableVertexAttribArrayARB(struct glm_context *ctx, GLuint in
 void glm_shadow_glEnableClientState(struct glm_context *ctx, GLenum array)
 {
     struct glm_shadow *s = shadow(ctx);
+    if (array == GL_ELEMENT_ARRAY_APPLE) ctx->apple_element_enabled = true;
     set_enabled(s, legacy_array_slot(s, array), true);
+    int legacy = legacy_array_index(array);
+    if (legacy >= 0 && !s->immediate) s->vao->legacy_enabled |= (uint8_t)(1u << legacy);
 }
 void glm_shadow_glDisableClientState(struct glm_context *ctx, GLenum array)
 {
     struct glm_shadow *s = shadow(ctx);
+    if (array == GL_ELEMENT_ARRAY_APPLE) ctx->apple_element_enabled = false;
     set_enabled(s, legacy_array_slot(s, array), false);
+    int legacy = legacy_array_index(array);
+    if (legacy >= 0 && !s->immediate) s->vao->legacy_enabled &= (uint8_t)~(1u << legacy);
 }
+static void set_legacy_pointer(struct glm_shadow *s, int which, GLsizei stride)
+{
+    if (s->immediate || stride < 0) return;
+    s->vao->legacy_buffer[which] = s->array_buffer;
+}
+void glm_shadow_glEdgeFlagPointer(struct glm_context *ctx, GLsizei stride, const GLvoid *pointer)
+{ (void)pointer; set_legacy_pointer(shadow(ctx), GLM_LEGACY_EDGE_FLAG, stride); }
+void glm_shadow_glIndexPointer(struct glm_context *ctx, GLenum type, GLsizei stride, const GLvoid *pointer)
+{ (void)type; (void)pointer; set_legacy_pointer(shadow(ctx), GLM_LEGACY_INDEX, stride); }
+void glm_shadow_glWeightPointerARB(struct glm_context *ctx, GLint size, GLenum type, GLsizei stride, const GLvoid *pointer)
+{ (void)size; (void)type; (void)pointer; set_legacy_pointer(shadow(ctx), GLM_LEGACY_WEIGHT, stride); }
+void glm_shadow_glPointSizePointerAPPLE(struct glm_context *ctx, GLenum type, GLsizei stride, const GLvoid *pointer)
+{ (void)type; (void)pointer; set_legacy_pointer(shadow(ctx), GLM_LEGACY_POINT_SIZE, stride); }
 void glm_shadow_glClientActiveTexture(struct glm_context *ctx, GLenum unit) { shadow(ctx)->client_active_texture = unit; }
 void glm_shadow_glClientActiveTextureARB(struct glm_context *ctx, GLenum unit) { shadow(ctx)->client_active_texture = unit; }
 
@@ -754,7 +811,7 @@ static bool draw_elements_list(struct glm_context *ctx, GLenum mode, GLsizei cou
             *c = (struct name##_cmd){__VA_ARGS__};                                                         \
             return;                                                                                        \
         }                                                                                                  \
-        if (name##_record_client(ctx, __VA_ARGS__)) return;                                             \
+        if (!legacy_client_arrays(shadow(ctx)) && name##_record_client(ctx, __VA_ARGS__)) return;       \
         glm_thread_sync_named(ctx, #name);                                                                 \
     }
 
@@ -1100,8 +1157,21 @@ GLM_EXPORT void glElementPointerAPPLE(GLenum type, const GLvoid *pointer)
     struct glm_context *ctx = glm_current();
     if (glm_profile_rejected(ctx, 1)) return;
     if (!ctx) return;
+    if (type != GL_UNSIGNED_BYTE && type != GL_UNSIGNED_SHORT && type != GL_UNSIGNED_INT) {
+        if (ctx->thread) glm_thread_sync_named(ctx, "glElementPointerAPPLE");
+        return glm_error(ctx, GL_INVALID_ENUM);
+    }
     ctx->apple_element_type = type;
     ctx->apple_element_pointer = pointer;
+}
+
+/* Element array draws need GL_ELEMENT_ARRAY_APPLE enabled (Apple). */
+static bool apple_elements_disabled(struct glm_context *ctx)
+{
+    if (ctx->apple_element_enabled) return false;
+    if (ctx->thread) glm_thread_sync_named(ctx, "element array draw");
+    glm_error(ctx, GL_INVALID_OPERATION);
+    return true;
 }
 
 static const char *apple_elements(struct glm_context *ctx, GLint first)
@@ -1114,13 +1184,14 @@ GLM_EXPORT void glDrawElementArrayAPPLE(GLenum mode, GLint first, GLsizei count)
 {
     struct glm_context *ctx = glm_current();
     if (glm_profile_rejected(ctx, 1)) return;
-    if (ctx) glDrawElements(mode, count, ctx->apple_element_type, apple_elements(ctx, first));
+    if (ctx && !apple_elements_disabled(ctx)) glDrawElements(mode, count, ctx->apple_element_type, apple_elements(ctx, first));
 }
 GLM_EXPORT void glDrawRangeElementArrayAPPLE(GLenum mode, GLuint start, GLuint end, GLint first, GLsizei count)
 {
     struct glm_context *ctx = glm_current();
     if (glm_profile_rejected(ctx, 1)) return;
-    if (ctx) glDrawRangeElements(mode, start, end, count, ctx->apple_element_type, apple_elements(ctx, first));
+    if (ctx && !apple_elements_disabled(ctx))
+        glDrawRangeElements(mode, start, end, count, ctx->apple_element_type, apple_elements(ctx, first));
 }
 GLM_EXPORT void glMultiDrawElementArrayAPPLE(GLenum mode, const GLint *first, const GLsizei *count, GLsizei n)
 {
@@ -1477,14 +1548,26 @@ static void shadow_define_level(struct glm_context *ctx, GLenum target, GLint le
     t->levels->known[face] |= (uint16_t)(1u << level);
 }
 
+/* Levels queries wait for (convolution resizes images). */
+static void shadow_forget_levels(struct glm_context *ctx, GLenum target)
+{
+    int face;
+    struct shadow_texture *t = bound_shadow_texture(ctx, target, &face);
+    if (t) {
+        free(t->levels);
+        t->levels = NULL;
+    }
+}
 void glm_shadow_glTexImage1D(struct glm_context *ctx, GLenum target, GLint level, GLint internal, GLsizei w, GLint border,
                              GLenum format, GLenum type, const GLvoid *pixels)
 {
+    if (shadow(ctx)->convolution & 1) return shadow_forget_levels(ctx, target);
     shadow_define_level(ctx, target, level, (GLenum)internal, w, 1, 1);
 }
 void glm_shadow_glTexImage2D(struct glm_context *ctx, GLenum target, GLint level, GLint internal, GLsizei w, GLsizei h,
                              GLint border, GLenum format, GLenum type, const GLvoid *pixels)
 {
+    if (shadow(ctx)->convolution & 6) return shadow_forget_levels(ctx, target);
     shadow_define_level(ctx, target, level, (GLenum)internal, w, h, 1);
 }
 void glm_shadow_glTexImage3D(struct glm_context *ctx, GLenum target, GLint level, GLint internal, GLsizei w, GLsizei h,
@@ -2655,4 +2738,337 @@ GLM_EXPORT void glGetQueryObjectuiv(GLuint name, GLenum pname, GLuint *params)
 GLM_EXPORT void glGetQueryObjectuivARB(GLuint name, GLenum pname, GLuint *params)
 {
     query_object(name, pname, params, true, "glGetQueryObjectuivARB");
+}
+
+/* ---- pixel data in display lists ------------------------------------------ */
+
+/* Commands that read client pixels unpack them when the list is compiled
+   (GL 2.1 5.4), from client memory or the bound pixel unpack buffer: the
+   bytes the unpack state reaches are copied with that state, and replay
+   restores it around the call (with no unpack buffer bound). */
+void glm_impl_glBitmap(GLsizei width, GLsizei height, GLfloat xorig, GLfloat yorig, GLfloat xmove, GLfloat ymove,
+                       const GLubyte *bitmap);
+void glm_impl_glDrawPixels(GLsizei width, GLsizei height, GLenum format, GLenum type, const GLvoid *pixels);
+void glm_impl_glPolygonStipple(const GLubyte *mask);
+void glm_impl_glTexImage1D(GLenum target, GLint level, GLint internal, GLsizei width, GLint border, GLenum format,
+                           GLenum type, const GLvoid *pixels);
+void glm_impl_glTexImage2D(GLenum target, GLint level, GLint internal, GLsizei width, GLsizei height, GLint border,
+                           GLenum format, GLenum type, const GLvoid *pixels);
+void glm_impl_glTexImage3D(GLenum target, GLint level, GLint internal, GLsizei width, GLsizei height, GLsizei depth,
+                           GLint border, GLenum format, GLenum type, const GLvoid *pixels);
+void glm_impl_glTexSubImage1D(GLenum target, GLint level, GLint x, GLsizei width, GLenum format, GLenum type,
+                              const GLvoid *pixels);
+void glm_impl_glTexSubImage2D(GLenum target, GLint level, GLint x, GLint y, GLsizei width, GLsizei height,
+                              GLenum format, GLenum type, const GLvoid *pixels);
+void glm_impl_glTexSubImage3D(GLenum target, GLint level, GLint x, GLint y, GLint z, GLsizei width, GLsizei height,
+                              GLsizei depth, GLenum format, GLenum type, const GLvoid *pixels);
+void glm_impl_glColorTable(GLenum target, GLenum internal, GLsizei width, GLenum format, GLenum type,
+                           const GLvoid *table);
+void glm_impl_glColorSubTable(GLenum target, GLsizei start, GLsizei count, GLenum format, GLenum type,
+                              const GLvoid *data);
+void glm_impl_glConvolutionFilter1D(GLenum target, GLenum internal, GLsizei width, GLenum format, GLenum type,
+                                    const GLvoid *image);
+void glm_impl_glConvolutionFilter2D(GLenum target, GLenum internal, GLsizei width, GLsizei height, GLenum format,
+                                    GLenum type, const GLvoid *image);
+void glm_impl_glSeparableFilter2D(GLenum target, GLenum internal, GLsizei width, GLsizei height, GLenum format,
+                                  GLenum type, const GLvoid *row, const GLvoid *column);
+
+enum list_pixel_call {
+    LIST_BITMAP, LIST_DRAW_PIXELS, LIST_POLYGON_STIPPLE, LIST_TEX_IMAGE_1D, LIST_TEX_IMAGE_2D, LIST_TEX_IMAGE_3D,
+    LIST_TEX_SUB_IMAGE_1D, LIST_TEX_SUB_IMAGE_2D, LIST_TEX_SUB_IMAGE_3D, LIST_COLOR_TABLE, LIST_COLOR_SUB_TABLE,
+    LIST_CONVOLUTION_1D, LIST_CONVOLUTION_2D, LIST_SEPARABLE_2D,
+};
+struct list_unpack {
+    GLint alignment, row_length, skip_rows, skip_pixels, image_height, skip_images, row_bytes, image_bytes;
+    bool swap_bytes, lsb_first;
+};
+struct list_pixels {
+    enum list_pixel_call call;
+    GLint i[10]; /* the integer arguments in order */
+    GLfloat f[4]; /* glBitmap's origin and move */
+    struct list_unpack unpack;
+    bool data; /* bytes follow (else the pointer was NULL) */
+    size_t second; /* glSeparableFilter2D: offset of the column image (0: none) */
+};
+
+static struct list_unpack unpack_get(const struct glm_state *s)
+{
+    return (struct list_unpack){s->unpack_alignment, s->unpack_row_length, s->unpack_skip_rows, s->unpack_skip_pixels,
+                                s->unpack_image_height, s->unpack_skip_images, s->unpack_row_bytes,
+                                s->unpack_image_bytes, s->unpack_swap_bytes, s->unpack_lsb_first};
+}
+static void unpack_set(struct glm_state *s, const struct list_unpack *u)
+{
+    s->unpack_alignment = u->alignment;
+    s->unpack_row_length = u->row_length;
+    s->unpack_skip_rows = u->skip_rows;
+    s->unpack_skip_pixels = u->skip_pixels;
+    s->unpack_image_height = u->image_height;
+    s->unpack_skip_images = u->skip_images;
+    s->unpack_row_bytes = u->row_bytes;
+    s->unpack_image_bytes = u->image_bytes;
+    s->unpack_swap_bytes = u->swap_bytes;
+    s->unpack_lsb_first = u->lsb_first;
+}
+
+/* Bytes the unpack state reads for an image (GL 2.1 3.6.4); `bits` for
+   bitmaps (one bit per pixel); 0 when nothing is read. */
+static size_t unpack_extent(const struct list_unpack *u, GLsizei w, GLsizei h, GLsizei d, bool three_d, GLenum format,
+                            GLenum type, bool bits)
+{
+    if (w <= 0 || h <= 0 || d <= 0) return 0;
+    if (type == GL_BITMAP) bits = true;
+    size_t row_length = u->row_length > 0 ? (size_t)u->row_length : (size_t)w;
+    size_t alignment = u->alignment > 0 ? (size_t)u->alignment : 4;
+    size_t skip_pixels = u->skip_pixels > 0 ? (size_t)u->skip_pixels : 0;
+    size_t skip_rows = u->skip_rows > 0 ? (size_t)u->skip_rows : 0;
+    size_t row_bytes, last_row;
+    if (bits) {
+        row_bytes = ((row_length + 7) / 8 + alignment - 1) / alignment * alignment;
+        last_row = (skip_pixels + (size_t)w + 7) / 8;
+    } else {
+        size_t bpp = glm_pixel_bytes(format, type);
+        if (!bpp) return 0;
+        row_bytes = (row_length * bpp + alignment - 1) / alignment * alignment;
+        last_row = (skip_pixels + (size_t)w) * bpp;
+    }
+    if (u->row_bytes > 0) row_bytes = (size_t)u->row_bytes;
+    size_t bytes = (skip_rows + (size_t)h - 1) * row_bytes + last_row;
+    if (three_d) {
+        size_t image_rows = u->image_height > 0 ? (size_t)u->image_height : (size_t)h;
+        size_t image_bytes = u->image_bytes > 0 ? (size_t)u->image_bytes : row_bytes * image_rows;
+        size_t skip_images = u->skip_images > 0 ? (size_t)u->skip_images : 0;
+        bytes += (skip_images + (size_t)d - 1) * image_bytes;
+    }
+    return bytes;
+}
+
+static void list_pixels_exec(const void *payload)
+{
+    const struct list_pixels *p = payload;
+    struct glm_context *ctx = glm_current();
+    if (!ctx) return;
+    const void *data = p->data ? (const void *)(p + 1) : NULL;
+    struct glm_state *s = &ctx->state;
+    struct list_unpack saved = unpack_get(s);
+    GLuint unpack_buffer = ctx->pixel_unpack_buffer;
+    bool client_storage = s->unpack_client_storage;
+    unpack_set(s, &p->unpack);
+    ctx->pixel_unpack_buffer = 0;
+    s->unpack_client_storage = false;
+    const GLint *i = p->i;
+    switch (p->call) {
+    case LIST_BITMAP: glm_impl_glBitmap(i[0], i[1], p->f[0], p->f[1], p->f[2], p->f[3], data); break;
+    case LIST_DRAW_PIXELS: glm_impl_glDrawPixels(i[0], i[1], (GLenum)i[2], (GLenum)i[3], data); break;
+    case LIST_POLYGON_STIPPLE:
+        if (data) glm_impl_glPolygonStipple(data);
+        break;
+    case LIST_TEX_IMAGE_1D:
+        glm_impl_glTexImage1D((GLenum)i[0], i[1], i[2], i[3], i[4], (GLenum)i[5], (GLenum)i[6], data);
+        break;
+    case LIST_TEX_IMAGE_2D:
+        glm_impl_glTexImage2D((GLenum)i[0], i[1], i[2], i[3], i[4], i[5], (GLenum)i[6], (GLenum)i[7], data);
+        break;
+    case LIST_TEX_IMAGE_3D:
+        glm_impl_glTexImage3D((GLenum)i[0], i[1], i[2], i[3], i[4], i[5], i[6], (GLenum)i[7], (GLenum)i[8], data);
+        break;
+    case LIST_TEX_SUB_IMAGE_1D:
+        glm_impl_glTexSubImage1D((GLenum)i[0], i[1], i[2], i[3], (GLenum)i[4], (GLenum)i[5], data);
+        break;
+    case LIST_TEX_SUB_IMAGE_2D:
+        glm_impl_glTexSubImage2D((GLenum)i[0], i[1], i[2], i[3], i[4], i[5], (GLenum)i[6], (GLenum)i[7], data);
+        break;
+    case LIST_TEX_SUB_IMAGE_3D:
+        glm_impl_glTexSubImage3D((GLenum)i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7], (GLenum)i[8], (GLenum)i[9],
+                                 data);
+        break;
+    case LIST_COLOR_TABLE:
+        glm_impl_glColorTable((GLenum)i[0], (GLenum)i[1], i[2], (GLenum)i[3], (GLenum)i[4], data);
+        break;
+    case LIST_COLOR_SUB_TABLE:
+        glm_impl_glColorSubTable((GLenum)i[0], i[1], i[2], (GLenum)i[3], (GLenum)i[4], data);
+        break;
+    case LIST_CONVOLUTION_1D:
+        glm_impl_glConvolutionFilter1D((GLenum)i[0], (GLenum)i[1], i[2], (GLenum)i[3], (GLenum)i[4], data);
+        break;
+    case LIST_CONVOLUTION_2D:
+        glm_impl_glConvolutionFilter2D((GLenum)i[0], (GLenum)i[1], i[2], i[3], (GLenum)i[4], (GLenum)i[5], data);
+        break;
+    case LIST_SEPARABLE_2D:
+        glm_impl_glSeparableFilter2D((GLenum)i[0], (GLenum)i[1], i[2], i[3], (GLenum)i[4], (GLenum)i[5], data,
+                                     data && p->second ? (const uint8_t *)data + p->second : NULL);
+        break;
+    }
+    unpack_set(s, &saved);
+    ctx->pixel_unpack_buffer = unpack_buffer;
+    s->unpack_client_storage = client_storage;
+}
+
+/* Records the call; true when the caller returns (GL_COMPILE). */
+static bool list_pixels(struct glm_context *ctx, enum list_pixel_call call, const GLint *args, int count,
+                        const GLfloat *f, const void *pixels, GLsizei w, GLsizei h, GLsizei d, bool three_d,
+                        GLenum format, GLenum type, bool bits)
+{
+    if (ctx->thread) glm_thread_sync_named(ctx, "display list pixels");
+    struct list_unpack unpack = unpack_get(&ctx->state);
+    const uint8_t *source = pixels;
+    if (ctx->pixel_unpack_buffer) {
+        struct glm_buffer *buffer = glm_buffer_get(ctx, ctx->pixel_unpack_buffer);
+        const uint8_t *contents = buffer ? glm_backend_buffer_contents(ctx, buffer, false) : NULL;
+        source = contents ? contents + (uintptr_t)pixels : NULL;
+    }
+    size_t bytes = source ? unpack_extent(&unpack, w, h, d, three_d, format, type, bits) : 0;
+    struct list_pixels *p = glm_list_alloc(ctx, sizeof *p + bytes, list_pixels_exec);
+    memset(p, 0, sizeof *p);
+    p->call = call;
+    memcpy(p->i, args, (size_t)count * sizeof *args);
+    if (f) memcpy(p->f, f, sizeof p->f);
+    p->unpack = unpack;
+    p->data = source != NULL && (bytes || !w || !h || !d);
+    if (bytes) memcpy(p + 1, source, bytes);
+    return !glm_list_executes(ctx);
+}
+
+bool glm_list_glBitmap(struct glm_context *ctx, GLsizei w, GLsizei h, GLfloat xorig, GLfloat yorig, GLfloat xmove,
+                       GLfloat ymove, const GLubyte *bitmap)
+{
+    const GLint args[] = {w, h};
+    const GLfloat f[] = {xorig, yorig, xmove, ymove};
+    return list_pixels(ctx, LIST_BITMAP, args, 2, f, bitmap, w, h, 1, false, 0, 0, true);
+}
+bool glm_list_glDrawPixels(struct glm_context *ctx, GLsizei w, GLsizei h, GLenum format, GLenum type,
+                           const GLvoid *pixels)
+{
+    const GLint args[] = {w, h, (GLint)format, (GLint)type};
+    return list_pixels(ctx, LIST_DRAW_PIXELS, args, 4, NULL, pixels, w, h, 1, false, format, type, false);
+}
+bool glm_list_glPolygonStipple(struct glm_context *ctx, const GLubyte *mask)
+{
+    return list_pixels(ctx, LIST_POLYGON_STIPPLE, NULL, 0, NULL, mask, 32, 32, 1, false, 0, 0, true);
+}
+bool glm_list_glTexImage1D(struct glm_context *ctx, GLenum target, GLint level, GLint internal, GLsizei w,
+                           GLint border, GLenum format, GLenum type, const GLvoid *pixels)
+{
+    const GLint args[] = {(GLint)target, level, internal, w, border, (GLint)format, (GLint)type};
+    return list_pixels(ctx, LIST_TEX_IMAGE_1D, args, 7, NULL, pixels, w, 1, 1, false, format, type, false);
+}
+bool glm_list_glTexImage2D(struct glm_context *ctx, GLenum target, GLint level, GLint internal, GLsizei w, GLsizei h,
+                           GLint border, GLenum format, GLenum type, const GLvoid *pixels)
+{
+    const GLint args[] = {(GLint)target, level, internal, w, h, border, (GLint)format, (GLint)type};
+    return list_pixels(ctx, LIST_TEX_IMAGE_2D, args, 8, NULL, pixels, w, h, 1, false, format, type, false);
+}
+bool glm_list_glTexImage3D(struct glm_context *ctx, GLenum target, GLint level, GLint internal, GLsizei w, GLsizei h,
+                           GLsizei d, GLint border, GLenum format, GLenum type, const GLvoid *pixels)
+{
+    const GLint args[] = {(GLint)target, level, internal, w, h, d, border, (GLint)format, (GLint)type};
+    return list_pixels(ctx, LIST_TEX_IMAGE_3D, args, 9, NULL, pixels, w, h, d, true, format, type, false);
+}
+bool glm_list_glTexSubImage1D(struct glm_context *ctx, GLenum target, GLint level, GLint x, GLsizei w, GLenum format,
+                              GLenum type, const GLvoid *pixels)
+{
+    const GLint args[] = {(GLint)target, level, x, w, (GLint)format, (GLint)type};
+    return list_pixels(ctx, LIST_TEX_SUB_IMAGE_1D, args, 6, NULL, pixels, w, 1, 1, false, format, type, false);
+}
+bool glm_list_glTexSubImage2D(struct glm_context *ctx, GLenum target, GLint level, GLint x, GLint y, GLsizei w,
+                              GLsizei h, GLenum format, GLenum type, const GLvoid *pixels)
+{
+    const GLint args[] = {(GLint)target, level, x, y, w, h, (GLint)format, (GLint)type};
+    return list_pixels(ctx, LIST_TEX_SUB_IMAGE_2D, args, 8, NULL, pixels, w, h, 1, false, format, type, false);
+}
+bool glm_list_glTexSubImage3D(struct glm_context *ctx, GLenum target, GLint level, GLint x, GLint y, GLint z,
+                              GLsizei w, GLsizei h, GLsizei d, GLenum format, GLenum type, const GLvoid *pixels)
+{
+    const GLint args[] = {(GLint)target, level, x, y, z, w, h, d, (GLint)format, (GLint)type};
+    return list_pixels(ctx, LIST_TEX_SUB_IMAGE_3D, args, 10, NULL, pixels, w, h, d, true, format, type, false);
+}
+
+/* Imaging tables and filters (proxy tables are never compiled: they run now). */
+static bool proxy_table(GLenum target)
+{
+    return target == GL_PROXY_COLOR_TABLE || target == GL_PROXY_POST_CONVOLUTION_COLOR_TABLE ||
+           target == GL_PROXY_POST_COLOR_MATRIX_COLOR_TABLE;
+}
+bool glm_list_glColorTable(struct glm_context *ctx, GLenum target, GLenum internal, GLsizei w, GLenum format,
+                           GLenum type, const GLvoid *table)
+{
+    if (proxy_table(target)) return false;
+    const GLint args[] = {(GLint)target, (GLint)internal, w, (GLint)format, (GLint)type};
+    return list_pixels(ctx, LIST_COLOR_TABLE, args, 5, NULL, table, w, 1, 1, false, format, type, false);
+}
+bool glm_list_glColorTableEXT(struct glm_context *ctx, GLenum target, GLenum internal, GLsizei w, GLenum format,
+                              GLenum type, const GLvoid *table)
+{
+    return glm_list_glColorTable(ctx, target, internal, w, format, type, table);
+}
+bool glm_list_glColorSubTable(struct glm_context *ctx, GLenum target, GLsizei start, GLsizei count, GLenum format,
+                              GLenum type, const GLvoid *data)
+{
+    const GLint args[] = {(GLint)target, start, count, (GLint)format, (GLint)type};
+    return list_pixels(ctx, LIST_COLOR_SUB_TABLE, args, 5, NULL, data, count, 1, 1, false, format, type, false);
+}
+bool glm_list_glColorSubTableEXT(struct glm_context *ctx, GLenum target, GLsizei start, GLsizei count, GLenum format,
+                                 GLenum type, const GLvoid *data)
+{
+    return glm_list_glColorSubTable(ctx, target, start, count, format, type, data);
+}
+bool glm_list_glConvolutionFilter1D(struct glm_context *ctx, GLenum target, GLenum internal, GLsizei w, GLenum format,
+                                    GLenum type, const GLvoid *image)
+{
+    const GLint args[] = {(GLint)target, (GLint)internal, w, (GLint)format, (GLint)type};
+    return list_pixels(ctx, LIST_CONVOLUTION_1D, args, 5, NULL, image, w, 1, 1, false, format, type, false);
+}
+bool glm_list_glConvolutionFilter2D(struct glm_context *ctx, GLenum target, GLenum internal, GLsizei w, GLsizei h,
+                                    GLenum format, GLenum type, const GLvoid *image)
+{
+    const GLint args[] = {(GLint)target, (GLint)internal, w, h, (GLint)format, (GLint)type};
+    return list_pixels(ctx, LIST_CONVOLUTION_2D, args, 6, NULL, image, w, h, 1, false, format, type, false);
+}
+/* The row and column images, one after the other. */
+bool glm_list_glSeparableFilter2D(struct glm_context *ctx, GLenum target, GLenum internal, GLsizei w, GLsizei h,
+                                  GLenum format, GLenum type, const GLvoid *row, const GLvoid *column)
+{
+    if (ctx->thread) glm_thread_sync_named(ctx, "display list pixels");
+    struct list_unpack unpack = unpack_get(&ctx->state);
+    const uint8_t *sources[2] = {row, column};
+    if (ctx->pixel_unpack_buffer) {
+        struct glm_buffer *buffer = glm_buffer_get(ctx, ctx->pixel_unpack_buffer);
+        const uint8_t *contents = buffer ? glm_backend_buffer_contents(ctx, buffer, false) : NULL;
+        for (int i = 0; i < 2; ++i) sources[i] = contents ? contents + (uintptr_t)sources[i] : NULL;
+    }
+    size_t bytes[2];
+    for (int i = 0; i < 2; ++i)
+        bytes[i] = sources[i] ? unpack_extent(&unpack, i ? h : w, 1, 1, false, format, type, false) : 0;
+    size_t second = (bytes[0] + 7) & ~(size_t)7;
+    struct list_pixels *p = glm_list_alloc(ctx, sizeof *p + second + bytes[1], list_pixels_exec);
+    memset(p, 0, sizeof *p);
+    p->call = LIST_SEPARABLE_2D;
+    const GLint args[] = {(GLint)target, (GLint)internal, w, h, (GLint)format, (GLint)type};
+    memcpy(p->i, args, sizeof args);
+    p->unpack = unpack;
+    p->data = bytes[0] || bytes[1];
+    p->second = bytes[1] ? second : 0;
+    if (bytes[0]) memcpy(p + 1, sources[0], bytes[0]);
+    if (bytes[1]) memcpy((uint8_t *)(p + 1) + second, sources[1], bytes[1]);
+    return !glm_list_executes(ctx);
+}
+
+/* ---- evaluator maps --------------------------------------------------------- */
+
+size_t glm_attrib_map_bytes(unsigned components, int ustride, int uorder, int vstride, int vorder, size_t size)
+{
+    int k = (int)components;
+    if (k < 1 || k > 4 || uorder < 1 || uorder > GLM_MAX_EVAL_ORDER || vorder < 1 || vorder > GLM_MAX_EVAL_ORDER ||
+        ustride < k || (vorder > 1 && vstride < k))
+        return 0;
+    return ((size_t)(uorder - 1) * (size_t)ustride + (size_t)(vorder - 1) * (size_t)vstride + (size_t)k) * size;
+}
+
+size_t glm_map_points_bytes(unsigned target, int ustride, int uorder, int vstride, int vorder, size_t size)
+{
+    int k = glm_eval_components(target);
+    if (!k || uorder < 1 || uorder > GLM_MAX_EVAL_ORDER || vorder < 1 || vorder > GLM_MAX_EVAL_ORDER || ustride < k ||
+        (vorder > 1 && vstride < k))
+        return 0;
+    return ((size_t)(uorder - 1) * (size_t)ustride + (size_t)(vorder - 1) * (size_t)vstride + (size_t)k) * size;
 }

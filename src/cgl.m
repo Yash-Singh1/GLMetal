@@ -24,9 +24,9 @@ struct _CGLPixelFormatObject {
     uint32_t magic;
     volatile int32_t refcount;
     enum glm_profile profile;
-    GLint color_size, alpha_size, depth_size, stencil_size, samples, display_mask;
+    GLint color_size, alpha_size, depth_size, stencil_size, samples, display_mask, aux_buffers, accum_size;
     bool double_buffer, color_float, no_recovery, minimum_policy, maximum_policy, closest_policy, backing_store,
-         allow_offline;
+         allow_offline, aux_depth_stencil;
 };
 
 struct _CGLContextObject {
@@ -77,11 +77,11 @@ GLM_EXPORT CGLError CGLChoosePixelFormat(const CGLPixelFormatAttribute *attribs,
     if (!glm_backend_initialize()) return kCGLBadCodeModule;
     struct _CGLPixelFormatObject req = {0};
     GLint profile = kCGLOGLPVersion_Legacy, renderer = 0, sample_buffers = 0, accum = 0, aux = 0;
-    bool stereo = false, multisample = false;
+    bool stereo = false, multisample = false, aux_depth_stencil = false;
     req.display_mask = (GLint)0xffffffff;
     for (const CGLPixelFormatAttribute *a = attribs; a && *a; ++a) {
         switch ((int)*a) {
-        case kCGLPFAAllRenderers: case kCGLPFAAuxDepthStencil: case kCGLPFASampleAlpha: case kCGLPFASingleRenderer:
+        case kCGLPFAAllRenderers: case kCGLPFASampleAlpha: case kCGLPFASingleRenderer:
         case kCGLPFARobust: case kCGLPFABackingVolatile: case kCGLPFAMPSafe: case kCGLPFAWindow: case kCGLPFAMultiScreen:
         case kCGLPFACompliant: case kCGLPFAPBuffer: case kCGLPFARemotePBuffer: case kCGLPFAAcceleratedCompute:
         case kCGLPFASupportsAutomaticGraphicsSwitching: case kCGLPFAOffScreen: case kCGLPFAFullScreen:
@@ -89,6 +89,7 @@ GLM_EXPORT CGLError CGLChoosePixelFormat(const CGLPixelFormatAttribute *attribs,
             break;
         case kCGLPFATripleBuffer: case kCGLPFADoubleBuffer: req.double_buffer = true; break;
         case kCGLPFAStereo: stereo = true; break;
+        case kCGLPFAAuxDepthStencil: aux_depth_stencil = true; break;
         case kCGLPFAAuxBuffers: aux = *++a; break;
         case kCGLPFAColorSize: req.color_size = *++a; break;
         case kCGLPFAAlphaSize: req.alpha_size = *++a; break;
@@ -119,13 +120,28 @@ GLM_EXPORT CGLError CGLChoosePixelFormat(const CGLPixelFormatAttribute *attribs,
     case kCGLOGLPVersion_3_2_Core: case kCGLOGLPVersion_GL4_Core: req.profile = GLM_PROFILE_CORE; break;
     default: return kCGLBadAttribute;
     }
-    /* Only the hardware renderer exists; other renderer IDs, stereo, aux
-       buffers and deep accumulation buffers find no format, as on Apple.
-       Renderer IDs compare under kCGLRendererIDMatchingMask like Apple's,
-       so the vendor byte does not affect format matching. */
+    /* Aux buffers as Apple answers them (tests/probes/aux_buffers.m): up to two
+       in legacy formats, a bad pixel format beyond that, and a bad
+       attribute in core profiles. */
+    if (aux && req.profile == GLM_PROFILE_CORE) return kCGLBadAttribute;
+    if (aux < 0) return kCGLBadValue;
+    if (aux > GLM_MAX_AUX_BUFFERS) return kCGLBadPixelFormat;
+    req.aux_buffers = aux;
+    /* Apple's software renderer has no aux depth/stencil buffers, so only
+       requests that exclude it (kCGLPFANoRecovery) find a format. */
+    if (aux_depth_stencil && !req.no_recovery) return kCGLBadPixelFormat;
+    req.aux_depth_stencil = aux_depth_stencil;
+    /* Only the hardware renderer exists; other renderer IDs and stereo
+       find no format, as on Apple. Renderer IDs
+       compare under kCGLRendererIDMatchingMask like Apple's, so the vendor
+       byte does not affect format matching. */
     if (renderer && (renderer & kCGLRendererIDMatchingMask) != (RENDERER_ID & kCGLRendererIDMatchingMask))
         return kCGLNoError;
-    if (stereo || accum > 64 || aux > 0) return kCGLNoError;
+    /* Legacy formats get a 32-bit float accumulation buffer for any
+       requested size, as Apple's do; core profiles have none. */
+    if (accum && req.profile == GLM_PROFILE_CORE) return kCGLBadAttribute;
+    req.accum_size = accum > 0 ? 128 : 0;
+    if (stereo) return kCGLNoError;
     /* Apple silicon: RGBA8 (RGBA16F with color float), 32-bit depth, 8-bit
        stencil, and the request's sample count. */
     req.samples = (sample_buffers > 0 || multisample) ? (req.samples > 0 ? req.samples : 4) : 0;
@@ -177,6 +193,9 @@ GLM_EXPORT CGLError CGLDescribePixelFormat(CGLPixelFormatObj pix, GLint pix_num,
     case kCGLPFAAlphaSize: *value = pix->color_float ? 16 : 8; break;
     case kCGLPFADepthSize: *value = pix->depth_size; break;
     case kCGLPFAStencilSize: *value = pix->stencil_size; break;
+    case kCGLPFAAuxBuffers: *value = pix->aux_buffers; break;
+    case kCGLPFAAccumSize: *value = pix->accum_size; break;
+    case kCGLPFAAuxDepthStencil: *value = pix->aux_depth_stencil; break;
     case kCGLPFAMinimumPolicy: *value = pix->minimum_policy; break;
     case kCGLPFAMaximumPolicy: *value = pix->maximum_policy; break;
     case kCGLPFAOffScreen: *value = 1; break;
@@ -193,8 +212,8 @@ GLM_EXPORT CGLError CGLDescribePixelFormat(CGLPixelFormatObj pix, GLint pix_num,
     case kCGLPFADisplayMask: *value = pix->display_mask; break;
     case kCGLPFAAllowOfflineRenderers: *value = pix->allow_offline; break;
     case kCGLPFAOpenGLProfile: *value = pix->profile == GLM_PROFILE_CORE ? kCGLOGLPVersion_GL4_Core : kCGLOGLPVersion_Legacy; break;
-    case kCGLPFAAllRenderers: case kCGLPFATripleBuffer: case kCGLPFAStereo: case kCGLPFAAuxBuffers: case kCGLPFAAccumSize:
-    case kCGLPFAFullScreen: case kCGLPFAAuxDepthStencil: case kCGLPFASupersample: case kCGLPFASampleAlpha:
+    case kCGLPFAAllRenderers: case kCGLPFATripleBuffer: case kCGLPFAStereo:
+    case kCGLPFAFullScreen: case kCGLPFASupersample: case kCGLPFASampleAlpha:
     case kCGLPFASingleRenderer: case kCGLPFARobust: case kCGLPFAPBuffer: case kCGLPFARemotePBuffer:
     case kCGLPFASupportsAutomaticGraphicsSwitching:
         *value = 0; break;
@@ -293,6 +312,9 @@ GLM_EXPORT CGLError CGLCreateContext(CGLPixelFormatObj pix, CGLContextObj share,
     gl->default_stencil_bits = (uint8_t)pix->stencil_size;
     gl->default_bits_known = true;
     gl->default_single_buffered = !pix->double_buffer;
+    gl->default_aux_buffers = (uint8_t)pix->aux_buffers;
+    gl->default_aux_depth_stencil = pix->aux_depth_stencil;
+    gl->default_accum_bits = (uint8_t)(pix->accum_size / 4);
     struct _CGLContextObject *ctx = calloc(1, sizeof *ctx);
     ctx->magic = CONTEXT_MAGIC;
     ctx->refcount = 1;
@@ -476,9 +498,19 @@ static void present_now(CGLContextObj ctx)
 {
     if (ctx->surface) {
         sync_drawable_size(ctx);
-        if (glm_backend_present(ctx->gl, glm_surface_layer(ctx->surface), ctx->surface_opacity != 0)) return;
+        if (glm_backend_present(ctx->gl, glm_surface_layer(ctx->surface), ctx->surface_opacity != 0, true)) return;
     }
     glm_backend_flush(ctx->gl, false);
+}
+
+/* glFlush and glFinish show front-buffer rendering (a single-buffered
+   context's drawing, or GL_FRONT on a double-buffered one), as Apple's
+   window-system buffers do. Runs where the context's commands execute. */
+GLM_HIDDEN void glm_cgl_present_front(struct glm_context *gl)
+{
+    CGLContextObj ctx = gl->cgl;
+    if (!valid_context(ctx) || !ctx->surface || !glm_backend_front_drawn(gl)) return;
+    glm_backend_present(gl, glm_surface_layer(ctx->surface), ctx->surface_opacity != 0, false);
 }
 
 struct present_cmd { CGLContextObj ctx; };
@@ -502,7 +534,7 @@ GLM_EXPORT CGLError CGLFlushDrawable(CGLContextObj ctx)
     }
     if (ctx->surface) {
         sync_drawable_size(ctx);
-        if (glm_backend_present(ctx->gl, glm_surface_layer(ctx->surface), ctx->surface_opacity != 0)) return kCGLNoError;
+        if (glm_backend_present(ctx->gl, glm_surface_layer(ctx->surface), ctx->surface_opacity != 0, true)) return kCGLNoError;
     }
     glm_backend_flush(ctx->gl, false);
     return kCGLNoError;

@@ -48,7 +48,7 @@ void glm_ff_key_build(struct glm_context *ctx, int color_attachments, bool ff_ve
     memset(k, 0, sizeof *k);
     k->all_outputs = !ff_fragment;
     k->front_only = !ff_vertex && !s->vertex_program_two_side;
-    k->wide_line_expansion = ff_vertex && ctx->wide_line_expansion;
+    k->wide_line_expansion = ff_vertex && ctx->wide_line_expansion && !ctx->pixel_rect;
     k->color_attachments = (uint8_t)(color_attachments ? color_attachments : 1);
     if (ff_fragment && s->color_logic_op && s->logic_op != GL_COPY) k->logic_op = (uint8_t)(s->logic_op - GL_CLEAR + 1);
     if (s->lighting) {
@@ -56,6 +56,7 @@ void glm_ff_key_build(struct glm_context *ctx, int color_attachments, bool ff_ve
         k->two_side = s->light_model_two_side;
         k->local_viewer = s->light_model_local_viewer;
         k->separate_specular = s->light_model_separate_specular;
+        k->vertex_materials = ff_vertex && ctx->vertex_materials;
         for (int i = 0; i < GLM_MAX_LIGHTS; ++i) {
             const struct glm_light *l = &s->lights[i];
             if (!l->enabled) continue;
@@ -117,6 +118,26 @@ void glm_ff_key_build(struct glm_context *ctx, int color_attachments, bool ff_ve
         float color[4], clamp[4];
         if (__atomic_load_n(&glm_custom_borders, __ATOMIC_RELAXED) && !k->unit[u].shadow)
             k->unit[u].border = glm_unit_border(ctx, u, target, color, clamp);
+    }
+    if (ff_vertex) {
+        k->vertex_blend = s->vertex_blend ? (uint8_t)s->active_vertex_units : 0;
+        k->weight_sum_unity = k->vertex_blend && s->weight_sum_unity;
+        k->vertex_point_size = s->vertex_point_size;
+        k->point_round = !s->point_sprite;
+        k->point_attenuation = ctx->point_distance[0] != 1 || ctx->point_distance[1] != 0 || ctx->point_distance[2] != 0 ||
+                               ctx->point_size_min != 0 || ctx->point_size_max != 64 || ctx->point_fade_threshold != 1;
+    }
+    if (ctx->pixel_rect) {
+        /* No vertex stage of its own: only the fragment state counts. */
+        k->pixel_rect = ctx->pixel_rect;
+        k->lighting = k->two_side = k->local_viewer = k->separate_specular = k->color_material = 0;
+        k->color_material_face = k->light_enabled = k->light_positional = k->light_spot = k->vertex_materials = 0;
+        k->normalize = k->rescale_normal = k->fog_from_coord = 0;
+        k->vertex_blend = k->weight_sum_unity = k->vertex_point_size = k->point_attenuation = k->point_round = 0;
+        k->front_only = 1;
+        k->clip_planes = k->texgen_needs_eye = k->texgen_needs_normal = 0;
+        for (int u = 0; u < GLM_FF_UNITS; ++u) memset(k->unit[u].gen, 0, sizeof k->unit[u].gen);
+        k->all_outputs = ctx->pixel_rect >= 3;
     }
 }
 
@@ -258,6 +279,30 @@ size_t glm_ff_uniforms_pack(struct glm_context *ctx, const struct glm_ff_key *k,
     o[0] = s->point_size;
     o[1] = o[2] = o[3] = 0;
     o += 4;
+    if (k->point_attenuation) {
+        memcpy(o, ctx->point_distance, 3 * sizeof(float));
+        o[3] = ctx->point_fade_threshold;
+        o[4] = ctx->point_size_min;
+        o[5] = ctx->point_size_max;
+        o[6] = o[7] = 0;
+        o += 8;
+    }
+    if (k->vertex_blend) {
+        /* The projection, then each unit's modelview and normal matrix. */
+        memcpy(o, p, 16 * sizeof(float));
+        o += 16;
+        const float *units[4] = {mv};
+        for (int u = 1; u < 4; ++u) units[u] = s->vertex_units[u - 1].m[s->vertex_units[u - 1].depth];
+        for (int u = 0; u < 4; ++u, o += 16) memcpy(o, units[u], 16 * sizeof(float));
+        for (int u = 0; u < 4; ++u, o += 16) {
+            float inverse[16];
+            glm_mat4_invert(inverse, units[u]);
+            for (int r = 0; r < 4; ++r)
+                for (int c = 0; c < 4; ++c) o[c * 4 + r] = inverse[r * 4 + c];
+            o[3] = o[7] = o[11] = o[12] = o[13] = o[14] = 0;
+            o[15] = 1;
+        }
+    }
     return (size_t)(o - out) * sizeof(float);
 }
 
@@ -314,7 +359,10 @@ static void emit_uniforms(struct text *t, const struct glm_ff_key *k)
     if (l.texenv) emit(t, "  float4 texenv_color[%d];\n", l.texenv);
     if (l.fog) emit(t, "  float4 fog_color, fog_params;\n");
     if (l.alpha) emit(t, "  float4 alpha_ref;\n");
-    emit(t, "  float4 point_size;\n};\n");
+    emit(t, "  float4 point_size;\n");
+    if (k->point_attenuation) emit(t, "  float4 point_attenuation, point_clamp;\n");
+    if (k->vertex_blend) emit(t, "  float4x4 blend_projection, blend_modelview[4], blend_normal[4];\n");
+    emit(t, "};\n");
 }
 
 /* Vertex inputs: GLM_MAX_ATTRIBS float4 slots (see vertex.c). */
@@ -327,6 +375,9 @@ static void emit_vertex_shader(struct text *t, const struct glm_ff_key *k)
     emit(t, "  float4 position [[attribute(0)]];\n  float4 normal [[attribute(2)]];\n  float4 color [[attribute(3)]];\n"
             "  float4 secondary [[attribute(4)]];\n  float4 fog [[attribute(5)]];\n");
     for (int u = 0; u < GLM_FF_UNITS; ++u) emit(t, "  float4 tex%d [[attribute(%d)]];\n", u, GLM_ATTR_TEX0 + u);
+    if (k->vertex_materials) emit(t, "  float4 material_index [[attribute(%d)]];\n", GLM_ATTR_MATERIAL_INDEX);
+    if (k->vertex_blend) emit(t, "  float4 weight [[attribute(%d)]];\n", GLM_ATTR_WEIGHT);
+    if (k->vertex_point_size) emit(t, "  float4 point_size [[attribute(%d)]];\n", GLM_ATTR_POINT_SIZE);
     emit(t, "};\n");
     /* Varyings at the shared legacy locations, so programs can supply
        either stage. */
@@ -345,6 +396,32 @@ static void emit_vertex_shader(struct text *t, const struct glm_ff_key *k)
     for (int u = 0; u < GLM_FF_UNITS; ++u)
         if (k->unit[u].target) emit(t, "  float4 tex%d [[user(locn%d)]];\n", u, GLM_VARYING_TEXCOORD0 + u);
     emit(t, "};\n");
+    if (k->pixel_rect) {
+        /* A pixel rectangle: its corners from GLMPixels, the raster
+           position's values everywhere. The fixed-function fragment stage
+           reads the image per fragment (1, 2); for a program's fragment
+           stage each image pixel is an instance's quad with its colour
+           (3 image, 4 bitmap: unset bits are culled). */
+        emit(t, "struct GLMPixels { float4 rect, color; float2 size; float depth, fog; float4 tex[%d]; };\n", GLM_FF_UNITS);
+        bool instanced = k->pixel_rect >= 3;
+        emit(t, "vertex V2F ff_vertex(uint vid [[vertex_id]], constant GLMPixels &px [[buffer(%d)]]", GLM_SLOT_FF_PIXELS);
+        if (instanced) emit(t, ", uint iid [[instance_id]], texture2d<float> glm_pixels [[texture(%d)]]", GLM_TEXTURE_FF_PIXELS);
+        emit(t, ") {\n  V2F out;\n  float2 c = float2(vid & 1, vid >> 1);\n  float4 color = px.color;\n");
+        if (instanced) {
+            emit(t, "  uint2 extent = uint2(glm_pixels.get_width(), glm_pixels.get_height());\n"
+                    "  uint2 pixel = uint2(iid %% extent.x, iid / extent.x);\n  c = (float2(pixel) + c) / float2(extent);\n");
+            if (k->pixel_rect == 3) emit(t, "  color = glm_pixels.read(pixel);\n");
+        }
+        emit(t, "  float2 p = mix(px.rect.xy, px.rect.zw, c) / px.size * 2.0 - 1.0;\n"
+                "  out.position = float4(p.x, -p.y, px.depth, 1.0);\n");
+        if (k->pixel_rect == 4) emit(t, "  if (glm_pixels.read(pixel).r < 0.5) out.position = float4(2.0, 2.0, 2.0, 1.0);\n");
+        emit(t, "  out.front_color = out.back_color = color;\n  out.front_secondary = out.back_secondary = float4(0.0);\n"
+                "  out.fog_coord = px.fog;\n  out.point_size = 1.0;\n");
+        for (int u = 0; u < GLM_FF_UNITS; ++u)
+            if (k->unit[u].target || k->all_outputs) emit(t, "  out.tex%d = px.tex[%d];\n", u, u);
+        emit(t, "  return out;\n}\n");
+        return;
+    }
 
     if (k->lighting) {
         /* GL 2.1 equation 2.5, per light. */
@@ -375,11 +452,36 @@ static void emit_vertex_shader(struct text *t, const struct glm_ff_key *k)
         emit(t, "  return c;\n}\n");
     }
 
-    emit(t, "vertex V2F ff_vertex(VIn in [[stage_in]], constant FF &ff [[buffer(16)]]) {\n  V2F out;\n");
-    emit(t, "  float4 eye = ff.modelview * in.position;\n  float4 clip = ff.mvp * in.position;\n");
+    emit(t, "vertex V2F ff_vertex(VIn in [[stage_in]], constant FF &ff [[buffer(16)]]");
+    if (k->vertex_materials) emit(t, ", const device float4 *vertex_materials [[buffer(%d)]]", GLM_SLOT_FF_MATERIALS);
+    emit(t, ") {\n  V2F out;\n");
+    if (k->vertex_materials)
+        emit(t, "  const device float4 *vm = vertex_materials + uint(in.material_index.x) * %d;\n", GLM_VERTEX_MATERIAL_FLOAT4S);
     bool need_normal = k->lighting || k->texgen_needs_normal;
+    if (k->vertex_blend) {
+        /* ARB_vertex_blend as Apple blends: the active units' weights
+           scaled to sum to 1 (with GL_WEIGHT_SUM_UNITY_ARB the last is 1
+           minus the others first); positions and normals each a weighted
+           sum of the units' transforms. */
+        int n = k->vertex_blend;
+        emit(t, "  float w[4] = {in.weight.x, in.weight.y, in.weight.z, in.weight.w};\n");
+        if (k->weight_sum_unity) {
+            emit(t, "  w[%d] = 1.0", n - 1);
+            for (int i = 0; i < n - 1; ++i) emit(t, " - w[%d]", i);
+            emit(t, ";\n");
+        }
+        emit(t, "  float total = 0.0;\n  for (int i = 0; i < %d; ++i) total += w[i];\n", n);
+        emit(t, "  float4 eye = float4(0.0);\n  float3 blended_normal = float3(0.0);\n");
+        emit(t, "  for (int i = 0; i < %d; ++i) {\n    float wi = w[i] / total;\n"
+                "    eye += wi * (ff.blend_modelview[i] * in.position);\n", n);
+        if (need_normal) emit(t, "    blended_normal += wi * (ff.blend_normal[i] * float4(in.normal.xyz, 0.0)).xyz;\n");
+        emit(t, "  }\n  float4 clip = ff.blend_projection * eye;\n");
+    } else {
+        emit(t, "  float4 eye = ff.modelview * in.position;\n  float4 clip = ff.mvp * in.position;\n");
+    }
     if (need_normal) {
-        emit(t, "  float3 N = (ff.normal_matrix * float4(in.normal.xyz, 0.0)).xyz;\n");
+        if (k->vertex_blend) emit(t, "  float3 N = blended_normal;\n");
+        else emit(t, "  float3 N = (ff.normal_matrix * float4(in.normal.xyz, 0.0)).xyz;\n");
         if (k->rescale_normal && !k->normalize) emit(t, "  N *= ff.rescale.x;\n");
         if (k->normalize || k->lighting) emit(t, "  N = %s;\n", k->normalize ? "normalize(N)" : "N");
     }
@@ -391,7 +493,8 @@ static void emit_vertex_shader(struct text *t, const struct glm_ff_key *k)
         static const char *const props[] = {"emission", "ambient", "diffuse", "specular"};
         for (int f = 0; f < 2; ++f)
             for (int p = 0; p < 4; ++p) {
-                snprintf(buffers[f][p], sizeof buffers[f][p], "ff.material_%s[%d]", props[p], f);
+                if (k->vertex_materials) snprintf(buffers[f][p], sizeof buffers[f][p], "vm[%d]", f * 4 + p);
+                else snprintf(buffers[f][p], sizeof buffers[f][p], "ff.material_%s[%d]", props[p], f);
                 mat[f][p] = buffers[f][p];
             }
         if (k->color_material) {
@@ -409,8 +512,8 @@ static void emit_vertex_shader(struct text *t, const struct glm_ff_key *k)
         for (int f = 0; f < (k->two_side ? 2 : 1); ++f) {
             const char *side = f ? "back" : "front";
             emit(t, "  { float4 spec; float3 n = %s;\n", f ? "-N" : "N");
-            emit(t, "    float4 lit = light_color(ff, eye.xyz / eye.w, n, %s, %s, %s, ff.material_shininess.%c, spec);\n",
-                 mat[f][1], mat[f][2], mat[f][3], f ? 'y' : 'x');
+            emit(t, "    float4 lit = light_color(ff, eye.xyz / eye.w, n, %s, %s, %s, %s.%c, spec);\n",
+                 mat[f][1], mat[f][2], mat[f][3], k->vertex_materials ? "vm[8]" : "ff.material_shininess", f ? 'y' : 'x');
             emit(t, "    float4 base = %s + %s * ff.scene_ambient + lit;\n", mat[f][0], mat[f][1]);
             if (k->separate_specular) {
                 emit(t, "    out.%s_color = float4(saturate(base.rgb), %s.a);\n", side, mat[f][2]);
@@ -459,7 +562,19 @@ static void emit_vertex_shader(struct text *t, const struct glm_ff_key *k)
         if (k->clip_planes & (1 << i)) emit(t, "  out.clip[%d] = dot(ff.clip_planes[%d], eye);\n", i, i);
         else emit(t, "  out.clip[%d] = 1.0;\n", i);
     }
-    emit(t, "  out.point_size = %s;\n", k->wide_line_expansion ? "1.0" : "ff.point_size.x");
+    if (k->wide_line_expansion) {
+        emit(t, "  out.point_size = 1.0;\n");
+    } else {
+        /* The point size, or the vertex's (APPLE_vertex_point_size), through
+           the distance attenuation and clamps (GL 2.1 3.4). */
+        emit(t, "  float size = %s;\n", k->vertex_point_size ? "in.point_size.x" : "ff.point_size.x");
+        if (k->point_attenuation)
+            emit(t, "  { float d = length(eye.xyz);\n"
+                    "    size *= sqrt(1.0 / (ff.point_attenuation.x + ff.point_attenuation.y * d + ff.point_attenuation.z * d * d));\n"
+                    "    size = max(clamp(size, ff.point_clamp.x, ff.point_clamp.y), ff.point_attenuation.w); }\n");
+        /* Aliased points are squares of the size rounded (GL 2.1 3.4.1). */
+        emit(t, "  out.point_size = %s;\n", k->point_round ? "max(floor(size + 0.5), 1.0)" : "size");
+    }
     if (k->wide_line_expansion) emit(t, "  clip.xy += in.fog.yz * clip.w;\n");
     /* GL clip space to Metal: y flipped (framebuffers store GL rows
        top-down), z from [-w, w] to [0, w]. */
@@ -549,6 +664,9 @@ static void emit_fragment_shader(struct text *t, const struct glm_ff_key *k)
         }
     }
     if (border) emit(t, ",\n    constant GLMBorder &bd [[buffer(22)]]");
+    if (k->pixel_rect)
+        emit(t, ",\n    texture2d<float> glm_pixels [[texture(%d)]], constant GLMPixels &px [[buffer(%d)]]", GLM_TEXTURE_FF_PIXELS,
+             GLM_SLOT_FF_PIXELS);
     emit(t, ") {\n");
     /* Metal reports front-facing for the winding it was told is front;
        the backend sets that from GL's glFrontFace. */
@@ -557,6 +675,16 @@ static void emit_fragment_shader(struct text *t, const struct glm_ff_key *k)
     } else {
         emit(t, "  float4 primary = front ? in.front_color : in.back_color;\n");
         emit(t, "  float4 secondary = front ? in.front_secondary : in.back_secondary;\n");
+    }
+    if (k->pixel_rect) {
+        /* The image's colour, or for a bitmap the raster colour where its bit is set. */
+        /* The image pixel whose zoomed square holds the fragment's centre
+           (GL 2.1 3.6.4); framebuffer rows are GL rows. */
+        emit(t, "  float2 window = in.position.xy;\n"
+                "  float2 extent = float2(glm_pixels.get_width(), glm_pixels.get_height());\n"
+                "  uint2 pixel = uint2(clamp(floor((window - px.rect.xy) * extent / (px.rect.zw - px.rect.xy)), 0.0, extent - 1.0));\n");
+        if (k->pixel_rect == 2) emit(t, "  if (glm_pixels.read(pixel).r < 0.5) discard_fragment();\n");
+        else emit(t, "  primary = glm_pixels.read(pixel);\n");
     }
     emit(t, "  float4 prev = primary;\n");
     for (int u = 0; u < GLM_FF_UNITS; ++u) {

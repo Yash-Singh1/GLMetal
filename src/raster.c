@@ -31,12 +31,17 @@ static void raster_pos(float x, float y, float z, float w)
     s->raster_pos[1] = (float)s->viewport[1] + (ndc[1] + 1) * 0.5f * (float)s->viewport[3];
     s->raster_pos[2] = (float)(s->depth_range[0] + (ndc[2] + 1) * 0.5 * (s->depth_range[1] - s->depth_range[0]));
     s->raster_pos[3] = clip[3];
+    float eye[4];
+    for (int r = 0; r < 4; ++r) eye[r] = mv[r] * x + mv[4 + r] * y + mv[8 + r] * z + mv[12 + r] * w;
+    s->raster_distance = s->fog_coord_source == GL_FOG_COORD ? s->current[GLM_ATTR_FOG][0] : -eye[2] / eye[3];
     memcpy(s->raster_color, s->current[GLM_ATTR_COLOR], sizeof s->raster_color);
     /* Texture coordinates through each unit's texture matrix. */
     for (int u = 0; u < 8; ++u) {
         const float *t = s->texture[u].m[s->texture[u].depth], *c = s->current[GLM_ATTR_TEX0 + u];
         for (int r = 0; r < 4; ++r) s->raster_texcoord[u][r] = t[r] * c[0] + t[4 + r] * c[1] + t[8 + r] * c[2] + t[12 + r] * c[3];
     }
+    /* A valid raster position is a selection hit (GL 2.1 5.2). */
+    if (ctx->render_modes.mode == GL_SELECT) glm_render_mode_raster(ctx, 0);
 }
 
 #define RASTER_POS(suffix, T)                                                                              \
@@ -65,8 +70,10 @@ static void window_pos(float x, float y, float z)
     s->raster_pos[2] = (float)(s->depth_range[0] + depth * (s->depth_range[1] - s->depth_range[0]));
     s->raster_pos[3] = 1;
     s->raster_valid = true;
+    s->raster_distance = s->fog_coord_source == GL_FOG_COORD ? s->current[GLM_ATTR_FOG][0] : 0;
     memcpy(s->raster_color, s->current[GLM_ATTR_COLOR], sizeof s->raster_color);
     for (int u = 0; u < 8; ++u) memcpy(s->raster_texcoord[u], s->current[GLM_ATTR_TEX0 + u], sizeof s->raster_texcoord[u]);
+    if (ctx->render_modes.mode == GL_SELECT) glm_render_mode_raster(ctx, 0);
 }
 
 #define WINDOW_POS(suffix, T)                                                                         \
@@ -116,8 +123,8 @@ GLM_EXPORT void glPixelTransferf(GLenum pname, GLfloat value)
     case GL_INDEX_OFFSET: s->index_offset = (GLint)value; break;
     case GL_DEPTH_SCALE: s->depth_scale = value; break;
     case GL_DEPTH_BIAS: s->depth_bias = value; break;
-    case GL_POST_COLOR_MATRIX_RED_SCALE: break;
-    default: glm_error(ctx, GL_INVALID_ENUM);
+    default:
+        if (!glm_imaging_transfer(ctx, pname, value)) glm_error(ctx, GL_INVALID_ENUM);
     }
 }
 GLM_EXPORT void glPixelTransferi(GLenum pname, GLint value) { glPixelTransferf(pname, (GLfloat)value); }
@@ -193,24 +200,13 @@ GLM_EXPORT void glGetPixelMapusv(GLenum map, GLushort *values) { get_pixel_map(m
 
 /* ---- drawing at the raster position ----------------------------------------- */
 
-static bool image_to_rgba(struct glm_context *ctx, GLsizei width, GLsizei height, GLenum format, GLenum type,
-                          const void *pixels, float **out)
+/* Colour pixels after glPixelTransfer: the imaging operations, then
+   clamped as fragments are; false when the image is discarded. */
+static bool fragments(struct glm_context *ctx, float **rgba, GLsizei *width, GLsizei *height)
 {
-    struct glm_format_info info;
-    if (!glm_format_lookup(GL_RGBA32F, &info)) return false;
-    const void *source = pixels;
-    if (ctx->pixel_unpack_buffer) {
-        struct glm_buffer *buffer = glm_buffer_get(ctx, ctx->pixel_unpack_buffer);
-        const uint8_t *contents = buffer ? glm_backend_buffer_contents(ctx, buffer, false) : NULL;
-        if (!contents) return false;
-        source = contents + (uintptr_t)pixels;
-    }
-    size_t row_bytes, image_bytes;
-    float *rgba = glm_convert_upload(ctx, &info, width, height, 1, format, type, source, &row_bytes, &image_bytes);
-    if (!rgba) return false;
-    /* (glm_convert_upload applies glPixelTransfer; fragments are clamped.) */
-    for (size_t i = 0; i < (size_t)width * (size_t)height * 4; ++i) rgba[i] = rgba[i] < 0 ? 0 : rgba[i] > 1 ? 1 : rgba[i];
-    *out = rgba;
+    if (!glm_imaging_apply(ctx, 2, rgba, width, height) || !*width || !*height) return false;
+    for (size_t i = 0; i < (size_t)*width * (size_t)*height * 4; ++i)
+        (*rgba)[i] = (*rgba)[i] < 0 ? 0 : (*rgba)[i] > 1 ? 1 : (*rgba)[i];
     return true;
 }
 
@@ -230,6 +226,8 @@ GLM_EXPORT void glDrawPixels(GLsizei width, GLsizei height, GLenum format, GLenu
     /* Format and type as for glReadPixels (stencil indices included). */
     GLenum error = glm_read_error((GLenum)-1, false, false, format, type, ctx->profile == GLM_PROFILE_CORE, true);
     if (error) return glm_error(ctx, error);
+    /* Selection and feedback modes draw no pixels (feedback reports them). */
+    if (ctx->render_modes.mode != GL_RENDER) return glm_render_mode_raster(ctx, GL_DRAW_PIXEL_TOKEN);
     if (!ctx->state.raster_valid || !width || !height || ctx->conditional_discard) return;
     if (!pixels && !ctx->pixel_unpack_buffer) return;
     if (format == GL_DEPTH_COMPONENT || format == GL_STENCIL_INDEX || format == GL_DEPTH_STENCIL) {
@@ -253,9 +251,9 @@ GLM_EXPORT void glDrawPixels(GLsizei width, GLsizei height, GLenum format, GLenu
         free(stencil);
         return;
     }
-    float *rgba;
-    if (!image_to_rgba(ctx, width, height, format, type, pixels, &rgba)) return glm_error(ctx, GL_INVALID_ENUM);
-    draw_at_raster(ctx, rgba, width, height);
+    float *rgba = glm_unpack_rgba(ctx, width, height, 1, format, type, pixels, true);
+    if (!rgba) return glm_error(ctx, GL_INVALID_ENUM);
+    if (fragments(ctx, &rgba, &width, &height)) draw_at_raster(ctx, rgba, width, height);
     free(rgba);
 }
 
@@ -265,6 +263,7 @@ GLM_EXPORT void glCopyPixels(GLint x, GLint y, GLsizei width, GLsizei height, GL
     if (width < 0 || height < 0) return glm_error(ctx, GL_INVALID_VALUE);
     if (type != GL_COLOR && type != GL_DEPTH && type != GL_STENCIL && type != GL_DEPTH_STENCIL)
         return glm_error(ctx, GL_INVALID_ENUM);
+    if (ctx->render_modes.mode != GL_RENDER) return glm_render_mode_raster(ctx, GL_COPY_PIXEL_TOKEN);
     if (!ctx->state.raster_valid || !width || !height || ctx->conditional_discard) return;
     if (type != GL_COLOR) {
         /* Read with the default pack state, then draw as glDrawPixels does. */
@@ -294,20 +293,31 @@ GLM_EXPORT void glCopyPixels(GLint x, GLint y, GLsizei width, GLsizei height, GL
         free(stencil);
         return;
     }
-    float *rgba = calloc((size_t)width * (size_t)height, 16);
+    /* Read, then through glPixelTransfer and the imaging operations once. */
+    float *rgba = glm_read_rgba(ctx, x, y, width, height);
     if (!rgba) return glm_error(ctx, GL_OUT_OF_MEMORY);
-    /* Read as floats with the default pack state, then draw. */
+    glm_transfer_rgba(ctx, rgba, (size_t)width * (size_t)height);
+    if (fragments(ctx, &rgba, &width, &height)) draw_at_raster(ctx, rgba, width, height);
+    free(rgba);
+}
+
+float *glm_read_rgba(struct glm_context *ctx, GLint x, GLint y, GLsizei width, GLsizei height)
+{
+    float *rgba = calloc((size_t)width * (size_t)height + 1, 16);
+    if (!rgba) return NULL;
+    /* Read as floats with the default pack state. */
     struct glm_state *s = &ctx->state;
     GLint row_bytes = s->pack_row_bytes;
     s->pack_row_bytes = 0;
     GLint alignment = s->pack_alignment, row_length = s->pack_row_length, skip_rows = s->pack_skip_rows,
           skip_pixels = s->pack_skip_pixels;
     GLuint pack_buffer = ctx->pixel_pack_buffer;
-    bool pack_swap = s->pack_swap_bytes;
+    bool pack_swap = s->pack_swap_bytes, read_transfer = ctx->read_transfer;
     s->pack_alignment = 4;
     s->pack_swap_bytes = false;
     s->pack_row_length = s->pack_skip_rows = s->pack_skip_pixels = 0;
     ctx->pixel_pack_buffer = 0;
+    ctx->read_transfer = false;
     glm_backend_read_pixels(ctx, x, y, width, height, GL_RGBA, GL_FLOAT, rgba);
     s->pack_alignment = alignment;
     s->pack_row_length = row_length;
@@ -316,8 +326,8 @@ GLM_EXPORT void glCopyPixels(GLint x, GLint y, GLsizei width, GLsizei height, GL
     s->pack_skip_pixels = skip_pixels;
     s->pack_swap_bytes = pack_swap;
     ctx->pixel_pack_buffer = pack_buffer;
-    draw_at_raster(ctx, rgba, width, height);
-    free(rgba);
+    ctx->read_transfer = read_transfer;
+    return rgba;
 }
 
 /* One bit per pixel, most significant first unless GL_UNPACK_LSB_FIRST,
@@ -330,6 +340,12 @@ GLM_EXPORT void glBitmap(GLsizei width, GLsizei height, GLfloat xorig, GLfloat y
     if (ctx->immediate) return glm_error(ctx, GL_INVALID_OPERATION);
     struct glm_state *s = &ctx->state;
     if (!s->raster_valid) return;
+    if (ctx->render_modes.mode != GL_RENDER) {
+        glm_render_mode_raster(ctx, GL_BITMAP_TOKEN);
+        s->raster_pos[0] += xmove;
+        s->raster_pos[1] += ymove;
+        return;
+    }
     const uint8_t *bits = bitmap;
     if (ctx->pixel_unpack_buffer) {
         struct glm_buffer *buffer = glm_buffer_get(ctx, ctx->pixel_unpack_buffer);

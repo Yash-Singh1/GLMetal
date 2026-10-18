@@ -259,12 +259,23 @@ struct glm_backend_context {
     id<MTLLibrary> utility_library;
     id<MTLFunction> clear_vertex, clear_fragment;
     id<MTLFunction> clear_typed[3][GLM_MAX_DRAW_BUFFERS]; /* glClearBuffer: float, int, uint per draw buffer */
-    int clear_only;          /* >= 0: clear pipelines write only this draw buffer */
+    int clear_only;          /* >= 0: clear pipelines write only this colour attachment */
+    /* The draw buffer each colour attachment of the pass serves: framebuffer
+       0 can give one draw buffer several images (GL_FRONT_AND_BACK). */
+    int8_t attachment_source[GLM_MAX_DRAW_BUFFERS];
     id<MTLFunction> present_vertex, present_fragment;
     id<MTLRenderPipelineState> present_pipeline;
     MTLPixelFormat present_format;
-    /* Default framebuffer storage. */
-    id<MTLTexture> default_color, default_depth;
+    /* Default framebuffer storage: the back colour image (the only one of
+       a single-buffered context), the front image of double-buffered ones,
+       and the pixel format's aux buffers. */
+    id<MTLTexture> default_color, default_depth, default_front;
+    bool front_drawn;        /* the displayed image was drawn since the last present */
+    id<MTLTexture> default_aux[GLM_MAX_AUX_BUFFERS];
+    id<MTLTexture> default_aux_depth[GLM_MAX_AUX_BUFFERS]; /* kCGLPFAAuxDepthStencil */
+    id<MTLTexture> default_accum;   /* RGBA32Float accumulation buffer */
+    id<MTLComputePipelineState> accum_kernel;
+    NSMutableDictionary<NSNumber *, id<MTLRenderPipelineState>> *accum_return; /* by attachment count and masks */
     uint64_t submitted_serial;
     volatile uint64_t completed_serial;
     /* Occlusion queries: a visibility buffer per command buffer, attached
@@ -335,6 +346,14 @@ struct glm_backend_context {
     uint32_t border_mask;    /* sampler slots whose border is emulated (fragment_override) */
     __unsafe_unretained id<MTLFunction> alpha_override; /* fragment_override when it is the alpha test variant */
     float alpha_ref;
+    bool stipple_active;      /* this pipeline's fragment function has the polygon stipple test */
+    bool line_stipple_active; /* ... the line stipple test, reading line_stipple */
+    const float *line_stipple; /* this draw's line stipple table (vertex.c), NULL for none */
+    uint32_t line_stipple_count;
+    bool vertex_materials; /* the last draw had per-vertex materials (ffgen.c) */
+    /* glm_backend_clip_positions: the vertex stage also stores clip
+       positions here, without rasterizing. */
+    __unsafe_unretained id<MTLBuffer> position_capture;
     bool depth_clamp_active;
     float border_data[64][4]; /* GLMBorder: colours by slot, then GL_CLAMP axes */
     uint8_t topology;        /* MTLPrimitiveTopologyClass for pipelines being built (layered output), 0: unspecified */
@@ -601,7 +620,10 @@ void glm_backend_context_destroy(struct glm_backend_context *b)
     for (int i = 0; i < 8; ++i) b->linear_views[i] = nil;
     for (int i = 0; i < GLM_MAX_DRAW_BUFFERS; ++i) b->color[i] = nil;
     b->depth = b->stencil = nil;
-    b->default_color = b->default_depth = nil;
+    b->default_color = b->default_depth = b->default_front = b->default_accum = nil;
+    for (int i = 0; i < GLM_MAX_AUX_BUFFERS; ++i) b->default_aux[i] = b->default_aux_depth[i] = nil;
+    b->accum_kernel = nil;
+    b->accum_return = nil;
     b->utility_library = nil;
     b->clear_vertex = b->clear_fragment = b->clear_vertex_layered = nil;
     for (int kind = 0; kind < 3; ++kind)
@@ -973,6 +995,45 @@ static id<MTLTexture> render_view(struct glm_context *ctx, id<MTLTexture> t)
     return ctx->state.framebuffer_srgb ? t : linear_view(ctx->backend, t);
 }
 
+/* The images window-system colour buffer `buffer` of framebuffer 0 names
+   (GL 2.1 4.2.1, table 4.4): GL_FRONT_AND_BACK and GL_LEFT name the front
+   and back images, GL_NONE and the right buffers none. A single-buffered
+   context's only image is its front buffer. */
+static int default_buffer_images(struct glm_backend_context *b, GLenum buffer, __unsafe_unretained id<MTLTexture> out[2])
+{
+    if (buffer >= GL_AUX0 && buffer < GL_AUX0 + GLM_MAX_AUX_BUFFERS) {
+        out[0] = b->default_aux[buffer - GL_AUX0];
+        return out[0] ? 1 : 0;
+    }
+    __unsafe_unretained id<MTLTexture> front = b->default_front ? b->default_front : b->default_color;
+    switch (buffer) {
+    case GL_BACK: case GL_BACK_LEFT: out[0] = b->default_color; return out[0] ? 1 : 0;
+    case GL_FRONT: case GL_FRONT_LEFT: out[0] = front; return out[0] ? 1 : 0;
+    case GL_FRONT_AND_BACK: case GL_LEFT:
+        out[0] = front;
+        out[1] = b->default_color;
+        return !out[0] ? 0 : out[1] != out[0] ? 2 : 1;
+    default: return 0;
+    }
+}
+
+/* The image glReadBuffer `buffer` names on framebuffer 0. */
+static id<MTLTexture> default_buffer_texture(struct glm_backend_context *b, GLenum buffer)
+{
+    __unsafe_unretained id<MTLTexture> images[2] = {nil, nil};
+    if (buffer == GL_LEFT) buffer = GL_FRONT_LEFT;
+    return default_buffer_images(b, buffer, images) ? images[0] : nil;
+}
+
+/* The depth/stencil image framebuffer 0 uses with colour buffer `buffer`:
+   an aux buffer's own with kCGLPFAAuxDepthStencil, else the shared one. */
+static id<MTLTexture> default_depth_texture(struct glm_backend_context *b, GLenum buffer)
+{
+    if (buffer >= GL_AUX0 && buffer < GL_AUX0 + GLM_MAX_AUX_BUFFERS && b->default_aux_depth[buffer - GL_AUX0])
+        return b->default_aux_depth[buffer - GL_AUX0];
+    return b->default_depth;
+}
+
 /* Opens a render pass on the current draw framebuffer if needed. Returns
    false when there is nothing to draw into. */
 static bool ensure_encoder(struct glm_context *ctx)
@@ -989,13 +1050,32 @@ static bool ensure_encoder(struct glm_context *ctx)
     b->width = b->height = 0;
     b->samples = 1;
     b->layers = 0;
-    for (int i = 0; i < GLM_MAX_DRAW_BUFFERS; ++i) b->color[i] = nil;
+    for (int i = 0; i < GLM_MAX_DRAW_BUFFERS; ++i) {
+        b->color[i] = nil;
+        b->attachment_source[i] = (int8_t)i;
+    }
     b->depth = b->stencil = nil;
     if (ctx->draw_framebuffer == 0) {
         if (!ctx->presents) glm_error(ctx, GL_INVALID_FRAMEBUFFER_OPERATION);
         if (!b->default_color) return false;
-        b->color[0] = b->default_color;
-        b->depth = b->stencil = b->default_depth;
+        /* Each draw buffer's images become attachments in order. A draw
+           buffer naming two images (GL_FRONT_AND_BACK) acts as Apple's: like
+           the list GL_FRONT, GL_BACK, so gl_FragData[1] reaches the back
+           image (gl_FragColor and fixed function broadcast anyway). */
+        int n = 0;
+        for (int i = 0; i < GLM_MAX_DRAW_BUFFERS && n < GLM_MAX_DRAW_BUFFERS; ++i) {
+            __unsafe_unretained id<MTLTexture> images[2] = {nil, nil};
+            int count = default_buffer_images(b, fb->draw_buffers[i], images);
+            for (int k = 0; k < count && n < GLM_MAX_DRAW_BUFFERS; ++k) {
+                bool attached = false;
+                for (int j = 0; j < n; ++j) attached |= b->color[j] == images[k];
+                if (attached) continue;
+                b->attachment_source[n] = (int8_t)(i + k);
+                b->color[n++] = images[k];
+                if (images[k] == (b->default_front ? b->default_front : b->default_color)) b->front_drawn = true;
+            }
+        }
+        b->depth = b->stencil = default_depth_texture(b, fb->draw_buffers[0]);
     } else {
         /* Incomplete framebuffers are not drawn to (and some, such as
            compressed attachments, Metal cannot render to at all). Checked
@@ -1240,24 +1320,25 @@ static id<MTLRenderPipelineState> pipeline_for(struct glm_backend_context *b, id
         if (!b->color[i]) continue;
         key.color_formats[i] = (uint32_t)b->color[i].pixelFormat;
         bool write = for_clear ? (clear_mask & GL_COLOR_BUFFER_BIT) != 0 && (b->clear_only < 0 || b->clear_only == i) : true;
+        int d = b->attachment_source[i]; /* masks and blending are per draw buffer */
         uint8_t mask = 0;
         if (write) {
-            if (s->color_mask[i][0]) mask |= MTLColorWriteMaskRed;
-            if (s->color_mask[i][1]) mask |= MTLColorWriteMaskGreen;
-            if (s->color_mask[i][2]) mask |= MTLColorWriteMaskBlue;
-            if (s->color_mask[i][3]) mask |= MTLColorWriteMaskAlpha;
+            if (s->color_mask[d][0]) mask |= MTLColorWriteMaskRed;
+            if (s->color_mask[d][1]) mask |= MTLColorWriteMaskGreen;
+            if (s->color_mask[d][2]) mask |= MTLColorWriteMaskBlue;
+            if (s->color_mask[d][3]) mask |= MTLColorWriteMaskAlpha;
         }
         key.blend[i].write_mask = mask;
         /* A logic op replaces blending (GL 2.1 4.1.10). */
         bool logic_op = s->color_logic_op && s->logic_op != GL_COPY;
-        if (!for_clear && s->blend[i].enabled && !logic_op) {
+        if (!for_clear && s->blend[d].enabled && !logic_op) {
             key.blend[i].enabled = 1;
-            key.blend[i].src_rgb = (uint16_t)s->blend[i].src_rgb;
-            key.blend[i].dst_rgb = (uint16_t)s->blend[i].dst_rgb;
-            key.blend[i].src_alpha = (uint16_t)s->blend[i].src_alpha;
-            key.blend[i].dst_alpha = (uint16_t)s->blend[i].dst_alpha;
-            key.blend[i].eq_rgb = (uint16_t)s->blend[i].eq_rgb;
-            key.blend[i].eq_alpha = (uint16_t)s->blend[i].eq_alpha;
+            key.blend[i].src_rgb = (uint16_t)s->blend[d].src_rgb;
+            key.blend[i].dst_rgb = (uint16_t)s->blend[d].dst_rgb;
+            key.blend[i].src_alpha = (uint16_t)s->blend[d].src_alpha;
+            key.blend[i].dst_alpha = (uint16_t)s->blend[d].dst_alpha;
+            key.blend[i].eq_rgb = (uint16_t)s->blend[d].eq_rgb;
+            key.blend[i].eq_alpha = (uint16_t)s->blend[d].eq_alpha;
         }
     }
     key.depth_format = b->depth ? (uint32_t)b->depth.pixelFormat : 0;
@@ -1513,6 +1594,25 @@ static NSString *const utility_source =
      "  fragment name##_out name(constant ClearValues &v [[buffer(0)]]) { name##_out o; o.c = as_type<T>(v.color); return o; }\n"
      "#define CLEARS(i) CLEAR(float4, clear_f##i, i) CLEAR(int4, clear_i##i, i) CLEAR(uint4, clear_u##i, i)\n"
      "CLEARS(0) CLEARS(1) CLEARS(2) CLEARS(3) CLEARS(4) CLEARS(5) CLEARS(6) CLEARS(7)\n"
+     /* The accumulation buffer: op 0 ACCUM, 1 LOAD, 2 MULT, 3 ADD, 4 clear to
+        `value`, over the window rectangle rect (x0, y0, x1, y1). RETURN
+        draws the scaled, clamped values (accum_return_fragment). */
+     "struct AccumArgs { uint4 rect; float4 value; uint op; };\n"
+     "kernel void accum_kernel(texture2d<float, access::read_write> acc [[texture(0)]],\n"
+     "                         texture2d<float> color [[texture(1)]], constant AccumArgs &a [[buffer(0)]],\n"
+     "                         uint2 gid [[thread_position_in_grid]]) {\n"
+     "  uint2 p = gid + a.rect.xy; if (p.x >= a.rect.z || p.y >= a.rect.w) return;\n"
+     "  float4 v = acc.read(p);\n"
+     "  if (a.op == 0) v += color.read(p) * a.value.x;\n"
+     "  else if (a.op == 1) v = color.read(p) * a.value.x;\n"
+     "  else if (a.op == 2) v *= a.value.x;\n"
+     "  else if (a.op == 3) v += a.value.x;\n"
+     "  else v = a.value;\n"
+     "  acc.write(v, p); }\n"
+     "fragment ImageColor accum_return_fragment(ClearOut in [[stage_in]], texture2d<float> acc [[texture(0)]],\n"
+     "                                          constant ClearValues &v [[buffer(0)]]) {\n"
+     "  float4 c = saturate(acc.read(uint2(in.position.xy)) * v.color.x);\n"
+     "  ImageColor o; o.c0 = o.c1 = o.c2 = o.c3 = o.c4 = o.c5 = o.c6 = o.c7 = c; return o; }\n"
      /* Presentation: the back buffer holds GL rows bottom-up, the drawable
         top-down. */
      "struct PresentOut { float4 position [[position]]; float2 uv; };\n"
@@ -1569,13 +1669,21 @@ void glm_backend_clear(struct glm_context *ctx, GLbitfield mask)
 
 /* glClearBuffer{f,i,ui}v on a color buffer: `kind` 0 float, 1 int, 2
    unsigned; `values` four 32-bit values. */
+static void clear_attachment(struct glm_context *ctx, int drawbuffer, int kind, const void *values);
+
 void glm_backend_clear_buffer(struct glm_context *ctx, int drawbuffer, int kind, const void *values)
 {
     struct glm_backend_context *b = ctx->backend;
+    if (!ensure_encoder(ctx) || scissor_empty(b, &ctx->state) || drawbuffer < 0 || drawbuffer >= GLM_MAX_DRAW_BUFFERS) return;
+    /* Every image of the draw buffer (two for GL_FRONT_AND_BACK). */
+    for (int i = 0; i < GLM_MAX_DRAW_BUFFERS; ++i)
+        if (b->color[i] && b->attachment_source[i] == drawbuffer) clear_attachment(ctx, i, kind, values);
+}
+
+static void clear_attachment(struct glm_context *ctx, int drawbuffer, int kind, const void *values)
+{
+    struct glm_backend_context *b = ctx->backend;
     const struct glm_state *s = &ctx->state;
-    if (!ensure_encoder(ctx) || scissor_empty(b, s) || drawbuffer < 0 || drawbuffer >= GLM_MAX_DRAW_BUFFERS ||
-        !b->color[drawbuffer])
-        return;
     if (!b->clear_vertex) {
         b->clear_vertex = utility_function(b, @"clear_vertex");
         b->clear_fragment = utility_function(b, @"clear_fragment");
@@ -1611,12 +1719,72 @@ void glm_backend_clear_buffer(struct glm_context *ctx, int drawbuffer, int kind,
    bottom row first) as fragments over the window rectangle x0,y0 - x1,y1
    at window depth `depth`, through the current per-fragment state. With
    `bitmap`, the red channel is a mask and the fragments take `color`. */
+static void *prepare_draw_raw(struct glm_context *ctx, const struct draw_stages *st, uint32_t metal_primitive,
+                              uint32_t primitive_count, uint32_t instances, MTLVertexDescriptor *layout,
+                              uint32_t layout_id, bool capture);
+
+/* A pixel rectangle's fragments through the fragment stage (GL 2.1 3.6.4,
+   3.7): the fixed-function one textures them with the raster texture
+   coordinates, fogs, alpha tests; a GLSL or ARB fragment program runs on
+   them with the image's colours. Then every per-fragment operation. */
+static bool draw_image_ff(struct glm_context *ctx, id<MTLTexture> image, float x0, float y0, float x1, float y1,
+                          float depth, bool bitmap, const float *color)
+{
+    struct glm_backend_context *b = ctx->backend;
+    const struct glm_state *s = &ctx->state;
+    struct draw_stages st;
+    memset(&st, 0, sizeof st);
+    st.ff_vertex = true;
+    struct glm_program *program = glm_current_program(ctx);
+    if (program && program->functions[GLM_STAGE_FRAGMENT]) {
+        st.program = st.fragment_program = program;
+    } else if (!program && (st.arb_fragment = glm_arb_current(ctx, 1))) {
+        if (!glm_arb_ready(ctx, st.arb_fragment)) return true;
+        st.fragment_program = &st.arb_fragment->linked;
+    }
+    st.ff_fragment = !st.fragment_program;
+    b->vertex_override = b->fragment_override = nil;
+    b->line_stipple = NULL;
+    b->fast.valid = false;
+    ctx->pixel_rect = (uint8_t)((bitmap ? 2 : 1) + (st.fragment_program ? 2 : 0));
+    id<MTLRenderCommandEncoder> e = prepare_draw(ctx, &st, MTLPrimitiveTypeTriangleStrip, 0, 1, nil, 0, false);
+    ctx->pixel_rect = 0;
+    b->fast.valid = false;
+    if (!e) return true; /* nothing to draw (culled by state, scissor) */
+    /* Rectangles are neither culled, outlined nor offset. */
+    enc_raster(b, MTLWindingClockwise, MTLCullModeNone, MTLTriangleFillModeFill, 0, 0, MTLDepthClipModeClamp,
+               (uint32_t)s->stencil[0].ref & 0xff, (uint32_t)glm_stencil_back(s)->ref & 0xff, s->blend_color);
+    struct glm_ff_pixels px;
+    memset(&px, 0, sizeof px);
+    px.rect[0] = x0;
+    px.rect[1] = y0;
+    px.rect[2] = x1;
+    px.rect[3] = y1;
+    memcpy(px.color, color ? color : s->raster_color, sizeof px.color);
+    px.size[0] = (float)b->width;
+    px.size[1] = (float)b->height;
+    px.depth = depth;
+    px.fog = s->raster_distance;
+    memcpy(px.texcoord, s->raster_texcoord, sizeof px.texcoord);
+    enc_bytes(b, STAGE_BOTH, &px, sizeof px, GLM_SLOT_FF_PIXELS);
+    if (st.fragment_program) {
+        glm_encoder_texture(ctx, STAGE_VERTEX, (__bridge void *)image, NULL, GLM_TEXTURE_FF_PIXELS);
+        [e drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4
+            instanceCount:image.width * image.height];
+    } else {
+        glm_encoder_texture(ctx, STAGE_FRAGMENT, (__bridge void *)image, NULL, GLM_TEXTURE_FF_PIXELS);
+        [e drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+    }
+    return true;
+}
+
 void glm_backend_draw_image(struct glm_context *ctx, const float *rgba, GLsizei width, GLsizei height, float x0, float y0,
                             float x1, float y1, float depth, bool bitmap, const float *color)
 {
     struct glm_backend_context *b = ctx->backend;
     const struct glm_state *s = &ctx->state;
     if (width <= 0 || height <= 0 || !ensure_encoder(ctx) || scissor_empty(b, s)) return;
+    bool ff = ctx->profile == GLM_PROFILE_LEGACY;
     if (!b->image_vertex) {
         b->image_vertex = utility_function(b, @"image_vertex");
         b->image_fragment = utility_function(b, @"image_fragment");
@@ -1631,6 +1799,7 @@ void glm_backend_draw_image(struct glm_context *ctx, const float *rgba, GLsizei 
     id<MTLTexture> image = [device newTextureWithDescriptor:d];
     [image replaceRegion:MTLRegionMake2D(0, 0, (NSUInteger)width, (NSUInteger)height) mipmapLevel:0 withBytes:rgba
              bytesPerRow:(NSUInteger)width * 16];
+    if (ff && draw_image_ff(ctx, image, x0, y0, x1, y1, depth, bitmap, color)) return;
     id<MTLRenderPipelineState> pipeline =
         pipeline_for(b, b->image_vertex, bitmap ? b->bitmap_fragment : b->image_fragment, s, false, 0, nil, 0, false);
     if (!pipeline) return;
@@ -1713,7 +1882,7 @@ void glm_backend_upload_encoded(struct glm_context *ctx)
 /* GLMETAL_DUMP_PRESENT=path[:interval]: writes the presented back buffer of
    every interval-th frame (default 300) to path.<frame>.ppm, top row first:
    what the window shows, independent of the application's own readbacks. */
-static void dump_presented(struct glm_backend_context *b, id<MTLCommandBuffer> commands)
+static void dump_presented(struct glm_backend_context *b, id<MTLCommandBuffer> commands, id<MTLTexture> shown)
 {
     static char path[1024];
     static long interval = -1;
@@ -1729,10 +1898,10 @@ static void dump_presented(struct glm_backend_context *b, id<MTLCommandBuffer> c
         }
     }
     if (!interval || glm_trace_frames % (unsigned long)interval) return;
-    NSUInteger width = b->default_color.width, height = b->default_color.height, row = width * 4;
+    NSUInteger width = shown.width, height = shown.height, row = width * 4;
     id<MTLBuffer> staging = glm_new_shared_buffer(row * height, NULL);
     id<MTLBlitCommandEncoder> blit = [commands blitCommandEncoder];
-    [blit copyFromTexture:b->default_color sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0, 0, 0)
+    [blit copyFromTexture:shown sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0, 0, 0)
                sourceSize:MTLSizeMake(width, height, 1) toBuffer:staging destinationOffset:0
       destinationBytesPerRow:row destinationBytesPerImage:row * height];
     [blit endEncoding];
@@ -1753,12 +1922,25 @@ static void dump_presented(struct glm_backend_context *b, id<MTLCommandBuffer> c
 
 /* Copies the back buffer into the layer's next drawable and presents it
    with the frame's command buffer. Returns false without a drawable. */
-bool glm_backend_present(struct glm_context *ctx, void *layer_pointer, bool opaque)
+bool glm_backend_front_drawn(struct glm_context *ctx) { return ctx->backend->front_drawn; }
+
+bool glm_backend_present(struct glm_context *ctx, void *layer_pointer, bool opaque, bool swap)
 {
     struct glm_backend_context *b = ctx->backend;
     CAMetalLayer *layer = (__bridge CAMetalLayer *)layer_pointer;
     if (!b->default_color || !layer) return false;
     end_encoder(b);
+    /* The window shows the front image. A swap exchanges the images, as
+       Apple's does: the back buffer becomes the front one and the old front
+       contents become the back buffer's. */
+    id<MTLTexture> shown = b->default_front && !swap ? b->default_front : b->default_color;
+    if (swap && b->default_front) {
+        id<MTLTexture> front = b->default_front;
+        b->default_front = b->default_color;
+        b->default_color = front;
+        b->framebuffer_dirty = true;
+    }
+    b->front_drawn = false;
     id<CAMetalDrawable> drawable = [layer nextDrawable];
     if (!drawable) {
         glm_backend_flush(ctx, false);
@@ -1782,7 +1964,7 @@ bool glm_backend_present(struct glm_context *ctx, void *layer_pointer, bool opaq
             return false;
         }
     }
-    bool scaled = drawable.texture.width != b->default_color.width || drawable.texture.height != b->default_color.height;
+    bool scaled = drawable.texture.width != shown.width || drawable.texture.height != shown.height;
     MTLSamplerDescriptor *sd = [MTLSamplerDescriptor new];
     sd.minFilter = sd.magFilter = scaled ? MTLSamplerMinMagFilterLinear : MTLSamplerMinMagFilterNearest;
     id<MTLSamplerState> sampler = [device newSamplerStateWithDescriptor:sd];
@@ -1793,12 +1975,12 @@ bool glm_backend_present(struct glm_context *ctx, void *layer_pointer, bool opaq
     id<MTLCommandBuffer> commands = command_buffer(b);
     id<MTLRenderCommandEncoder> e = [commands renderCommandEncoderWithDescriptor:pass];
     [e setRenderPipelineState:b->present_pipeline];
-    [e setFragmentTexture:b->default_color atIndex:0];
+    [e setFragmentTexture:shown atIndex:0];
     [e setFragmentSamplerState:sampler atIndex:0];
     [e drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
     [e endEncoding];
     (void)opaque;
-    dump_presented(b, commands);
+    dump_presented(b, commands, shown);
     ++glm_trace_frames;
     if (b->inline_bytes_stats && ++b->reported_frames == 60) {
         fprintf(stderr, "glmetal: render passes per frame=%.2f\n", (b->pass_id - b->reported_pass_id) / 60.0);
@@ -2112,6 +2294,91 @@ static id<MTLFunction> depth_clamp_function(struct glm_backend_context *b, id<MT
     }
     *active = true;
     return entry->function;
+}
+
+static char *output_map_msl(const char *msl, uint32_t map);
+
+/* `function` with its MSL rewritten by `patch` (shader_depth.cpp), compiled
+   once per source and patch. Returns `function` when the patch does not
+   apply; `active` reports whether it did. */
+static id<MTLFunction> patched_function(id<MTLFunction> function, char *(*patch)(const char *, const char *), bool *active)
+{
+    static NSMutableDictionary<NSArray *, id> *variants;
+    pthread_mutex_lock(&function_cache_lock);
+    NSString *source = [function_sources objectForKey:function];
+    if (!source) {
+        pthread_mutex_unlock(&function_cache_lock);
+        return function;
+    }
+    NSArray *key = @[source, function.name, @((uintptr_t)patch)];
+    if (!variants) variants = [NSMutableDictionary dictionary];
+    id cached = variants[key];
+    pthread_mutex_unlock(&function_cache_lock);
+    if (!cached) {
+        char *patched = patch(source.UTF8String, function.name.UTF8String);
+        cached = patched ? function_entry(@(patched), false) : (id)[NSNull null];
+        free(patched);
+        pthread_mutex_lock(&function_cache_lock);
+        variants[key] = cached;
+        pthread_mutex_unlock(&function_cache_lock);
+    }
+    if (cached == [NSNull null]) return function;
+    GLMCompiledFunction *entry = cached;
+    dispatch_group_wait(entry->group, DISPATCH_TIME_FOREVER);
+    if (!entry->function) {
+        glm_log("shader variant failed: %s", entry->error.localizedDescription.UTF8String);
+        return function;
+    }
+    if (active) *active = true;
+    return entry->function;
+}
+
+/* A program's fragment function routed onto this pass's attachments
+   (output_map_msl); `map` 0 means one output per attachment, as compiled. */
+static id<MTLFunction> output_map_function(id<MTLFunction> function, uint32_t map)
+{
+    static NSMutableDictionary<NSArray *, id> *variants;
+    pthread_mutex_lock(&function_cache_lock);
+    NSString *source = [function_sources objectForKey:function];
+    if (!source) {
+        pthread_mutex_unlock(&function_cache_lock);
+        return function;
+    }
+    NSArray *key = @[source, function.name, @(map)];
+    if (!variants) variants = [NSMutableDictionary dictionary];
+    id cached = variants[key];
+    pthread_mutex_unlock(&function_cache_lock);
+    if (!cached) {
+        char *patched = output_map_msl(source.UTF8String, map);
+        cached = patched ? function_entry(@(patched), false) : (id)[NSNull null];
+        free(patched);
+        pthread_mutex_lock(&function_cache_lock);
+        variants[key] = cached;
+        pthread_mutex_unlock(&function_cache_lock);
+    }
+    if (cached == [NSNull null]) return function;
+    GLMCompiledFunction *entry = cached;
+    dispatch_group_wait(entry->group, DISPATCH_TIME_FOREVER);
+    if (!entry->function) {
+        glm_log("fragment output routing failed: %s", entry->error.localizedDescription.UTF8String);
+        return function;
+    }
+    return entry->function;
+}
+
+/* The output routing a program's fragment stage needs on this pass (see
+   output_map_msl), 0 when attachment j takes output j. */
+static uint32_t pass_output_map(struct glm_backend_context *b, const struct glm_program *p)
+{
+    uint32_t map = 0;
+    bool identity = true;
+    for (int j = 0; j < GLM_MAX_DRAW_BUFFERS; ++j) {
+        if (!b->color[j]) continue;
+        uint32_t source = p->result.writes_frag_color ? 0 : (uint32_t)b->attachment_source[j];
+        if (source != (uint32_t)j) identity = false;
+        map |= (source + 1) << (4 * j);
+    }
+    return identity ? 0 : map;
 }
 
 /* Clip enables affect rasterization, not captured shader output values. */
@@ -2490,6 +2757,7 @@ static void bind_arb_parameters(struct glm_context *ctx, struct glm_arb_program 
 static void bind_program_uniforms(struct glm_context *ctx, struct glm_program *p, unsigned stages)
 {
     struct glm_backend_context *b = ctx->backend;
+    if (p->bindable_count) glm_bindable_update(ctx, p);
     if (p->result.global_size > 0) {
         /* Uploaded again only when glUniform* changed it, or for a new
            command buffer (transient memory lives one command buffer). */
@@ -2777,7 +3045,7 @@ static void *prepare_draw_once(struct glm_context *ctx, const struct draw_stages
     const struct glm_state *s = &ctx->state;
     /* Transform feedback still runs the vertex stage with the rasterizer
        discarding everything. */
-    bool discard = s->rasterizer_discard || capture;
+    bool discard = s->rasterizer_discard || capture || b->position_capture;
     if (s->rasterizer_discard && !capture) return NULL;
     bool cull_all = s->cull_face && s->cull_mode == GL_FRONT_AND_BACK;
     if (cull_all && metal_primitive >= 3 && !capture) return NULL;
@@ -2850,24 +3118,44 @@ static void *prepare_draw_once(struct glm_context *ctx, const struct draw_stages
             if (!capture && b->vertex_override) vertex = b->vertex_override;
             if (!layout) layout = (__bridge MTLVertexDescriptor *)st->vertex_program->vertex_descriptor;
         }
-        if (st->fragment_program)
+        if (st->fragment_program) {
             fragment = b->fragment_override ? b->fragment_override
                                             : (__bridge id<MTLFunction>)st->fragment_program->functions[GLM_STAGE_FRAGMENT];
+            uint32_t map = pass_output_map(b, st->fragment_program);
+            if (map && fragment && !capture) fragment = output_map_function(fragment, map);
+        }
         else if (st->core)
             fragment = empty_fragment(b);
-        if (vertex && !capture) {
+        if (vertex && !capture && !ctx->pixel_rect) {
             uint32_t clip_mask = 0;
             for (int i = 0; i < GLM_MAX_CLIP_PLANES; ++i)
                 if (s->clip_plane_enabled[i]) clip_mask |= 1u << i;
             vertex = clip_mask_function(b, vertex, clip_mask);
+        }
+        if (vertex && b->position_capture) {
+            bool captured = false;
+            vertex = patched_function(vertex, glm_position_capture_msl, &captured);
+            if (!captured) return NULL;
         }
         b->depth_clamp_active = false;
         if (fragment && b->samples > 1 && s->sample_shading && s->min_sample_shading > 0 && !capture)
             fragment = sample_shading_function(b, fragment);
         if (fragment && s->depth_clamp && !capture)
             fragment = depth_clamp_function(b, fragment, &b->depth_clamp_active);
+        /* Polygon stipple: filled polygons only (GL 2.1 3.5.2). */
+        b->stipple_active = false;
+        if (fragment && s->polygon_stipple && !capture && !b->position_capture && !ctx->pixel_rect &&
+            (metal_primitive >= 3 || ctx->polygon_split) &&
+            s->polygon_mode[0] == GL_FILL)
+            fragment = patched_function(fragment, glm_polygon_stipple_msl, &b->stipple_active);
+        /* Line stipple: line primitives whose segment table the CPU stream
+           set (vertex.c). */
+        b->line_stipple_active = false;
+        if (fragment && b->line_stipple && !capture && !b->position_capture && metal_primitive == 1)
+            fragment = patched_function(fragment, glm_line_stipple_msl, &b->line_stipple_active);
         if (!vertex || !fragment) return NULL;
-        id<MTLRenderPipelineState> pipeline = pipeline_for(b, vertex, fragment, s, false, 0, layout, layout_id, capture);
+        id<MTLRenderPipelineState> pipeline = pipeline_for(b, vertex, fragment, s, false, 0, layout, layout_id,
+                                                           capture || b->position_capture);
         if (!pipeline) return NULL;
         enc_pipeline(b, pipeline);
         enc_depth(b, depth_stencil_for(b, s, false, 0));
@@ -2947,6 +3235,21 @@ static void *prepare_draw_once(struct glm_context *ctx, const struct draw_stages
             bounds[i][1] = fmax(s->depth_ranges[i][0], s->depth_ranges[i][1]);
         }
         enc_bytes(b, STAGE_FRAGMENT, bounds, sizeof bounds, 24);
+    }
+    if (b->line_stipple_active && b->line_stipple) {
+        NSUInteger bytes = ((NSUInteger)b->line_stipple_count + 1) * 16, offset;
+        id<MTLBuffer> table = transient_alloc(b, bytes, &offset);
+        memcpy((uint8_t *)mtl_contents(table) + offset, b->line_stipple, bytes);
+        enc_buffer(b, STAGE_FRAGMENT, table, offset, 26);
+    }
+    if (b->position_capture) enc_buffer(b, STAGE_VERTEX, b->position_capture, 0, 27);
+    if (b->stipple_active) {
+        uint32_t rows[32];
+        for (int y = 0; y < 32; ++y) {
+            const uint8_t *row = &s->polygon_stipple_pattern[y * 4];
+            rows[y] = (uint32_t)row[0] << 24 | (uint32_t)row[1] << 16 | (uint32_t)row[2] << 8 | row[3];
+        }
+        enc_bytes(b, STAGE_FRAGMENT, rows, sizeof rows, 26);
     }
     if (st->ff_vertex || st->ff_fragment) {
         float packed[sizeof(struct glm_ff_uniforms) / sizeof(float)];
@@ -3422,6 +3725,12 @@ static bool draw_user_clipped(struct glm_context *ctx, const struct glm_draw *dr
    rasterized separately unless the rasterizer discards everything. */
 void glm_backend_draw(struct glm_context *ctx, const struct glm_draw *draw)
 {
+    if (draw->stipple || ctx->backend->line_stipple) ctx->backend->fast.valid = false;
+    /* Per-vertex materials change the fixed-function key without a state change. */
+    if (ctx->vertex_materials || ctx->backend->vertex_materials) ctx->backend->fast.valid = false;
+    ctx->backend->vertex_materials = ctx->vertex_materials != NULL;
+    ctx->backend->line_stipple = draw->stipple;
+    ctx->backend->line_stipple_count = draw->stipple_count;
     vertex_id_base(ctx->backend, draw->vertex_id_base);
     ctx->backend->vertex_override = nil;
     ctx->backend->fragment_override = nil;
@@ -3448,6 +3757,38 @@ void glm_backend_draw(struct glm_context *ctx, const struct glm_draw *draw)
         if (draw->raster_indices) normal.indices = draw->raster_indices;
         if (!program || !draw_user_clipped(ctx, &normal, program)) draw_once(ctx, &normal);
     }
+}
+
+/* What the current vertex stage gives `draw`'s vertices: per vertex its
+   clip position, front colour and first texture coordinate (12 floats
+   into `out`, as Metal sees them: y inverted, z in [0, w]). The stage runs
+   over them as points, without rasterizing. Waits for it. */
+bool glm_backend_vertex_outputs(struct glm_context *ctx, const struct glm_draw *draw, float *out)
+{
+    struct glm_backend_context *b = ctx->backend;
+    if (!draw->vertex_count) return true;
+    size_t bytes = (size_t)draw->vertex_count * 48;
+    id<MTLBuffer> positions = glm_new_shared_buffer((NSUInteger)bytes, NULL);
+    if (!positions) return false;
+    memset(mtl_contents(positions), 0, bytes);
+    struct glm_draw points = *draw;
+    points.metal_primitive = 0; /* MTLPrimitiveTypePoint */
+    points.indices = NULL;
+    points.index_count = draw->vertex_count;
+    points.stipple = NULL;
+    points.capture = false;
+    b->line_stipple = NULL;
+    b->fast.valid = false;
+    b->position_capture = positions;
+    vertex_id_base(b, draw->vertex_id_base);
+    draw_once(ctx, &points);
+    b->position_capture = nil;
+    b->fast.valid = false;
+    end_encoder(b);
+    b->framebuffer_dirty = true;
+    glm_backend_flush(ctx, true);
+    memcpy(out, mtl_contents(positions), bytes);
+    return true;
 }
 
 static void draw_once(struct glm_context *ctx, const struct glm_draw *draw)
@@ -3498,6 +3839,13 @@ static void draw_once(struct glm_context *ctx, const struct glm_draw *draw)
     if (id_bytes) memcpy((uint8_t *)mtl_contents(vertices) + vertex_offset + vertex_bytes,
                          draw->original_vertex_ids, (size_t)id_bytes);
     enc_buffer(b, STAGE_VERTEX, vertices, vertex_offset, GLM_SLOT_STREAM);
+    if (ctx->vertex_materials && st.ff_vertex) {
+        NSUInteger material_bytes = (NSUInteger)ctx->vertex_material_count * GLM_VERTEX_MATERIAL_FLOAT4S * 16, material_offset;
+        id<MTLBuffer> materials = transient_alloc(b, material_bytes, &material_offset);
+        if (!materials) return glm_error(ctx, GL_OUT_OF_MEMORY);
+        memcpy((uint8_t *)mtl_contents(materials) + material_offset, ctx->vertex_materials, material_bytes);
+        enc_buffer(b, STAGE_VERTEX, materials, material_offset, GLM_SLOT_FF_MATERIALS);
+    }
     MTLPrimitiveType primitive = (MTLPrimitiveType)draw->metal_primitive;
     if (draw->indices) {
         NSUInteger index_bytes = (NSUInteger)draw->index_count * 4, index_offset;
@@ -3673,6 +4021,72 @@ static char *alpha_variant_msl(const char *source_msl, uint32_t variant)
     }
     result[n] = 0;
     free(flat);
+    return result;
+}
+
+/* Fragment outputs onto the pass's colour attachments: attachment j takes
+   output ((map >> 4j) & 15) - 1 (nibble 0: no attachment). A program writing gl_FragColor (or
+   ARB result.color) broadcasts it to every draw buffer (GL 2.1 3.11.2), and
+   framebuffer 0 gives one draw buffer several images (GL_FRONT_AND_BACK).
+   Each [[color(n)]] output moves to its first attachment, gets copies for
+   the others, and parks on a free slot when it has none. */
+static char *output_map_msl(const char *msl, uint32_t map)
+{
+    const char *out_struct = strstr(msl, "struct main0_out");
+    const char *struct_end = out_struct ? strstr(out_struct, "};") : NULL;
+    const char *entry = strstr(msl, "fragment main0_out main0(");
+    const char *signature_end = entry ? strstr(entry, ")\n{") : NULL;
+    if (!struct_end || !signature_end) return NULL;
+    struct { char type[32], name[96]; int location; const char *attr; } outputs[GLM_MAX_DRAW_BUFFERS];
+    int count = 0;
+    for (const char *q = strstr(out_struct, "[[color("); q && q < struct_end; q = strstr(q + 1, "[[color(")) {
+        if (count == GLM_MAX_DRAW_BUFFERS) return NULL;
+        const char *line = q;
+        while (line > out_struct && line[-1] != '\n') --line;
+        if (sscanf(line, " %31s %95s", outputs[count].type, outputs[count].name) != 2) return NULL;
+        outputs[count].location = atoi(q + 8);
+        outputs[count].attr = q;
+        ++count;
+    }
+    bool used[GLM_MAX_DRAW_BUFFERS] = {false};
+    for (int j = 0; j < GLM_MAX_DRAW_BUFFERS; ++j) used[j] = ((map >> (4 * j)) & 15) != 0;
+    char members[1024] = "", copies[1024] = "";
+    int target[GLM_MAX_DRAW_BUFFERS];
+    for (int o = 0; o < count; ++o) {
+        target[o] = -1;
+        for (int j = 0; j < GLM_MAX_DRAW_BUFFERS; ++j) {
+            if (((map >> (4 * j)) & 15) != (uint32_t)outputs[o].location + 1) continue;
+            if (target[o] < 0) { target[o] = j; continue; }
+            size_t m = strlen(members), c = strlen(copies);
+            snprintf(members + m, sizeof members - m, "    %s glm_output%d [[color(%d)]];\n", outputs[o].type, j, j);
+            snprintf(copies + c, sizeof copies - c, "out.glm_output%d = out.%s; ", j, outputs[o].name);
+        }
+        if (target[o] < 0) {
+            for (int j = GLM_MAX_DRAW_BUFFERS - 1; j >= 0 && target[o] < 0; --j)
+                if (!used[j]) { target[o] = j; used[j] = true; }
+            if (target[o] < 0) return NULL;
+        }
+    }
+    size_t cap = strlen(msl) + strlen(members) + 64 * strlen(copies) + 4096, n = 0;
+    char *result = malloc(cap);
+    int next = 0;
+    for (const char *q = msl; *q;) {
+        if (next < count && q == outputs[next].attr) {
+            n += (size_t)snprintf(result + n, cap - n, "[[color(%d)]]", target[next]);
+            q = strstr(q, ")]]") + 3;
+            ++next;
+            continue;
+        }
+        if (q == struct_end) n += (size_t)snprintf(result + n, cap - n, "%s", members);
+        if (q > signature_end && copies[0] && !strncmp(q, "return out;", 11)) {
+            n += (size_t)snprintf(result + n, cap - n, "{ %sreturn out; }", copies);
+            q += 11;
+            continue;
+        }
+        if (n + 1 >= cap) { free(result); return NULL; }
+        result[n++] = *q++;
+    }
+    result[n] = 0;
     return result;
 }
 
@@ -4217,7 +4631,8 @@ static struct glm_index_list restart_list(GLenum mode, const uint8_t *data, GLen
     return list;
 }
 
-/* GLMETAL_TRACE_FRAME=N: one line per draw of presented frame N (sRGB debugging). */
+/* GLMETAL_TRACE_FRAME=N: one line per draw of presented frame N (sRGB, draw buffer, ARB
+   programs and enabled arrays). */
 static bool tracing(void)
 {
     static long frame = -2;
@@ -4244,11 +4659,23 @@ static void trace_draw(struct glm_context *ctx, const char *what)
         snprintf(textures + n, sizeof textures - n, " u%d:%u/%04x%s%s", u, name, t->levels[0][0].internal_format,
                  t->sampler.skip_srgb_decode ? "/skip" : "", ctx->state.units[u].sampler ? "/sampler" : "");
     }
-    fprintf(stderr, "TRACE ctx %p tex %p %s fb %u srgb %d fmt %d parent %d %dx%d blend %d prog %u %s |%s\n",
-            (void *)ctx, (__bridge void *)b->color[0], what, ctx->draw_framebuffer, ctx->state.framebuffer_srgb, b->color[0] ? (int)b->color[0].pixelFormat : -1,
+    /* Enabled arrays: slot:size/type, "n" when normalized. */
+    char arrays[256] = "";
+    for (int i = 0; i < GLM_MAX_ATTRIBS; ++i) {
+        const struct glm_array *a = &ctx->vao->arrays[i];
+        size_t n = strlen(arrays);
+        if (a->enabled)
+            snprintf(arrays + n, sizeof arrays - n, " %d:%d/%04x%s", i, a->size, a->type, a->normalized ? "n" : "");
+    }
+    fprintf(stderr, "TRACE ctx %p tex %p %s fb %u buffer %#x srgb %d fmt %d parent %d %dx%d blend %d prog %u %s arb %u/%u |%s |%s\n",
+            (void *)ctx, (__bridge void *)b->color[0], what, ctx->draw_framebuffer,
+            glm_framebuffer_get(ctx, ctx->draw_framebuffer)->draw_buffers[0], ctx->state.framebuffer_srgb,
+            b->color[0] ? (int)b->color[0].pixelFormat : -1,
             b->color[0].parentTexture ? (int)b->color[0].parentTexture.pixelFormat : -1,
             b->color[0] ? (int)b->color[0].width : 0, b->color[0] ? (int)b->color[0].height : 0,
-            ctx->state.blend[0].enabled, p ? p->name : 0, shader, textures);
+            ctx->state.blend[0].enabled, p ? p->name : 0, shader,
+            ctx->state.vertex_program ? ctx->arb_bound[0] : 0, ctx->state.fragment_program ? ctx->arb_bound[1] : 0,
+            textures, arrays);
 }
 
 bool glm_backend_draw_gpu(struct glm_context *ctx, GLenum mode, GLint first, GLsizei count, GLenum index_type,
@@ -4268,6 +4695,7 @@ bool glm_backend_draw_gpu(struct glm_context *ctx, GLenum mode, GLint first, GLs
     if (mode == GL_PATCHES || (st.program && (st.program->gs || st.program->tess))) return gpu_fallback("geometry or tessellation stage");
     if (mode >= GL_TRIANGLES && (s->polygon_mode[0] != GL_FILL || s->polygon_mode[1] != GL_FILL))
         return gpu_fallback("polygon mode (vertex.c draws polygon outlines and points)");
+    if (glm_ff_vertex_extras(ctx)) return gpu_fallback("vertex blend or vertex point size (vertex.c fetches them)");
 
     /* Primitive: native, or indices generated on the CPU. */
     MTLPrimitiveType primitive;
@@ -4679,7 +5107,7 @@ static id<MTLTexture> read_texture(struct glm_context *ctx, NSUInteger *slice, N
 {
     *slice = *level = 0;
     struct glm_backend_context *b = ctx->backend;
-    if (ctx->read_framebuffer == 0) return b->default_color;
+    if (ctx->read_framebuffer == 0) return default_buffer_texture(b, ctx->default_framebuffer.read_buffer);
     struct glm_framebuffer *fb = glm_framebuffer_get(ctx, ctx->read_framebuffer);
     GLenum buffer = fb->read_buffer;
     if (buffer < GL_COLOR_ATTACHMENT0 || buffer >= GL_COLOR_ATTACHMENT0 + GLM_MAX_DRAW_BUFFERS) return nil;
@@ -4716,7 +5144,7 @@ static id<MTLTexture> read_depth_texture(struct glm_context *ctx, bool stencil, 
     *slice = *level = 0;
     if (ctx->read_framebuffer == 0) {
         if (ctx->default_bits_known && !(stencil ? ctx->default_stencil_bits : ctx->default_depth_bits)) return nil;
-        return ctx->backend->default_depth;
+        return default_depth_texture(ctx->backend, ctx->default_framebuffer.read_buffer);
     }
     struct glm_framebuffer *fb = glm_framebuffer_get(ctx, ctx->read_framebuffer);
     return fb ? attachment_texture(ctx, stencil ? &fb->stencil : &fb->depth, slice, level) : nil;
@@ -4851,6 +5279,12 @@ void glm_backend_read_pixels(struct glm_context *ctx, GLint x, GLint y, GLsizei 
         float *dst = rgba + (((size_t)(y0 - y + (NSInteger)row) * (size_t)width) + (size_t)(x0 - x)) * 4;
         glm_unpack_texels((uint32_t)readable.pixelFormat, (const uint8_t *)mtl_contents(staging) + row * bytes_per_row,
                           region.size.width, dst);
+    }
+    /* glReadPixels: glPixelTransfer and the imaging operations (which may
+       resize or discard the image). */
+    if (ctx->read_transfer && !glm_imaging_read(ctx, &rgba, &width, &height)) {
+        free(rgba);
+        return;
     }
     if (!glm_convert_pack(ctx, rgba, width, height, format, type, pixels)) glm_error(ctx, GL_INVALID_ENUM);
     free(rgba);
@@ -5121,7 +5555,12 @@ void glm_backend_blit_framebuffer(struct glm_context *ctx, GLint src[4], GLint d
                 id<MTLTexture> target = nil;
                 NSUInteger dslice = 0, dlevel = 0;
                 if (!draw) {
-                    if (i == 0) target = b->default_color;
+                    __unsafe_unretained id<MTLTexture> images[2] = {nil, nil};
+                    int count = default_buffer_images(b, ctx->default_framebuffer.draw_buffers[i], images);
+                    for (int k = 0; k < count; ++k) {
+                        if (images[k] == (b->default_front ? b->default_front : b->default_color)) b->front_drawn = true;
+                        blit_texture(ctx, source, sslice, slevel, linear_view(b, images[k]), 0, 0, src, dst, 0, filter, true);
+                    }
                 } else {
                     GLenum buffer = draw->draw_buffers[i];
                     if (buffer >= GL_COLOR_ATTACHMENT0 && buffer < GL_COLOR_ATTACHMENT0 + GLM_MAX_DRAW_BUFFERS)
@@ -5131,17 +5570,19 @@ void glm_backend_blit_framebuffer(struct glm_context *ctx, GLint src[4], GLint d
             }
         }
     }
+    id<MTLTexture> default_read_depth = default_depth_texture(b, ctx->default_framebuffer.read_buffer);
+    id<MTLTexture> default_draw_depth = default_depth_texture(b, ctx->default_framebuffer.draw_buffers[0]);
     for (int aspect = 0; aspect < 2; ++aspect) {
         GLbitfield bits = aspect ? GL_STENCIL_BUFFER_BIT : GL_DEPTH_BUFFER_BIT;
         if (!(mask & bits)) continue;
         NSUInteger sslice = 0, slevel = 0, dslice = 0, dlevel = 0;
-        id<MTLTexture> source = read ? attachment_texture(ctx, aspect ? &read->stencil : &read->depth, &sslice, &slevel) : b->default_depth;
-        id<MTLTexture> target = draw ? attachment_texture(ctx, aspect ? &draw->stencil : &draw->depth, &dslice, &dlevel) : b->default_depth;
+        id<MTLTexture> source = read ? attachment_texture(ctx, aspect ? &read->stencil : &read->depth, &sslice, &slevel) : default_read_depth;
+        id<MTLTexture> target = draw ? attachment_texture(ctx, aspect ? &draw->stencil : &draw->depth, &dslice, &dlevel) : default_draw_depth;
         if (!source || !target) continue;
         if (!aspect && (mask & GL_STENCIL_BUFFER_BIT)) {
             NSUInteger ss = 0, sl = 0, ds = 0, dl = 0;
-            id<MTLTexture> st = read ? attachment_texture(ctx, &read->stencil, &ss, &sl) : b->default_depth;
-            id<MTLTexture> dt = draw ? attachment_texture(ctx, &draw->stencil, &ds, &dl) : b->default_depth;
+            id<MTLTexture> st = read ? attachment_texture(ctx, &read->stencil, &ss, &sl) : default_read_depth;
+            id<MTLTexture> dt = draw ? attachment_texture(ctx, &draw->stencil, &ds, &dl) : default_draw_depth;
             if (st == source && dt == target && ss == sslice && sl == slevel && ds == dslice && dl == dlevel) {
                 bits |= GL_STENCIL_BUFFER_BIT;
                 mask &= ~GL_STENCIL_BUFFER_BIT;
@@ -5441,6 +5882,8 @@ GLM_HIDDEN void glm_backend_default_framebuffer_resize(struct glm_context *ctx, 
     struct glm_backend_context *b = ctx->backend;
     if (b->default_color && b->default_color.width == (NSUInteger)width && b->default_color.height == (NSUInteger)height) return;
     end_encoder(b);
+    for (int i = 0; i < GLM_MAX_AUX_BUFFERS; ++i) b->default_aux[i] = b->default_aux_depth[i] = nil;
+    b->default_front = b->default_accum = nil;
     if (width <= 0 || height <= 0) {
         b->default_color = b->default_depth = nil;
         return;
@@ -5452,9 +5895,123 @@ GLM_HIDDEN void glm_backend_default_framebuffer_resize(struct glm_context *ctx, 
     d.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead | MTLTextureUsagePixelFormatView;
     d.storageMode = MTLStorageModePrivate;
     b->default_color = [device newTextureWithDescriptor:d];
+    if (!ctx->default_single_buffered) b->default_front = [device newTextureWithDescriptor:d];
+    for (int i = 0; i < ctx->default_aux_buffers && i < GLM_MAX_AUX_BUFFERS; ++i)
+        b->default_aux[i] = [device newTextureWithDescriptor:d];
+    if (ctx->default_accum_bits) {
+        MTLTextureDescriptor *a = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA32Float
+                                                                                     width:(NSUInteger)width
+                                                                                    height:(NSUInteger)height
+                                                                                 mipmapped:NO];
+        a.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
+        a.storageMode = MTLStorageModePrivate;
+        b->default_accum = [device newTextureWithDescriptor:a];
+    }
     d.pixelFormat = MTLPixelFormatDepth32Float_Stencil8;
     b->default_depth = [device newTextureWithDescriptor:d];
+    if (ctx->default_aux_depth_stencil)
+        for (int i = 0; i < ctx->default_aux_buffers && i < GLM_MAX_AUX_BUFFERS; ++i)
+            b->default_aux_depth[i] = [device newTextureWithDescriptor:d];
     b->framebuffer_dirty = true;
+}
+
+/* ---- accumulation buffer ------------------------------------------------ */
+
+void glm_backend_accum(struct glm_context *ctx, GLenum op, float value, const float clear[4])
+{
+    struct glm_backend_context *b = ctx->backend;
+    const struct glm_state *s = &ctx->state;
+    if (!b->default_accum) return;
+    /* Every operation covers the window, or its scissor box (GL 2.1 4.2.4). */
+    NSInteger width = (NSInteger)b->default_accum.width, height = (NSInteger)b->default_accum.height;
+    NSInteger x0 = 0, y0 = 0, x1 = width, y1 = height;
+    if (s->scissor_test) {
+        x0 = MAX(s->scissor[0], 0);
+        y0 = MAX(s->scissor[1], 0);
+        x1 = MIN((NSInteger)s->scissor[0] + s->scissor[2], width);
+        y1 = MIN((NSInteger)s->scissor[1] + s->scissor[3], height);
+    }
+    if (x1 <= x0 || y1 <= y0) return;
+    end_encoder(b);
+    if (op == GL_RETURN) {
+        /* Drawn into the draw buffers as fragments that only the scissor
+           test and the colour masks apply to. */
+        b->framebuffer_dirty = true;
+        if (!ensure_encoder(ctx)) return;
+        int count = color_attachment_count(b);
+        uint32_t key = (uint32_t)count;
+        for (int i = 0; i < count; ++i) {
+            const bool *m = s->color_mask[b->attachment_source[i]];
+            uint32_t mask = b->color[i] ? (m[0] ? MTLColorWriteMaskRed : 0) | (m[1] ? MTLColorWriteMaskGreen : 0) |
+                                              (m[2] ? MTLColorWriteMaskBlue : 0) | (m[3] ? MTLColorWriteMaskAlpha : 0)
+                                        : 0;
+            key |= mask << (4 + 4 * i);
+        }
+        if (!b->accum_return) b->accum_return = [NSMutableDictionary dictionary];
+        id<MTLRenderPipelineState> pipeline = b->accum_return[@(key)];
+        if (!pipeline) {
+            MTLRenderPipelineDescriptor *d = [MTLRenderPipelineDescriptor new];
+            d.vertexFunction = utility_function(b, @"clear_vertex");
+            d.fragmentFunction = utility_function(b, @"accum_return_fragment");
+            for (int i = 0; i < count; ++i) {
+                if (!b->color[i]) continue;
+                d.colorAttachments[i].pixelFormat = b->color[i].pixelFormat;
+                d.colorAttachments[i].writeMask = (key >> (4 + 4 * i)) & 15;
+            }
+            if (b->depth) d.depthAttachmentPixelFormat = b->depth.pixelFormat;
+            if (b->stencil) d.stencilAttachmentPixelFormat = b->stencil.pixelFormat;
+            d.rasterSampleCount = b->samples;
+            NSError *error = nil;
+            pipeline = [device newRenderPipelineStateWithDescriptor:d error:&error];
+            if (!pipeline) {
+                glm_log("accumulation return pipeline: %s", error.localizedDescription.UTF8String);
+                return;
+            }
+            b->accum_return[@(key)] = pipeline;
+        }
+        id<MTLRenderCommandEncoder> e = b->encoder;
+        [e setRenderPipelineState:pipeline];
+        MTLDepthStencilDescriptor *dd = [MTLDepthStencilDescriptor new];
+        [e setDepthStencilState:[device newDepthStencilStateWithDescriptor:dd]];
+        [e setCullMode:MTLCullModeNone];
+        [e setTriangleFillMode:MTLTriangleFillModeFill];
+        [e setViewport:(MTLViewport){0, 0, (double)b->width, (double)b->height, 0, 1}];
+        [e setScissorRect:(MTLScissorRect){(NSUInteger)x0, (NSUInteger)y0, (NSUInteger)(x1 - x0), (NSUInteger)(y1 - y0)}];
+        struct { float color[4]; float depth; float pad[3]; } args = {{value, 0, 0, 0}, 0, {0, 0, 0}};
+        [e setVertexBytes:&args length:sizeof args atIndex:0];
+        [e setFragmentBytes:&args length:sizeof args atIndex:0];
+        [e setFragmentTexture:b->default_accum atIndex:0];
+        [e drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+        /* The pass's cached encoder state no longer holds. */
+        end_encoder(b);
+        b->framebuffer_dirty = true;
+        return;
+    }
+    uint32_t code = op == GL_ACCUM ? 0 : op == GL_LOAD ? 1 : op == GL_MULT ? 2 : op == GL_ADD ? 3 : 4;
+    id<MTLTexture> source = nil;
+    if (code <= 1) {
+        source = ctx->read_framebuffer ? nil : default_buffer_texture(b, ctx->default_framebuffer.read_buffer);
+        if (!source) return;
+    }
+    if (!b->accum_kernel) {
+        NSError *error = nil;
+        b->accum_kernel = [device newComputePipelineStateWithFunction:utility_function(b, @"accum_kernel") error:&error];
+        if (!b->accum_kernel) {
+            glm_log("accumulation kernel: %s", error.localizedDescription.UTF8String);
+            return;
+        }
+    }
+    struct { uint32_t rect[4]; float value[4]; uint32_t op, pad[3]; } args = {
+        {(uint32_t)x0, (uint32_t)y0, (uint32_t)x1, (uint32_t)y1}, {value, value, value, value}, code, {0, 0, 0}};
+    if (code == 4) memcpy(args.value, clear, sizeof args.value);
+    id<MTLComputeCommandEncoder> compute = [command_buffer(b) computeCommandEncoder];
+    [compute setComputePipelineState:b->accum_kernel];
+    [compute setTexture:b->default_accum atIndex:0];
+    [compute setTexture:source ? source : b->default_accum atIndex:1];
+    [compute setBytes:&args length:sizeof args atIndex:0];
+    [compute dispatchThreads:MTLSizeMake((NSUInteger)(x1 - x0), (NSUInteger)(y1 - y0), 1)
+       threadsPerThreadgroup:MTLSizeMake(16, 16, 1)];
+    [compute endEncoding];
 }
 
 GLM_HIDDEN void *glm_backend_default_color(struct glm_context *ctx) { return (__bridge void *)ctx->backend->default_color; }

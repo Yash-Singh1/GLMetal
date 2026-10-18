@@ -22,7 +22,7 @@ static void restore(struct glm_context *ctx, const struct saved_attrib *saved, G
         COPY(raster_valid);
     }
     if (mask & GL_POINT_BIT) { COPY(point_size); COPY(point_sprite); }
-    if (mask & GL_LINE_BIT) { COPY(line_width); COPY(line_smooth); }
+    if (mask & GL_LINE_BIT) { COPY(line_width); COPY(line_smooth); COPY(line_stipple); COPY(line_stipple_factor); COPY(line_stipple_pattern); }
     if (mask & GL_POLYGON_BIT) {
         COPY(cull_face); COPY(cull_mode); COPY(front_face); COPY(polygon_mode); COPY(polygon_smooth);
         COPY(polygon_offset_fill); COPY(polygon_offset_line); COPY(polygon_offset_point);
@@ -44,6 +44,11 @@ static void restore(struct glm_context *ctx, const struct saved_attrib *saved, G
         struct glm_framebuffer *fb = glm_framebuffer_get(ctx, ctx->draw_framebuffer);
         if (fb) memcpy(fb->draw_buffers, saved->draw_buffers, sizeof fb->draw_buffers);
     }
+    if (mask & GL_ACCUM_BUFFER_BIT) COPY(clear_accum);
+    if (mask & GL_CURRENT_BIT) { COPY(edge_flag); COPY(current_index); }
+    if (mask & GL_COLOR_BUFFER_BIT) { COPY(clear_index); COPY(index_mask); }
+    if (mask & GL_POLYGON_STIPPLE_BIT) COPY(polygon_stipple_pattern);
+    if (mask & GL_POLYGON_BIT) COPY(polygon_stipple);
     if (mask & GL_VIEWPORT_BIT) { COPY(viewport); COPY(depth_range); }
     if (mask & GL_SCISSOR_BIT) { COPY(scissor_test); COPY(scissor); }
     if (mask & GL_TRANSFORM_BIT) {
@@ -54,9 +59,10 @@ static void restore(struct glm_context *ctx, const struct saved_attrib *saved, G
         COPY(alpha_test); COPY(blend); COPY(clip_plane_enabled); COPY(color_material); COPY(cull_face);
         COPY(depth_test); COPY(dither); COPY(fog); COPY(lighting); COPY(line_smooth); COPY(color_logic_op);
         COPY(normalize); COPY(rescale_normal); COPY(point_sprite); COPY(polygon_offset_fill); COPY(polygon_offset_line);
-        COPY(polygon_offset_point); COPY(polygon_smooth); COPY(scissor_test); COPY(stencil_test);
+        COPY(polygon_offset_point); COPY(polygon_smooth); COPY(polygon_stipple); COPY(line_stipple); COPY(scissor_test); COPY(stencil_test);
         COPY(multisample); COPY(sample_alpha_to_coverage); COPY(vertex_program); COPY(fragment_program); COPY(vertex_program_two_side);
         COPY(depth_clamp); COPY(primitive_restart); COPY(program_point_size); COPY(framebuffer_srgb);
+        COPY(vertex_blend); COPY(weight_sum_unity); COPY(vertex_point_size);
         for (int i = 0; i < GLM_MAX_LIGHTS; ++i) s->lights[i].enabled = o->lights[i].enabled;
         for (int u = 0; u < GLM_MAX_TEXTURE_UNITS; ++u) {
             s->units[u].enabled_1d = o->units[u].enabled_1d;
@@ -71,7 +77,13 @@ static void restore(struct glm_context *ctx, const struct saved_attrib *saved, G
         COPY(active_texture);
         COPY(units);
     }
-    if (mask & GL_PIXEL_MODE_BIT) COPY(pixel_zoom);
+    if (mask & GL_PIXEL_MODE_BIT) {
+        COPY(pixel_zoom); COPY(pixel_scale); COPY(pixel_bias); COPY(map_color); COPY(map_stencil); COPY(index_shift);
+        COPY(index_offset); COPY(depth_scale); COPY(depth_bias); COPY(imaging);
+    }
+    if (mask & GL_ENABLE_BIT) COPY(imaging.enabled);
+    if (mask & (GL_EVAL_BIT | GL_ENABLE_BIT)) { COPY(map_enabled); COPY(auto_normal); COPY(attrib_maps_enabled); }
+    if (mask & GL_EVAL_BIT) { COPY(eval_grid_segments); COPY(eval_grid_domain); }
 #undef COPY
 }
 

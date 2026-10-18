@@ -1,0 +1,324 @@
+%% vp
+!!ARBvp1.0
+MOV result.position, vertex.position;
+END
+%% vp
+!!ARBvp1.0
+TEMP a, b, c;
+MOV result.position, vertex.position;
+END
+%% vp
+!!ARBvp1.0
+TEMP a;
+MOV a, {1, 2, 3, 4};
+ADD a, a, {0.5, 0.5, 0.5, 0.5};
+ADD a, a, 2.0;
+MOV result.position, a;
+END
+%% vp
+!!ARBvp1.0
+PARAM p = program.env[7];
+PARAM q = program.env[7];
+MOV result.position, p;
+MOV result.color, q;
+END
+%% vp
+!!ARBvp1.0
+PARAM m[4] = { state.matrix.mvp };
+PARAM u[] = { program.local[0..9] };
+DP4 result.position.x, m[0], vertex.position;
+MOV result.color, u[2];
+END
+%% vp
+!!ARBvp1.0
+PARAM m[4] = { state.matrix.mvp };
+DP4 result.position.x, m[0], vertex.position;
+DP4 result.position.y, m[1], vertex.position;
+MOV result.color, vertex.attrib[3];
+MOV result.texcoord[0], vertex.texcoord[0];
+MOV result.texcoord[1], vertex.attrib[9];
+MOV result.texcoord[2], vertex.normal;
+END
+%% vp
+!!ARBvp1.0
+OPTION ARB_position_invariant;
+MOV result.color, state.light[0].diffuse;
+END
+%% vp
+!!ARBvp1.0
+ADDRESS A0, A1;
+TEMP t;
+ARL A0.x, vertex.attrib[1].x;
+MOV result.position, vertex.position;
+END
+%% vp
+!!ARBvp1.0
+TEMP t;
+MOV t, vertex.position;
+MOV t, vertex.position;
+MOV result.position, t;
+SWZ result.color, t, x, -y, 0, 1;
+END
+%% vp
+!!ARBvp1.0
+PARAM big = program.local[1023];
+PARAM env = program.env[255];
+MOV result.position, big;
+MOV result.color, env;
+END
+%% vp
+!!ARBvp1.0
+PARAM toobig = program.local[1024];
+MOV result.position, toobig;
+END
+%% fp
+!!ARBfp1.0
+MOV result.color, fragment.color;
+END
+%% fp
+!!ARBfp1.0
+TEMP a;
+TEX a, fragment.texcoord[0], texture[0], 2D;
+MOV result.color, a;
+END
+%% fp
+!!ARBfp1.0
+TEMP a, b;
+TEX a, fragment.texcoord[0], texture[0], 2D;
+TEX b, fragment.texcoord[1], texture[1], 2D;
+ADD result.color, a, b;
+END
+%% fp
+!!ARBfp1.0
+TEMP a, b;
+TEX a, fragment.texcoord[0], texture[0], 2D;
+TEX b, a, texture[1], 2D;
+TEX a, b, texture[2], 2D;
+MOV result.color, a;
+END
+%% fp
+!!ARBfp1.0
+TEMP a;
+MUL a, fragment.color, {2, 2, 2, 1};
+MAD a, a, 0.5, program.env[2];
+TXP result.color, a, texture[0], 2D;
+END
+%% fp
+!!ARBfp1.0
+TEMP a;
+TEX a, fragment.texcoord[0], texture[0], 2D;
+MUL a, a, a;
+TEX a, a, texture[0], 2D;
+KIL a;
+MOV result.color, a;
+END
+%% fp
+!!ARBfp1.0
+PARAM e = program.env[127];
+MOV result.color, e;
+END
+%% fp
+!!ARBfp1.0
+PARAM e = program.env[128];
+MOV result.color, e;
+END
+%% vp
+!!ARBvp1.0
+OPTION ARB_position_invariant;
+END
+%% vp
+!!ARBvp1.0
+OPTION ARB_position_invariant;
+MOV result.color, vertex.color;
+END
+%% vp
+!!ARBvp1.0
+OPTION ARB_position_invariant;
+MOV result.color, program.env[1];
+MOV result.texcoord[0], state.matrix.mvp.row[0];
+END
+%% fp
+!!ARBfp1.0
+OPTION ARB_fog_linear;
+MOV result.color, fragment.color;
+END
+%% fp
+!!ARBfp1.0
+OPTION ARB_fog_exp;
+MOV result.color, fragment.color;
+END
+%% fp
+!!ARBfp1.0
+OPTION ARB_fog_exp2;
+MOV result.color, fragment.color;
+END
+%% fp
+!!ARBfp1.0
+OPTION ARB_fog_exp2;
+MOV result.color, state.fog.color;
+END
+%% fp
+!!ARBfp1.0
+TEMP a;
+MOV a, fragment.position;
+MOV result.depth.z, a.x;
+MOV result.color, fragment.fogcoord;
+END
+%% fp
+!!ARBfp1.0
+MOV result.depth.z, fragment.color.x;
+MOV result.color, fragment.color;
+END
+%% fp
+!!ARBfp1.0
+MOV result.color, fragment.position;
+END
+%% vp
+!!ARBvp1.0
+PARAM c[] = { program.env[0..5] };
+ADDRESS A0;
+ARL A0.x, vertex.attrib[1].x;
+MOV result.position, c[A0.x + 1];
+END
+%% vp
+!!ARBvp1.0
+PARAM c[] = { {1,2,3,4}, program.local[3], state.matrix.modelview.row[1] };
+MOV result.position, c[1];
+MOV result.color, c[2];
+MOV result.texcoord[0], {1,2,3,4};
+MOV result.texcoord[1], 1.0;
+MOV result.texcoord[2], {1.0, 1.0, 1.0, 1.0};
+END
+%% vp
+!!ARBvp1.0
+PARAM m[4] = { state.matrix.modelview };
+MOV result.position, m[0];
+MOV result.color, state.matrix.modelview.row[0];
+MOV result.texcoord[0], state.matrix.modelview.transpose.row[0];
+END
+%% vp
+!!ARBvp1.0
+TEMP a;
+ATTRIB p = vertex.position;
+ATTRIB q = vertex.position;
+MOV a, p;
+MOV result.position, q;
+MOV result.color, vertex.attrib[0];
+END
+%% vp
+!!ARBvp1.0
+ATTRIB p = vertex.position;
+ATTRIB q = vertex.position;
+MOV result.position, q;
+MOV result.color, p;
+END
+%% vp
+!!ARBvp1.0
+MOV result.position, vertex.position;
+MOV result.color, vertex.attrib[0];
+END
+%% vp
+!!ARBvp1.0
+MOV result.position, vertex.position;
+MOV result.color, vertex.attrib[3];
+MOV result.texcoord[0], vertex.color;
+END
+%% vp
+!!ARBvp1.0
+MOV result.position, vertex.position;
+MOV result.color, vertex.attrib[2];
+MOV result.texcoord[0], vertex.normal;
+END
+%% vp
+!!ARBvp1.0
+MOV result.position, vertex.position;
+MOV result.color, vertex.attrib[8];
+MOV result.texcoord[0], vertex.texcoord[0];
+END
+%% vp
+!!ARBvp1.0
+MOV result.position, vertex.position;
+MOV result.color, vertex.attrib[5];
+MOV result.texcoord[0], vertex.fogcoord;
+END
+%% vp
+!!ARBvp1.0
+MOV result.position, vertex.position;
+MOV result.color, vertex.attrib[1];
+MOV result.texcoord[0], vertex.weight;
+END
+%% fp
+!!ARBfp1.0
+TEMP a;
+MOV a, fragment.fogcoord;
+ADD result.color, a, fragment.fogcoord;
+END
+%% fp
+!!ARBfp1.0
+TEMP dot, texture2D, float, gl_Position;
+MOV dot, fragment.color;
+MUL texture2D, dot, dot;
+ADD float, texture2D, dot;
+MOV gl_Position, float;
+MOV result.color, gl_Position;
+END
+%% vp
+!!ARBvp1.0
+TEMP $value;
+MOV $value, vertex.position;
+MOV result.position, $value;
+END
+%% vp
+!!ARBvp1.0
+ADDRESS A0;
+ALIAS a = A0;
+PARAM c[] = { program.env[0..3] };
+ARL a.x, vertex.attrib[1].x;
+MOV result.position, c[a.x + 1];
+END
+%% vp
+!!ARBvp1.0
+TEMP t;
+ALIAS u = t;
+MOV u, vertex.position;
+MOV result.position, u;
+END
+%% vp
+!!ARBvp1.0
+ADDRESS A0;
+ALIAS a = A0;
+PARAM c[] = { program.env[0..3] };
+ARL A0.x, vertex.attrib[1].x;
+MOV result.position, c[a.x + 1];
+END
+%% vp
+!!ARBvp1.0
+ATTRIB p = vertex.position;
+ALIAS q = p;
+MOV result.position, q;
+END
+%% fp
+!!ARBfp1.0
+MOV result.color, fragment.color;
+END
+END
+%% fp
+!!ARBfp1.0
+MOV result.color, fragment.color;
+END
+garbage here
+%% fp
+!!ARBfp1.0
+MOV result.color, fragment.color;
+END
+   
+
+%% fp
+!!ARBfp1.0
+MOV result.color, fragment.color;
+END
+# comment
+%% fp
+!!ARBfp1.0
+MOV result.color, fragment.color;
+END

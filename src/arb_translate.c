@@ -7,6 +7,7 @@
  * Program environment and local parameters live in the GLMARB block; its
  * arrays are sized to what the program references. */
 #include "arb_translate.h"
+#include "legacy_block.h"
 
 #include <ctype.h>
 #include <stdarg.h>
@@ -56,12 +57,22 @@ enum name_kind { NAME_TEMP, NAME_ADDRESS, NAME_ATTRIB, NAME_PARAM, NAME_PARAM_AR
 
 struct name {
     char ident[64];
+    /* The GLSL variable (arb_n<slot>): program identifiers may be GLSL
+       keywords or built-in names ("dot") or contain '$'. ALIAS shares its
+       target's variable and slot. */
+    char glsl[16];
+    int slot;
+    bool alias;
     enum name_kind kind;
     char expression[160]; /* ATTRIB/PARAM/OUTPUT: GLSL expression or variable */
     int array_size;
     /* Arrays aliasing one env/local range index the block directly. */
     const char *alias_array;
     int alias_base;
+    /* Program parameter counting (count_key): PARAM's binding, and one key
+       per array element. */
+    char key[160];
+    char (*element_keys)[160];
 };
 
 struct parser {
@@ -80,19 +91,53 @@ struct parser {
     uint16_t texcoords_written;
     int draw_buffers_written;
     uint32_t attribs_used; /* generic attributes read */
+    /* Vertex attribute slots bound by conventional names (vertex.position,
+       vertex.color, ...) and by vertex.attrib[n]: a slot bound both ways is
+       an error (ARB_vertex_program 2.14.3.1). */
+    uint32_t conventional_bound, generic_bound;
+    /* glGetProgramivARB counters, as Apple's implementation counts: every
+       instruction, temporaries and parameters (incl. literals, deduplicated)
+       actually referenced, attributes read, address registers declared. */
+    int instructions, alu_instructions, tex_instructions, address_declared;
+    char (*param_keys)[160], (*attrib_keys)[160];
+    int param_count, attrib_count;
+    bool temp_used[MAX_NAMES];
+    bool fogcoord_read;
     uint32_t sampler_declared[16]; /* per unit: bitmask of targets */
     int temp_counter;
     char error[256];
     size_t error_position;
+    char error_hint[64];     /* the token Apple's messages quote */
+    struct token previous;   /* the token before the current one */
     bool failed;
 };
 
+/* Adds `key` (outer parentheses ignored) to a counted set. */
+static void count_key(char (**keys)[160], int *count, const char *key)
+{
+    size_t length = strlen(key);
+    char normal[160];
+    if (length >= 2 && key[0] == '(' && key[length - 1] == ')') snprintf(normal, sizeof normal, "%.*s", (int)length - 2, key + 1);
+    else snprintf(normal, sizeof normal, "%s", key);
+    for (int i = 0; i < *count; ++i)
+        if (!strcmp((*keys)[i], normal)) return;
+    if (*count % 64 == 0) *keys = realloc(*keys, (size_t)(*count + 64) * sizeof **keys);
+    snprintf((*keys)[(*count)++], 160, "%s", normal);
+}
+
 static void fail(struct parser *p, const char *format, ...) __attribute__((format(printf, 2, 3)));
+/* Undefined-name errors quote the name, at its line. */
+static void undefined_hint(struct parser *p, const char *ident)
+{
+    snprintf(p->error_hint, sizeof p->error_hint, "%s", ident);
+    p->error_position = p->previous.position;
+}
 static void fail(struct parser *p, const char *format, ...)
 {
     if (p->failed) return;
     p->failed = true;
     p->error_position = p->token.position;
+    snprintf(p->error_hint, sizeof p->error_hint, "%s", p->token.text);
     va_list args;
     va_start(args, format);
     vsnprintf(p->error, sizeof p->error, format, args);
@@ -101,6 +146,7 @@ static void fail(struct parser *p, const char *format, ...)
 
 static void next(struct parser *p)
 {
+    if (p->token.kind != TOK_END) p->previous = p->token;
     const char *s = p->source;
     for (;;) {
         while (p->at < p->length && isspace((unsigned char)s[p->at])) ++p->at;
@@ -175,7 +221,9 @@ static bool accept(struct parser *p, const char *text)
 
 static void expect(struct parser *p, const char *text)
 {
-    if (!accept(p, text)) fail(p, "expected '%s' near '%s'", text, p->token.text);
+    if (accept(p, text)) return;
+    if (!strcmp(text, ";")) fail(p, "missing semicolon");
+    else fail(p, "expected '%s'", text);
 }
 
 static int expect_integer(struct parser *p)
@@ -220,6 +268,8 @@ static struct name *add_name(struct parser *p, const char *ident, enum name_kind
     struct name *n = &p->names[p->name_count++];
     memset(n, 0, sizeof *n);
     snprintf(n->ident, sizeof n->ident, "%s", ident);
+    n->slot = (int)(n - p->names);
+    snprintf(n->glsl, sizeof n->glsl, "arb_n%d", n->slot);
     n->kind = kind;
     return n;
 }
@@ -313,7 +363,8 @@ static int matrix_rows(struct parser *p, char rows[4][160], int *first_row)
 
 static void use_parameter(struct parser *p, bool env, int index)
 {
-    if (index < 0 || index >= 256) {
+    int limit = !env ? GLM_ARB_LOCAL_PARAMETERS : p->vertex ? GLM_ARB_ENV_PARAMETERS : GLM_ARB_FRAGMENT_ENV_PARAMETERS;
+    if (index < 0 || index >= limit) {
         fail(p, "parameter index %d out of range", index);
         return;
     }
@@ -417,7 +468,9 @@ static int parameter_binding(struct parser *p, char (*out)[160], int capacity, c
         expect(p, ".");
         char prop[32];
         expect_ident(p, prop, sizeof prop);
-        snprintf(out[0], 160, "gl_%sLightProduct[%d].%s", face, n, prop);
+        /* The product's alpha is the material's, as Apple's (and NVIDIA's)
+           ARB programs read it. */
+        snprintf(out[0], 160, "vec4(gl_%sLightProduct[%d].%s.rgb, gl_%sMaterial.%s.a)", face, n, prop, face, prop);
         return 1;
     }
     if (!strcmp(group, "texgen")) {
@@ -527,14 +580,17 @@ static int parameter_item(struct parser *p, char (*out)[160], int capacity, bool
     return parameter_binding(p, out, capacity, alias, alias_base);
 }
 
+/* Generic attributes that alias a conventional four-component one read it
+   (the GLSL built-ins share the slot and current value). The normal and fog
+   coordinate built-ins have fewer components, so generic attributes 2 and 5
+   are generic inputs of their own: a 4-component glVertexAttribPointer(5)
+   array (Call of Duty 2's vertex colour) keeps all of its components. */
 static const char *legacy_attribute(int index)
 {
     switch (index) {
     case 0: return "gl_Vertex";
-    case 2: return "vec4(gl_Normal, 1.0)";
     case 3: return "gl_Color";
     case 4: return "gl_SecondaryColor";
-    case 5: return "vec4(gl_FogCoord, 0.0, 0.0, 1.0)";
     default: return NULL;
     }
 }
@@ -564,21 +620,32 @@ static void attribute_binding(struct parser *p, char *out)
     expect_ident(p, what, sizeof what);
     if (p->vertex) {
         if (strcmp(root, "vertex")) { fail(p, "vertex programs read vertex.* attributes"); return; }
-        if (!strcmp(what, "position")) snprintf(out, 160, "gl_Vertex");
-        else if (!strcmp(what, "normal")) snprintf(out, 160, "vec4(gl_Normal, 1.0)");
-        else if (!strcmp(what, "fogcoord")) snprintf(out, 160, "vec4(gl_FogCoord, 0.0, 0.0, 1.0)");
+        if (!strcmp(what, "position")) {
+            p->conventional_bound |= 1u << 0;
+            snprintf(out, 160, "gl_Vertex");
+        } else if (!strcmp(what, "normal")) {
+            p->conventional_bound |= 1u << 2;
+            snprintf(out, 160, "vec4(gl_Normal, 1.0)");
+        } else if (!strcmp(what, "fogcoord")) {
+            p->conventional_bound |= 1u << 5;
+            snprintf(out, 160, "vec4(gl_FogCoord, 0.0, 0.0, 1.0)");
+        }
         else if (!strcmp(what, "weight") || !strcmp(what, "matrixindex")) {
             optional_index(p, 0);
+            if (!strcmp(what, "weight")) p->conventional_bound |= 1u << 1;
             snprintf(out, 160, "vec4(1.0, 0.0, 0.0, 0.0)");
         } else if (!strcmp(what, "color")) {
             bool secondary = color_qualifier(p);
+            p->conventional_bound |= 1u << (secondary ? 4 : 3);
             snprintf(out, 160, secondary ? "gl_SecondaryColor" : "gl_Color");
         } else if (!strcmp(what, "texcoord")) {
             int n = optional_index(p, 0);
+            if (n >= 0 && n < 8) p->conventional_bound |= 1u << (8 + n);
             snprintf(out, 160, "gl_MultiTexCoord%d", n);
         } else if (!strcmp(what, "attrib")) {
             int n = optional_index(p, 0);
             if (n < 0 || n >= 16) { fail(p, "attribute index out of range"); return; }
+            p->generic_bound |= 1u << n;
             const char *legacy = n >= 8 ? NULL : legacy_attribute(n);
             if (n >= 8) snprintf(out, 160, "gl_MultiTexCoord%d", n - 8);
             else if (legacy) snprintf(out, 160, "%s", legacy);
@@ -596,8 +663,10 @@ static void attribute_binding(struct parser *p, char *out)
     } else if (!strcmp(what, "texcoord")) {
         int n = optional_index(p, 0);
         snprintf(out, 160, "gl_TexCoord[%d]", n);
-    } else if (!strcmp(what, "fogcoord")) snprintf(out, 160, "vec4(gl_FogFragCoord, 0.0, 0.0, 1.0)");
-    else if (!strcmp(what, "position")) snprintf(out, 160, "gl_FragCoord");
+    } else if (!strcmp(what, "fogcoord")) {
+        p->fogcoord_read = true;
+        snprintf(out, 160, "vec4(gl_FogFragCoord, 0.0, 0.0, 1.0)");
+    } else if (!strcmp(what, "position")) snprintf(out, 160, "gl_FragCoord");
     else fail(p, "unknown fragment attribute '%s'", what);
 }
 
@@ -706,24 +775,31 @@ static void source_operand(struct parser *p, char *out, size_t size)
     else accept(p, "+");
     char base[200] = {0};
     if (p->token.kind == TOK_NUMBER || is(p, "{")) {
-        char c[160];
+        char c[160], key[160];
+        bool scalar = p->token.kind == TOK_NUMBER;
         constant_vector(p, c, true);
         snprintf(base, sizeof base, "%s", c);
+        /* A scalar constant and the equal vector count apart. */
+        snprintf(key, sizeof key, "%s%s", scalar ? "scalar " : "", c);
+        count_key(&p->param_keys, &p->param_count, key);
     } else if (p->token.kind == TOK_IDENT) {
         if (is(p, "vertex") || is(p, "fragment")) {
             char e[160];
             attribute_binding(p, e);
             snprintf(base, sizeof base, "(%s)", e);
+            count_key(&p->attrib_keys, &p->attrib_count, e);
         } else if (is(p, "state") || is(p, "program")) {
             char e[4][160];
             if (parameter_binding(p, e, 1, NULL, NULL) < 1) return;
             snprintf(base, sizeof base, "(%s)", e[0]);
+            count_key(&p->param_keys, &p->param_count, e[0]);
         } else {
             char ident[64];
             expect_ident(p, ident, sizeof ident);
             struct name *n = find_name(p, ident);
             if (!n) {
-                fail(p, "undeclared '%s'", ident);
+                fail(p, "undefined source identifier");
+                undefined_hint(p, ident);
                 return;
             }
             if (n->kind == NAME_PARAM_ARRAY) {
@@ -743,21 +819,30 @@ static void source_operand(struct parser *p, char *out, size_t size)
                     int offset = 0;
                     if (accept(p, "+")) offset = expect_integer(p);
                     else if (accept(p, "-")) offset = -expect_integer(p);
-                    snprintf(index, sizeof index, "clamp(%s.x + %d, 0, %d)", address, offset + (n->alias_array ? n->alias_base : 0),
+                    snprintf(index, sizeof index, "clamp(%s.x + %d, 0, %d)", a ? a->glsl : address, offset + (n->alias_array ? n->alias_base : 0),
                              n->alias_array ? n->alias_base + n->array_size - 1 : n->array_size - 1);
                     if (n->alias_array) {
                         if (!strcmp(n->alias_array, "glm_arb_env")) p->env_dynamic = true;
                         else p->local_dynamic = true;
                     }
+                    /* Relative addressing may read every element. */
+                    for (int i = 0; n->element_keys && i < n->array_size; ++i)
+                        count_key(&p->param_keys, &p->param_count, n->element_keys[i]);
                     expect(p, "]");
-                    snprintf(base, sizeof base, "%s[%s]", n->alias_array ? n->alias_array : n->ident, index);
+                    snprintf(base, sizeof base, "%s[%s]", n->alias_array ? n->alias_array : n->glsl, index);
                     goto swizzle;
                 }
                 expect(p, "]");
                 if (n->alias_array) snprintf(base, sizeof base, "%s[%d]", n->alias_array, n->alias_base + atoi(index));
-                else snprintf(base, sizeof base, "%s[%s]", n->ident, index);
+                else snprintf(base, sizeof base, "%s[%s]", n->glsl, index);
+                int element = atoi(index);
+                if (n->element_keys && element >= 0 && element < n->array_size)
+                    count_key(&p->param_keys, &p->param_count, n->element_keys[element]);
             } else if (n->kind == NAME_TEMP || n->kind == NAME_PARAM || n->kind == NAME_ATTRIB) {
-                snprintf(base, sizeof base, "%s", n->kind == NAME_TEMP ? n->ident : n->expression);
+                snprintf(base, sizeof base, "%s", n->kind == NAME_TEMP ? n->glsl : n->expression);
+                if (n->kind == NAME_TEMP) p->temp_used[n->slot] = true;
+                else if (n->kind == NAME_PARAM) count_key(&p->param_keys, &p->param_count, n->key);
+                else count_key(&p->attrib_keys, &p->attrib_count, n->key);
             } else if (n->kind == NAME_OUTPUT) {
                 fail(p, "result registers cannot be read");
                 return;
@@ -788,14 +873,19 @@ static void destination(struct parser *p, char *variable, size_t size, char *mas
         expect_ident(p, ident, sizeof ident);
         struct name *n = find_name(p, ident);
         if (!n) {
-            fail(p, "undeclared '%s'", ident);
+            fail(p, "undefined destination identifier");
+            undefined_hint(p, ident);
             return;
         }
         if (n->kind == NAME_OUTPUT) {
             *slot = atoi(n->expression);
             snprintf(variable, size, "%s", result_variable(*slot));
+        } else if (n->kind == NAME_ADDRESS && n->alias) {
+            fail(p, "address register alias '%s' cannot be written", ident); /* as Apple's */
+            return;
         } else if (n->kind == NAME_TEMP || n->kind == NAME_ADDRESS) {
-            snprintf(variable, size, "%s", ident);
+            snprintf(variable, size, "%s", n->glsl);
+            if (n->kind == NAME_TEMP) p->temp_used[n->slot] = true;
         } else {
             fail(p, "'%s' cannot be written", ident);
             return;
@@ -949,6 +1039,9 @@ static void instruction(struct parser *p, const struct opcode *op, bool saturate
     char variable[64], mask[8];
     int slot;
     char s[3][400];
+    ++p->instructions;
+    if (!strcmp(op->name, "TEX") || !strcmp(op->name, "TXP") || !strcmp(op->name, "TXB")) ++p->tex_instructions;
+    else ++p->alu_instructions;
     if (!strcmp(op->name, "KIL")) {
         source_operand(p, s[0], sizeof s[0]);
         emit(&p->body, "  if (any(lessThan(%s, vec4(0.0)))) discard;\n", s[0]);
@@ -1024,9 +1117,11 @@ static void declaration_list(struct parser *p, enum name_kind kind)
         char ident[64];
         expect_ident(p, ident, sizeof ident);
         if (p->failed) return;
-        if (!add_name(p, ident, kind)) return;
-        if (kind == NAME_TEMP) emit(&p->prologue, "  vec4 %s = vec4(0.0);\n", ident);
-        else emit(&p->prologue, "  ivec4 %s = ivec4(0);\n", ident);
+        struct name *n = add_name(p, ident, kind);
+        if (!n) return;
+        if (kind == NAME_ADDRESS) ++p->address_declared;
+        if (kind == NAME_TEMP) emit(&p->prologue, "  vec4 %s = vec4(0.0);\n", n->glsl);
+        else emit(&p->prologue, "  ivec4 %s = ivec4(0);\n", n->glsl);
     } while (accept(p, ","));
 }
 
@@ -1051,10 +1146,11 @@ static void param_statement(struct parser *p)
         int count = parameter_item(p, items, 4, true, NULL, NULL);
         if (count != 1) fail(p, "'%s' needs a single vector binding", ident);
         snprintf(n->expression, sizeof n->expression, "%s", items[0]);
+        snprintf(n->key, sizeof n->key, "%s", items[0]);
         /* Constant vectors are hoisted into locals. */
         if (!strncmp(items[0], "vec4(", 5)) {
-            emit(&p->prologue, "  vec4 %s = %s;\n", ident, items[0]);
-            snprintf(n->expression, sizeof n->expression, "%s", ident);
+            emit(&p->prologue, "  vec4 %s = %s;\n", n->glsl, items[0]);
+            snprintf(n->expression, sizeof n->expression, "%s", n->glsl);
         } else {
             snprintf(n->expression, sizeof n->expression, "(%s)", items[0]);
         }
@@ -1063,28 +1159,32 @@ static void param_statement(struct parser *p)
     struct name *n = add_name(p, ident, NAME_PARAM_ARRAY);
     if (!n) return;
     expect(p, "{");
-    char (*items)[160] = calloc(256, sizeof *items);
+    /* Up to GL_MAX_PROGRAM_PARAMETERS_ARB (1024) elements. */
+    enum { MAX_ELEMENTS = 1024 };
+    char (*items)[160] = calloc(MAX_ELEMENTS, sizeof *items);
     int count = 0;
     const char *alias = NULL;
     int alias_base = 0, groups = 0;
     do {
         const char *a;
         int base;
-        int got = parameter_item(p, items + count, 256 - count, false, &a, &base);
+        int got = parameter_item(p, items + count, MAX_ELEMENTS - count, false, &a, &base);
         if (groups == 0 && a) { alias = a; alias_base = base; }
         else alias = NULL;
         count += got;
         ++groups;
-    } while (!p->failed && accept(p, ",") && count < 256);
+    } while (!p->failed && accept(p, ",") && count < MAX_ELEMENTS);
     expect(p, "}");
     if (groups != 1) alias = NULL;
     if (declared >= 0 && declared != count) fail(p, "'%s' declared with %d elements but has %d", ident, declared, count);
     n->array_size = count;
+    n->element_keys = calloc((size_t)(count ? count : 1), sizeof *n->element_keys);
+    for (int i = 0; i < count; ++i) snprintf(n->element_keys[i], 160, "%s", items[i]);
     if (alias) {
         n->alias_array = alias;
         n->alias_base = alias_base;
     } else if (!p->failed) {
-        emit(&p->prologue, "  vec4 %s[%d] = vec4[%d](", ident, count, count);
+        emit(&p->prologue, "  vec4 %s[%d] = vec4[%d](", n->glsl, count, count);
         for (int i = 0; i < count; ++i) emit(&p->prologue, "%s%s", i ? ", " : "", items[i]);
         emit(&p->prologue, ");\n");
     }
@@ -1094,6 +1194,10 @@ static void param_statement(struct parser *p)
 static void statement(struct parser *p)
 {
     char word[64];
+    if (p->token.kind != TOK_IDENT) {
+        fail(p, "unrecognised statement");
+        return;
+    }
     expect_ident(p, word, sizeof word);
     if (p->failed) return;
     if (!strcmp(word, "OPTION")) {
@@ -1119,6 +1223,7 @@ static void statement(struct parser *p)
         char e[160];
         attribute_binding(p, e);
         snprintf(n->expression, sizeof n->expression, "(%s)", e);
+        snprintf(n->key, sizeof n->key, "%s", e);
     } else if (!strcmp(word, "PARAM")) {
         param_statement(p);
     } else if (!strcmp(word, "OUTPUT")) {
@@ -1136,29 +1241,22 @@ static void statement(struct parser *p)
         expect_ident(p, target, sizeof target);
         struct name *t = find_name(p, target);
         if (!t) {
-            fail(p, "undeclared '%s'", target);
+            fail(p, "undefined identifier");
+            undefined_hint(p, target);
             return;
         }
         struct name copy = *t;
         struct name *n = add_name(p, ident, t->kind);
         if (!n) return;
-        *n = copy;
+        *n = copy; /* the same variable (glsl, slot), under another name */
         snprintf(n->ident, sizeof n->ident, "%s", ident);
-        if (copy.kind == NAME_TEMP || copy.kind == NAME_ADDRESS) {
-            /* The alias names the same variable. */
-            n->kind = NAME_ATTRIB;
-            snprintf(n->expression, sizeof n->expression, "%s", target);
-            if (copy.kind == NAME_TEMP) {
-                /* Writable alias: redirect through a macro-like rename. */
-                n->kind = NAME_TEMP;
-                emit(&p->declarations, "#define %s %s\n", ident, target);
-            }
-        }
+        n->alias = true;
     } else {
         bool saturate;
         const struct opcode *op = find_opcode(word, &saturate);
         if (!op || (p->vertex ? !op->vertex : !op->fragment) || (saturate && p->vertex)) {
-            fail(p, "unknown instruction '%s'", word);
+            fail(p, "unrecognised statement");
+            snprintf(p->error_hint, sizeof p->error_hint, "%s", word);
             return;
         }
         instruction(p, op, saturate);
@@ -1177,6 +1275,85 @@ static const char helpers[] =
     "  float v = abs(a), e = floor(log2(v));\n"
     "  return vec4(e, v / exp2(e), log2(v), 1.0);\n}\n";
 
+/* The GLSL expression parameter_binding gives `text` (state.* or program.*). */
+static void binding_key(bool vertex, const char *text, char *out)
+{
+    struct parser *q = calloc(1, sizeof *q);
+    q->source = text;
+    q->length = strlen(text);
+    q->vertex = vertex;
+    q->env_max = q->local_max = -1;
+    next(q);
+    char e[4][160];
+    if (parameter_binding(q, e, 1, NULL, NULL) >= 1 && !q->failed) snprintf(out, 160, "%s", e[0]);
+    else snprintf(out, 160, "%s", text);
+    free(q->declarations.data);
+    free(q->body.data);
+    free(q->prologue.data);
+    free(q);
+}
+
+/* The counters glGetProgramivARB reports. Options add what Apple's
+   implementation counts for them: position invariance 8 instructions and
+   8 parameters (the MVP and modelview rows), fog 4 (linear) or 5
+   instructions with 2 temporaries, its colour and parameters (linear: one
+   more constant) and the fog coordinate; reading fragment.fogcoord costs
+   one instruction and temporary. */
+static void count_program(struct parser *p, struct glm_arb_translation *out)
+{
+    int extra_instructions = 0, extra_temporaries = 0;
+    char key[160];
+    if (p->vertex && p->position_invariant) {
+        extra_instructions += 8;
+        const char *const matrices[] = {"mvp", "modelview"};
+        for (int m = 0; m < 2; ++m)
+            for (int r = 0; r < 4; ++r) {
+                char text[64];
+                snprintf(text, sizeof text, "state.matrix.%s.row[%d]", matrices[m], r);
+                binding_key(true, text, key);
+                count_key(&p->param_keys, &p->param_count, key);
+            }
+        count_key(&p->attrib_keys, &p->attrib_count, "gl_Vertex");
+    }
+    if (!p->vertex && p->fog_option) {
+        extra_instructions += p->fog_option == 1 ? 4 : 5;
+        extra_temporaries += 2;
+        binding_key(false, "state.fog.color", key);
+        count_key(&p->param_keys, &p->param_count, key);
+        binding_key(false, "state.fog.params", key);
+        count_key(&p->param_keys, &p->param_count, key);
+        if (p->fog_option == 1) count_key(&p->param_keys, &p->param_count, "glm fog linear");
+        count_key(&p->attrib_keys, &p->attrib_count, "vec4(gl_FogFragCoord, 0.0, 0.0, 1.0)");
+    } else if (!p->vertex && p->fogcoord_read) {
+        extra_instructions += 1;
+        extra_temporaries += 1;
+    }
+    int temporaries = 0;
+    for (int i = 0; i < p->name_count; ++i) temporaries += p->temp_used[i];
+    out->instructions = p->instructions + extra_instructions;
+    out->alu_instructions = p->vertex ? 0 : p->alu_instructions + extra_instructions;
+    out->tex_instructions = p->vertex ? 0 : p->tex_instructions;
+    out->tex_indirections = p->vertex ? 0 : 1;
+    out->temporaries = temporaries + extra_temporaries;
+    out->parameters = p->param_count;
+    out->attribs = p->attrib_count ? p->attrib_count : 1; /* Apple counts at least one */
+    out->address_registers = p->address_declared;
+}
+
+static void free_counting(struct parser *p)
+{
+    for (int i = 0; i < p->name_count; ++i) {
+        if (!p->names[i].element_keys) continue;
+        bool shared = false; /* ALIAS copies the pointer */
+        for (int j = 0; j < i; ++j) shared |= p->names[j].element_keys == p->names[i].element_keys;
+        if (!shared) free(p->names[i].element_keys);
+    }
+    for (int i = 0; i < p->name_count; ++i) p->names[i].element_keys = NULL;
+    free(p->param_keys);
+    free(p->attrib_keys);
+    p->param_keys = p->attrib_keys = NULL;
+}
+
 bool glm_arb_translate(const char *source, size_t length, bool vertex, struct glm_arb_translation *out)
 {
     memset(out, 0, sizeof *out);
@@ -1189,21 +1366,40 @@ bool glm_arb_translate(const char *source, size_t length, bool vertex, struct gl
     size_t header_length = strlen(header);
     if (length < header_length || strncmp(source, header, header_length)) {
         p->failed = true;
-        snprintf(p->error, sizeof p->error, "missing %s header", header);
+        snprintf(p->error, sizeof p->error, "missing or invalid version");
         p->error_position = 0;
+        size_t n = 0;
+        while (n < length && n < sizeof p->error_hint - 1 && !isspace((unsigned char)source[n])) ++n;
+        snprintf(p->error_hint, sizeof p->error_hint, "%.*s", (int)n, source);
     } else {
         p->at = header_length;
         next(p);
         while (!p->failed && !is(p, "END")) {
             if (p->token.kind == TOK_END) {
-                fail(p, "missing END");
+                fail(p, "unexpected end of program");
+                /* Quoted at the last token, as Apple's message is. */
+                p->error_position = p->previous.position;
+                snprintf(p->error_hint, sizeof p->error_hint, "%s", p->previous.text);
                 break;
             }
             statement(p);
         }
+        /* Only whitespace and comments may follow END, as Apple's parser
+           requires. */
+        if (!p->failed) {
+            next(p);
+            if (p->token.kind != TOK_END) fail(p, "text after END");
+        }
     }
+    uint32_t conflict = vertex ? p->conventional_bound & p->generic_bound : 0;
+    if (!p->failed && conflict)
+        fail(p, "vertex.attrib[%d] and the conventional attribute it aliases are both bound", __builtin_ctz(conflict));
     if (p->failed) {
-        snprintf(out->error, sizeof out->error, "%s", p->error);
+        free_counting(p);
+        /* Apple's form: "Error on line N: message (hint: 'token')". */
+        int line = 1;
+        for (size_t i = 0; i < p->error_position && i < length; ++i) line += source[i] == '\n';
+        snprintf(out->error, sizeof out->error, "Error on line %d: %s (hint: '%s')", line, p->error, p->error_hint);
         out->error_position = (int)p->error_position;
         free(p->declarations.data);
         free(p->body.data);
@@ -1214,8 +1410,8 @@ bool glm_arb_translate(const char *source, size_t length, bool vertex, struct gl
 
     struct text t = {0};
     emit(&t, "#version 120\n");
-    int env_count = p->env_dynamic ? 256 : p->env_max + 1;
-    int local_count = p->local_dynamic ? 256 : p->local_max + 1;
+    int env_count = p->env_dynamic ? (vertex ? GLM_ARB_ENV_PARAMETERS : GLM_ARB_FRAGMENT_ENV_PARAMETERS) : p->env_max + 1;
+    int local_count = p->local_dynamic ? GLM_ARB_LOCAL_PARAMETERS : p->local_max + 1;
     if (env_count < 1) env_count = 1;
     if (local_count < 1) local_count = 1;
     emit(&t, "layout(std140, set = 1, binding = 13) uniform GLMARB { vec4 glm_arb_env[%d]; vec4 glm_arb_local[%d]; };\n", env_count, local_count);
@@ -1224,6 +1420,8 @@ bool glm_arb_translate(const char *source, size_t length, bool vertex, struct gl
     for (int i = 0; i < 16; ++i)
         if (p->attribs_used & (1u << i)) emit(&t, "attribute vec4 arb_attrib%d;\n", i);
     out->attribs_used = p->attribs_used;
+    count_program(p, out);
+    free_counting(p);
     emit(&t, "%s", helpers);
     if (p->declarations.data) emit(&t, "%s", p->declarations.data);
     for (int slot = 0; slot < RESULT_COUNT; ++slot) {
@@ -1235,7 +1433,10 @@ bool glm_arb_translate(const char *source, size_t length, bool vertex, struct gl
     if (p->body.data) emit(&t, "%s", p->body.data);
     uint32_t w = p->results_written;
     if (vertex) {
-        if (p->position_invariant) emit(&t, "  gl_Position = ftransform();\n");
+        /* Position-invariant programs get user clip planes as fixed
+           function does (ARB_vertex_program issue: "user-defined clipping
+           ... for programs that use the position invariant option"). */
+        if (p->position_invariant) emit(&t, "  gl_Position = ftransform();\n  gl_ClipVertex = gl_ModelViewMatrix * gl_Vertex;\n");
         else if (w & (1u << RESULT_POSITION)) emit(&t, "  gl_Position = %s;\n", result_variable(RESULT_POSITION));
         if (w & (1u << RESULT_COLOR0)) emit(&t, "  gl_FrontColor = %s;\n", result_variable(RESULT_COLOR0));
         if (w & (1u << RESULT_COLOR1)) emit(&t, "  gl_FrontSecondaryColor = %s;\n", result_variable(RESULT_COLOR1));

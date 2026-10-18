@@ -6,6 +6,7 @@
  * single vertex layout, so client arrays, immediate mode and every GL vertex
  * format share one path. */
 #include "glm_internal.h"
+#include "arb_program.h"
 #include "programs.h"
 
 #include <stdlib.h>
@@ -20,6 +21,11 @@ enum { MTL_POINT = 0, MTL_LINE = 1, MTL_LINE_STRIP = 2, MTL_TRIANGLE = 3, MTL_TR
 struct glm_begin_end {
     GLenum mode;
     float *vertices; /* GLM_MAX_ATTRIBS float4 per vertex */
+    uint8_t *edge_flags; /* per vertex */
+    /* Once glMaterial runs between vertices: GLM_VERTEX_MATERIAL_FLOAT4S
+       per vertex (capacity entries). */
+    float *materials;
+    bool materials_vary;
     uint32_t count, capacity;
 };
 
@@ -54,10 +60,57 @@ GLM_EXPORT void glBegin(GLenum mode)
     GLM_CONTEXT(ctx);
     if (ctx->immediate) return glm_error(ctx, GL_INVALID_OPERATION);
     if (!valid_mode(mode) || mode == GL_PATCHES) return glm_error(ctx, GL_INVALID_ENUM);
+    if (glm_arb_draw_invalid(ctx)) return glm_error(ctx, GL_INVALID_OPERATION);
     static __thread struct glm_begin_end storage;
     storage.mode = mode;
     storage.count = 0;
+    storage.materials_vary = false;
     ctx->immediate = &storage;
+}
+
+static void material_snapshot(const struct glm_state *s, float *out)
+{
+    for (int f = 0; f < 2; ++f) {
+        const struct glm_material *m = &s->material[f];
+        memcpy(out + (f * 4 + 0) * 4, m->emission, 16);
+        memcpy(out + (f * 4 + 1) * 4, m->ambient, 16);
+        memcpy(out + (f * 4 + 2) * 4, m->diffuse, 16);
+        memcpy(out + (f * 4 + 3) * 4, m->specular, 16);
+    }
+    float *shininess = out + 8 * 4;
+    shininess[0] = s->material[0].shininess;
+    shininess[1] = s->material[1].shininess;
+    shininess[2] = shininess[3] = 0;
+}
+
+/* glMaterial between glBegin and glEnd (GL 2.1 2.14.3): from now on each
+   vertex keeps the materials current when it was specified; the vertices
+   so far keep the ones before this change. */
+GLM_HIDDEN void glm_immediate_material(struct glm_context *ctx)
+{
+    struct glm_begin_end *im = ctx->immediate;
+    if (!im || im->materials_vary) return;
+    im->materials_vary = true;
+    size_t stride = GLM_VERTEX_MATERIAL_FLOAT4S * 4;
+    im->materials = realloc(im->materials, (size_t)(im->capacity ? im->capacity : 1) * stride * sizeof(float));
+    for (uint32_t i = 0; i < im->count; ++i) material_snapshot(&ctx->state, im->materials + i * stride);
+}
+
+/* Fixed-function vertices of ARB_vertex_blend or APPLE_vertex_point_size:
+   their weights in attribute 1 and point sizes in attribute 7. */
+GLM_HIDDEN bool glm_ff_vertex_extras(struct glm_context *ctx)
+{
+    const struct glm_state *s = &ctx->state;
+    return (s->vertex_blend || s->vertex_point_size) && !s->vertex_program && !glm_current_program(ctx);
+}
+
+static void current_extras(const struct glm_state *s, float *v)
+{
+    memcpy(v + GLM_ATTR_WEIGHT * 4, s->current_weight, 4 * sizeof(float));
+    float *size = v + GLM_ATTR_POINT_SIZE * 4;
+    size[0] = s->current_point_size;
+    size[1] = size[2] = 0;
+    size[3] = 1;
 }
 
 static void emit_vertex(struct glm_context *ctx, float x, float y, float z, float w)
@@ -66,9 +119,16 @@ static void emit_vertex(struct glm_context *ctx, float x, float y, float z, floa
     if (im->count == im->capacity) {
         im->capacity = im->capacity ? im->capacity * 2 : 256;
         im->vertices = realloc(im->vertices, (size_t)im->capacity * GLM_MAX_ATTRIBS * 4 * sizeof(float));
+        im->edge_flags = realloc(im->edge_flags, im->capacity);
+        if (im->materials_vary)
+            im->materials = realloc(im->materials, (size_t)im->capacity * GLM_VERTEX_MATERIAL_FLOAT4S * 4 * sizeof(float));
     }
+    if (im->materials_vary)
+        material_snapshot(&ctx->state, im->materials + (size_t)im->count * GLM_VERTEX_MATERIAL_FLOAT4S * 4);
+    im->edge_flags[im->count] = ctx->state.edge_flag;
     float *v = im->vertices + (size_t)im->count * GLM_MAX_ATTRIBS * 4;
     memcpy(v, ctx->state.current, sizeof ctx->state.current);
+    if (glm_ff_vertex_extras(ctx)) current_extras(&ctx->state, v);
     v[0] = x; v[1] = y; v[2] = z; v[3] = w;
     /* Fog coordinates live in the fog slot's x like other attributes. */
     ++im->count;
@@ -83,7 +143,21 @@ GLM_EXPORT void glEnd(void)
     struct glm_begin_end *im = ctx->immediate;
     if (!im) return glm_error(ctx, GL_INVALID_OPERATION);
     ctx->immediate = NULL;
-    if (im->count && !ctx->conditional_discard) submit(ctx, im->mode, im->vertices, im->count, NULL, 0, 0, 0);
+    /* As for array draws, even without vertices (Apple). */
+    if (!ctx->draw_framebuffer && !ctx->presents) return glm_error(ctx, GL_INVALID_FRAMEBUFFER_OPERATION);
+    if (im->count && !ctx->conditional_discard) {
+        ctx->edge_flags = im->edge_flags;
+        if (im->materials_vary) {
+            /* Each vertex finds its materials by index (ffgen.c). */
+            for (uint32_t i = 0; i < im->count; ++i)
+                im->vertices[((size_t)i * GLM_MAX_ATTRIBS + GLM_ATTR_MATERIAL_INDEX) * 4] = (float)i;
+            ctx->vertex_materials = im->materials;
+            ctx->vertex_material_count = im->count;
+        }
+        submit(ctx, im->mode, im->vertices, im->count, NULL, 0, 0, 0);
+        ctx->edge_flags = NULL;
+        ctx->vertex_materials = NULL;
+    }
 }
 
 GLM_EXPORT void glRectf(GLfloat x1, GLfloat y1, GLfloat x2, GLfloat y2)
@@ -185,12 +259,20 @@ GLM_HIDDEN int glm_client_array_slot(struct glm_context *ctx, GLenum array)
     }
 }
 
+static int legacy_array_index(GLenum array);
+
 GLM_EXPORT void glEnableClientState(GLenum array)
 {
     GLM_CONTEXT(ctx);
     int slot = glm_client_array_slot(ctx, array);
     if (slot < 0) {
-        if (array == GL_EDGE_FLAG_ARRAY || array == GL_INDEX_ARRAY || array == GL_ELEMENT_ARRAY_APPLE) return;
+        int legacy = legacy_array_index(array);
+        if (legacy >= 0) {
+            ctx->vao->legacy[legacy].enabled = true;
+            glm_vao_changed(ctx->vao);
+            return;
+        }
+        if (array == GL_ELEMENT_ARRAY_APPLE) return;
         return glm_error(ctx, GL_INVALID_ENUM);
     }
     if (ctx->vao->arrays[slot].enabled) return;
@@ -203,7 +285,13 @@ GLM_EXPORT void glDisableClientState(GLenum array)
     GLM_CONTEXT(ctx);
     int slot = glm_client_array_slot(ctx, array);
     if (slot < 0) {
-        if (array == GL_EDGE_FLAG_ARRAY || array == GL_INDEX_ARRAY || array == GL_ELEMENT_ARRAY_APPLE) return;
+        int legacy = legacy_array_index(array);
+        if (legacy >= 0) {
+            ctx->vao->legacy[legacy].enabled = false;
+            glm_vao_changed(ctx->vao);
+            return;
+        }
+        if (array == GL_ELEMENT_ARRAY_APPLE) return;
         return glm_error(ctx, GL_INVALID_ENUM);
     }
     if (!ctx->vao->arrays[slot].enabled) return;
@@ -239,11 +327,75 @@ GLM_EXPORT void glClientActiveTexture(GLenum texture)
 }
 GLM_EXPORT void glClientActiveTextureARB(GLenum texture) { glClientActiveTexture(texture); }
 
-/* Edge flags only matter for GL_LINE/GL_POINT polygon modes, whose outlines
-   are drawn whole. */
-GLM_EXPORT void glEdgeFlag(GLboolean flag) { (void)flag; }
-GLM_EXPORT void glEdgeFlagv(const GLboolean *flag) { (void)flag; }
-GLM_EXPORT void glEdgeFlagPointer(GLsizei stride, const GLvoid *pointer) { (void)stride, (void)pointer; }
+/* Edge flags (GL 2.1 2.6.2): which edges of separate triangles, quads and
+   polygons are boundary edges, drawn in GL_LINE polygon mode (and whose
+   start vertices are drawn in GL_POINT mode). */
+GLM_EXPORT void glEdgeFlag(GLboolean flag) { GLM_CONTEXT(ctx); ctx->state.edge_flag = flag != GL_FALSE; }
+GLM_EXPORT void glEdgeFlagv(const GLboolean *flag) { glEdgeFlag(*flag); }
+
+GLM_HIDDEN void glm_set_legacy_array(struct glm_context *ctx, int which, GLint size, GLenum type, GLsizei stride,
+                                     const void *pointer);
+#define set_legacy_array glm_set_legacy_array
+void glm_set_legacy_array(struct glm_context *ctx, int which, GLint size, GLenum type, GLsizei stride,
+                          const void *pointer)
+{
+    if (ctx->immediate) return glm_error(ctx, GL_INVALID_OPERATION);
+    if (stride < 0) return glm_error(ctx, GL_INVALID_VALUE);
+    struct glm_array *a = &ctx->vao->legacy[which];
+    a->size = size;
+    a->type = type;
+    a->stride = stride;
+    a->pointer = pointer;
+    a->buffer = ctx->array_buffer;
+    glm_vao_changed(ctx->vao);
+}
+
+GLM_EXPORT void glEdgeFlagPointer(GLsizei stride, const GLvoid *pointer)
+{ GLM_CONTEXT(ctx); set_legacy_array(ctx, GLM_LEGACY_EDGE_FLAG, 1, GL_UNSIGNED_BYTE, stride, pointer); }
+GLM_EXPORT void glIndexPointer(GLenum type, GLsizei stride, const GLvoid *pointer)
+{
+    GLM_CONTEXT(ctx);
+    if (type != GL_UNSIGNED_BYTE && type != GL_SHORT && type != GL_INT && type != GL_FLOAT && type != GL_DOUBLE)
+        return glm_error(ctx, GL_INVALID_ENUM);
+    set_legacy_array(ctx, GLM_LEGACY_INDEX, 1, type, stride, pointer);
+}
+GLM_EXPORT void glPointSizePointerAPPLE(GLenum type, GLsizei stride, const GLvoid *pointer)
+{
+    GLM_CONTEXT(ctx);
+    if (type != GL_FLOAT && type != GL_FIXED) return glm_error(ctx, GL_INVALID_ENUM);
+    set_legacy_array(ctx, GLM_LEGACY_POINT_SIZE, 1, type, stride, pointer);
+}
+
+static int legacy_array_index(GLenum array)
+{
+    switch (array) {
+    case GL_EDGE_FLAG_ARRAY: return GLM_LEGACY_EDGE_FLAG;
+    case GL_INDEX_ARRAY: return GLM_LEGACY_INDEX;
+    case GL_WEIGHT_ARRAY_ARB: return GLM_LEGACY_WEIGHT;
+    case GL_POINT_SIZE_ARRAY_APPLE: return GLM_LEGACY_POINT_SIZE;
+    default: return -1;
+    }
+}
+
+static const uint8_t *array_base(struct glm_context *ctx, const struct glm_array *a, size_t *limit);
+
+/* Each of `count` vertices' edge flags from `first`: the edge flag array's,
+   or the current flag. NULL when every one is set. */
+static uint8_t *fetch_edge_flags(struct glm_context *ctx, uint32_t first, uint32_t count)
+{
+    const struct glm_array *a = &ctx->vao->legacy[GLM_LEGACY_EDGE_FLAG];
+    size_t limit = 0;
+    const uint8_t *base = a->enabled ? array_base(ctx, a, &limit) : NULL;
+    if (!base && ctx->state.edge_flag) return NULL;
+    uint8_t *flags = malloc(count ? count : 1);
+    if (!flags) return NULL;
+    size_t stride = a->stride ? (size_t)a->stride : 1;
+    for (uint32_t i = 0; i < count; ++i) {
+        size_t offset = (size_t)(first + i) * stride;
+        flags[i] = base ? (offset < limit || !limit ? base[offset] != 0 : 1) : 0;
+    }
+    return flags;
+}
 
 GLM_EXPORT void glGetPointerv(GLenum pname, GLvoid **params)
 {
@@ -257,8 +409,12 @@ GLM_EXPORT void glGetPointerv(GLenum pname, GLvoid **params)
     case GL_SECONDARY_COLOR_ARRAY_POINTER: *params = (GLvoid *)arrays[GLM_ATTR_SECONDARY_COLOR].pointer; break;
     case GL_FOG_COORD_ARRAY_POINTER: *params = (GLvoid *)arrays[GLM_ATTR_FOG].pointer; break;
     case GL_TEXTURE_COORD_ARRAY_POINTER: *params = (GLvoid *)arrays[texture].pointer; break;
-    case GL_EDGE_FLAG_ARRAY_POINTER: case GL_INDEX_ARRAY_POINTER: case GL_FEEDBACK_BUFFER_POINTER:
-    case GL_SELECTION_BUFFER_POINTER: *params = NULL; break;
+    case GL_EDGE_FLAG_ARRAY_POINTER: *params = (GLvoid *)ctx->vao->legacy[GLM_LEGACY_EDGE_FLAG].pointer; break;
+    case GL_INDEX_ARRAY_POINTER: *params = (GLvoid *)ctx->vao->legacy[GLM_LEGACY_INDEX].pointer; break;
+    case GL_WEIGHT_ARRAY_POINTER_ARB: *params = (GLvoid *)ctx->vao->legacy[GLM_LEGACY_WEIGHT].pointer; break;
+    case GL_POINT_SIZE_ARRAY_POINTER_APPLE: *params = (GLvoid *)ctx->vao->legacy[GLM_LEGACY_POINT_SIZE].pointer; break;
+    case GL_FEEDBACK_BUFFER_POINTER: *params = ctx->render_modes.feedback_buffer; break;
+    case GL_SELECTION_BUFFER_POINTER: *params = ctx->render_modes.select_buffer; break;
     case GL_ELEMENT_ARRAY_POINTER_APPLE: *params = (GLvoid *)ctx->apple_element_pointer; break;
     default: glm_error(ctx, GL_INVALID_ENUM);
     }
@@ -458,6 +614,29 @@ static float *fetch_vertices(struct glm_context *ctx, uint32_t first, uint32_t c
                 continue;
             }
             fetch_element(ctx, a, base + stride * index, dst);
+        }
+    }
+    if (glm_ff_vertex_extras(ctx)) {
+        /* The weight and point size arrays, or the current values. */
+        for (uint32_t v = 0; v < count; ++v) current_extras(&ctx->state, out + (size_t)v * GLM_MAX_ATTRIBS * 4);
+        const struct { int legacy, slot; } extras[] = {{GLM_LEGACY_WEIGHT, GLM_ATTR_WEIGHT},
+                                                       {GLM_LEGACY_POINT_SIZE, GLM_ATTR_POINT_SIZE}};
+        for (int e = 0; e < 2; ++e) {
+            const struct glm_array *a = &ctx->vao->legacy[extras[e].legacy];
+            size_t limit = 0;
+            const uint8_t *base = a->enabled ? array_base(ctx, a, &limit) : NULL;
+            if (!base) continue;
+            size_t element = type_size(a->type) * (size_t)a->size;
+            size_t stride = a->stride ? (size_t)a->stride : element;
+            for (uint32_t v = 0; v < count; ++v) {
+                size_t index = first + v;
+                if (limit != SIZE_MAX && (stride * index > limit || limit - stride * index < element)) continue;
+                float *dst = out + ((size_t)v * GLM_MAX_ATTRIBS + (size_t)extras[e].slot) * 4;
+                fetch_element(ctx, a, base + stride * index, dst);
+                /* Weights past the array's size are 0. */
+                if (extras[e].legacy == GLM_LEGACY_WEIGHT)
+                    for (int c = a->size; c < 4; ++c) dst[c] = 0;
+            }
         }
     }
     return out;
@@ -786,6 +965,15 @@ static bool wide_fixed_lines(struct glm_context *ctx)
            !(ctx->state.multisample && glm_backend_draw_samples(ctx) > 1);
 }
 
+/* Stippled lines and polygon outlines take the CPU stream, which builds
+   their stipple tables (submit). */
+static bool stipple_stream(struct glm_context *ctx, GLenum mode)
+{
+    if (!ctx->state.line_stipple || mode == GL_POINTS) return false;
+    bool lines = mode == GL_LINES || mode == GL_LINE_STRIP || mode == GL_LINE_LOOP;
+    return lines || ctx->state.polygon_mode[0] == GL_LINE || ctx->state.polygon_mode[1] == GL_LINE;
+}
+
 static bool wide_line_stream(struct glm_context *ctx, GLenum mode)
 {
     bool lines = mode == GL_LINES || mode == GL_LINE_STRIP || mode == GL_LINE_LOOP;
@@ -926,9 +1114,9 @@ static bool wide_interval_state(struct glm_context *ctx, const struct glm_draw *
         if (ctx->active_queries[q]) return false;
         for (int stream = 0; stream < 3; ++stream) if (ctx->indexed_queries[q][stream]) return false;
     }
+    if (s->line_stipple) return false;
     for (int c = 0; c < ctx->extra_cap_count; ++c)
-        if (ctx->extra_caps[c].enabled && (ctx->extra_caps[c].cap == GL_LINE_STIPPLE ||
-                                          ctx->extra_caps[c].cap == GL_POINT_SMOOTH)) return false;
+        if (ctx->extra_caps[c].enabled && ctx->extra_caps[c].cap == GL_POINT_SMOOTH) return false;
     for (int p = 0; p < GLM_MAX_CLIP_PLANES; ++p) if (!transformed && s->clip_plane_enabled[p]) return false;
     for (int u = 0; u < GLM_MAX_TEXTURE_UNITS; ++u) {
         const struct glm_texture_unit *unit = &s->units[u];
@@ -1258,6 +1446,76 @@ static bool wide_line_draw(struct glm_context *ctx, const struct glm_draw *draw)
 
 /* `instance` is the gl_InstanceID of this draw: instanced draws are fetched
    and submitted one instance at a time. */
+/* The line stipple table of the line primitives `pairs` (glm_draw.stipple):
+   (factor, pattern), then per primitive its start along the major axis,
+   the stipple counter there and the axis. Strips and loops carry the counter from
+   segment to segment, by the fragments each produced along its major
+   axis (GL 2.1 3.4.2). Window positions come from the vertex stage: fixed
+   function's transform here, a program's output from the GPU. */
+static float *stipple_table(struct glm_context *ctx, GLenum mode, const float *vertices, uint32_t vertex_count,
+                            const struct glm_draw *draw, const uint32_t *pairs, uint32_t count)
+{
+    const struct glm_state *s = &ctx->state;
+    uint32_t segments = count / 2;
+    float *clip = malloc((size_t)(vertex_count ? vertex_count : 1) * 12 * sizeof(float));
+    float *table = calloc((size_t)(segments + 1) * 4, sizeof(float));
+    if (!clip || !table) {
+        free(clip);
+        free(table);
+        return NULL;
+    }
+    if (!glm_current_program(ctx) && !s->vertex_program) {
+        float mvp[16];
+        glm_mat4_multiply(mvp, s->projection.m[s->projection.depth], s->modelview.m[s->modelview.depth]);
+        for (uint32_t i = 0; i < vertex_count; ++i) {
+            const float *v = vertices + (size_t)i * GLM_MAX_ATTRIBS * 4 + GLM_ATTR_POSITION * 4;
+            for (int r = 0; r < 4; ++r) clip[i * 4 + r] = mvp[r] * v[0] + mvp[4 + r] * v[1] + mvp[8 + r] * v[2] + mvp[12 + r] * v[3];
+        }
+    } else {
+        struct glm_draw positions = *draw;
+        positions.vertices = vertices;
+        positions.vertex_count = vertex_count;
+        if (!glm_backend_vertex_outputs(ctx, &positions, clip)) {
+            free(clip);
+            free(table);
+            return NULL;
+        }
+        /* Positions only, with y back the way GL has it. */
+        for (uint32_t i = 0; i < vertex_count; ++i) {
+            memmove(clip + i * 4, clip + i * 12, 4 * sizeof(float));
+            clip[i * 4 + 1] = -clip[i * 4 + 1];
+        }
+    }
+    table[0] = (float)s->line_stipple_factor;
+    table[1] = (float)s->line_stipple_pattern;
+    bool carry = mode == GL_LINE_STRIP || mode == GL_LINE_LOOP;
+    double counter = 0;
+    for (uint32_t k = 0; k < segments; ++k) {
+        bool restart = ctx->stipple_resets ? ctx->stipple_resets[k] != 0 : !carry;
+        double window[2][2];
+        for (int e = 0; e < 2; ++e) {
+            uint32_t v = pairs[2 * k + e];
+            const float *c = v < vertex_count ? clip + (size_t)v * 4 : (const float[4]){0, 0, 0, 1};
+            double w = c[3] != 0 ? c[3] : 1e-30;
+            for (int axis = 0; axis < 2; ++axis)
+                window[e][axis] = s->viewport[axis] + (c[axis] / w * 0.5 + 0.5) * s->viewport[axis + 2];
+        }
+        if (restart) counter = 0;
+        /* By the diamond-exit rule a line's fragments run from the pixel
+           holding its start to the one before the pixel holding its end,
+           along the major axis. */
+        int major = fabs(window[1][0] - window[0][0]) >= fabs(window[1][1] - window[0][1]) ? 0 : 1;
+        double from = window[0][major], to = window[1][major];
+        double steps = fabs(floor(to) - floor(from));
+        table[(k + 1) * 4 + 0] = (float)from;
+        table[(k + 1) * 4 + 2] = (float)counter;
+        table[(k + 1) * 4 + 3] = (float)major;
+        counter += steps;
+    }
+    free(clip);
+    return table;
+}
+
 static void submit(struct glm_context *ctx, GLenum mode, float *vertices, uint32_t vertex_count,
                    const uint32_t *indices, uint32_t index_count, uint32_t instance, uint32_t vertex_id_base)
 {
@@ -1267,6 +1525,12 @@ static void submit(struct glm_context *ctx, GLenum mode, float *vertices, uint32
         for (uint32_t i = 0; i < vertex_count; ++i) seq[i] = i;
         indices = seq;
         index_count = vertex_count;
+    }
+    /* Selection and feedback: no rasterization (render_modes.c). */
+    if (ctx->render_modes.mode != GL_RENDER && !ctx->polygon_split) {
+        glm_render_mode_submit(ctx, mode, vertices, vertex_count, indices, index_count, instance, vertex_id_base);
+        free(seq);
+        return;
     }
     struct glm_program *current = glm_current_program(ctx);
     if ((mode == GL_PATCHES) != (current && current->tess)) {
@@ -1304,8 +1568,13 @@ static void submit(struct glm_context *ctx, GLenum mode, float *vertices, uint32
         float mvp[16];
         glm_mat4_multiply(mvp, st->projection.m[st->projection.depth], st->modelview.m[st->modelview.depth]);
         struct index_list groups[3] = {{0}}; /* fill triangles, edges, points */
+        struct { uint8_t *data; uint32_t count, capacity; } resets = {0}; /* per edge: first of its polygon */
         uint8_t *point_seen = calloc(vertex_count ? vertex_count : 1, 1);
-        uint32_t n = index_count;
+        /* Edge flags mark boundary edges of separate triangles, quads and
+           polygons; strips and fans ignore them (GL 2.1 2.6.2). */
+        bool flagged = mode == GL_TRIANGLES || mode == GL_QUADS || mode == GL_POLYGON;
+        const uint8_t *edge_flags = flagged ? ctx->edge_flags : NULL;
+#define EDGE_FLAG(v) (!edge_flags || (v) >= vertex_count || edge_flags[(v)])
         for (uint32_t t = 0; t + 2 < list.count; t += 3) {
             bool front = true;
             if (fixed_function) {
@@ -1329,22 +1598,56 @@ static void submit(struct glm_context *ctx, GLenum mode, float *vertices, uint32
             if (face_mode == GL_FILL) {
                 push3(&groups[0], v[0], v[1], v[2]);
             } else if (face_mode == GL_LINE) {
-                /* The polygon's own edges: not the diagonals that split
-                   quads and polygons into triangles. */
-                uint32_t k = t / 3, edges = 7;
-                if (mode == GL_QUADS) edges = k & 1 ? 3 /* (1,2)(2,3) */ : 5 /* (0,1)(3,0) */;
-                else if (mode == GL_QUAD_STRIP) edges = k & 1 ? 6 /* (3,2)(2,0) */ : 3 /* (0,1)(1,3) */;
-                else if (mode == GL_POLYGON) edges = 1u | (k == n - 3 ? 2u : 0u) | (k == 0 ? 4u : 0u);
-                for (int e = 0; e < 3; ++e)
-                    if (edges >> e & 1) { push(&groups[1], v[e]); push(&groups[1], v[(e + 1) % 3]); }
+                /* The polygon's own edges (not the diagonals that split
+                   quads and polygons into triangles), once per polygon from
+                   its first triangle, around it in GL's vertex order from
+                   its last vertex as Apple's are (that start shows in the
+                   line stipple); GL_POLYGON from its first. */
+                uint32_t k = t / 3, corners = 3, start = 2;
+                uint32_t cycle[4] = {v[0], v[1], v[2], 0};
+                const uint32_t *poly = cycle;
+                if (mode == GL_TRIANGLE_FAN) {
+                    /* Triangulated (i, i+1, 0); GL's order is (0, i, i+1). */
+                    cycle[0] = v[2];
+                    cycle[1] = v[0];
+                    cycle[2] = v[1];
+                } else if (mode == GL_QUADS || mode == GL_QUAD_STRIP) {
+                    if ((k & 1) || t + 5 >= list.count) continue;
+                    /* GL_QUADS (v0 v1 v3)(v1 v2 v3); quad strips (v0 v1 v3)(v0 v3 v2). */
+                    cycle[0] = list.data[t];
+                    cycle[1] = list.data[t + 1];
+                    cycle[2] = mode == GL_QUADS ? list.data[t + 4] : list.data[t + 2];
+                    cycle[3] = mode == GL_QUADS ? list.data[t + 2] : list.data[t + 5];
+                    corners = 4;
+                    start = mode == GL_QUADS ? 3 : 2; /* the last vertex given */
+                } else if (mode == GL_POLYGON) {
+                    if (k) continue;
+                    poly = indices;
+                    corners = index_count;
+                    start = 0;
+                }
+                bool first = true;
+                for (uint32_t e = 0; e < corners; ++e) {
+                    uint32_t from = poly[(start + e) % corners], to = poly[(start + e + 1) % corners];
+                    if (!EDGE_FLAG(from)) continue;
+                    push(&groups[1], from);
+                    push(&groups[1], to);
+                    if (resets.count == resets.capacity) {
+                        resets.capacity = resets.capacity ? resets.capacity * 2 : 64;
+                        resets.data = realloc(resets.data, resets.capacity);
+                    }
+                    resets.data[resets.count++] = first;
+                    first = false;
+                }
             } else {
                 for (int k = 0; k < 3; ++k)
                     if (v[k] >= vertex_count || !point_seen[v[k]]) {
                         if (v[k] < vertex_count) point_seen[v[k]] = 1;
-                        push(&groups[2], v[k]);
+                        if (EDGE_FLAG(v[k])) push(&groups[2], v[k]);
                     }
             }
         }
+#undef EDGE_FLAG
         free(point_seen);
         GLenum saved[2] = {pm[0], pm[1]};
         bool cull = st->cull_face;
@@ -1356,9 +1659,13 @@ static void submit(struct glm_context *ctx, GLenum mode, float *vertices, uint32
             /* Polygon offset by the mode these came from. */
             ctx->state.polygon_mode[0] = ctx->state.polygon_mode[1] = g == 0 ? GL_FILL : g == 1 ? GL_LINE : GL_POINT;
             __atomic_add_fetch(&ctx->state_serial, 1, __ATOMIC_RELAXED);
+            /* Each polygon outline restarts the line stipple. */
+            ctx->stipple_resets = g == 1 ? resets.data : NULL;
             submit(ctx, modes[g], vertices, vertex_count, groups[g].data, groups[g].count, instance, vertex_id_base);
+            ctx->stipple_resets = NULL;
             free(groups[g].data);
         }
+        free(resets.data);
         ctx->state.polygon_mode[0] = saved[0];
         ctx->state.polygon_mode[1] = saved[1];
         ctx->state.cull_face = cull;
@@ -1384,6 +1691,14 @@ static void submit(struct glm_context *ctx, GLenum mode, float *vertices, uint32
         list.count = kept;
         draw.metal_primitive = MTL_POINT;
     }
+    /* Line stipple: before flat-shading rotation reorders line ends. */
+    float *stipple = NULL;
+    if (draw.metal_primitive == MTL_LINE && ctx->state.line_stipple && list.count && !glm_feedback_capturing(ctx)) {
+        draw.vertex_id_base = vertex_id_base;
+        stipple = stipple_table(ctx, mode, vertices, vertex_count, &draw, list.data, list.count);
+        draw.stipple = stipple;
+        draw.stipple_count = list.count / 2;
+    }
     /* Metal's flat varyings take the first vertex of each primitive; GL's
        the last (or first under GL_FIRST_VERTEX_CONVENTION). Rotating each
        triangle keeps its winding. */
@@ -1398,6 +1713,7 @@ static void submit(struct glm_context *ctx, GLenum mode, float *vertices, uint32
             capture_order = malloc((size_t)list.count * sizeof *capture_order);
             raster_order = malloc((size_t)list.count * sizeof *raster_order);
             if (!capture_order || !raster_order) {
+                free(stipple);
                 free(capture_order);
                 free(raster_order);
                 free(list.data);
@@ -1438,23 +1754,23 @@ static void submit(struct glm_context *ctx, GLenum mode, float *vertices, uint32
            order, so the vertex index is the output position. */
         uint32_t first = 0, kept = capture && !(geometry && geometry->gs) ? glm_feedback_reserve(ctx, list.count, &first) : list.count;
         if ((uint64_t)list.count * GLM_MAX_ATTRIBS * 4 * sizeof(float) > SIZE_MAX) {
-            free(capture_order); free(raster_order); free(list.data); free(seq);
+            free(stipple); free(capture_order); free(raster_order); free(list.data); free(seq);
             return glm_error(ctx, GL_OUT_OF_MEMORY);
         }
         expanded = malloc((size_t)list.count * GLM_MAX_ATTRIBS * 4 * sizeof(float));
         if (!expanded) {
-            free(capture_order); free(raster_order); free(list.data); free(seq);
+            free(stipple); free(capture_order); free(raster_order); free(list.data); free(seq);
             return glm_error(ctx, GL_OUT_OF_MEMORY);
         }
         uint32_t *original_ids = NULL;
         if (capture && !(geometry && (geometry->gs || geometry->tess))) {
             if ((uint64_t)list.count * sizeof(uint32_t) > SIZE_MAX) {
-                free(expanded); free(capture_order); free(raster_order); free(list.data); free(seq);
+                free(expanded); free(stipple); free(capture_order); free(raster_order); free(list.data); free(seq);
                 return glm_error(ctx, GL_OUT_OF_MEMORY);
             }
             original_ids = malloc((size_t)list.count * sizeof *original_ids);
             if (!original_ids) {
-                free(expanded); free(capture_order); free(raster_order); free(list.data); free(seq);
+                free(expanded); free(stipple); free(capture_order); free(raster_order); free(list.data); free(seq);
                 return glm_error(ctx, GL_OUT_OF_MEMORY);
             }
         }
@@ -1474,6 +1790,7 @@ static void submit(struct glm_context *ctx, GLenum mode, float *vertices, uint32
         draw.xfb_first = first;
         draw.xfb_count = kept;
         if (draw.index_count) glm_backend_draw(ctx, &draw);
+        free(stipple);
         free(expanded);
         free(original_ids);
         free(capture_order);
@@ -1501,6 +1818,8 @@ static void submit(struct glm_context *ctx, GLenum mode, float *vertices, uint32
                 memcpy(dst + GLM_ATTR_COLOR * 4, src + GLM_ATTR_COLOR * 4, 4 * sizeof(float));
                 memcpy(dst + GLM_ATTR_SECONDARY_COLOR * 4, src + GLM_ATTR_SECONDARY_COLOR * 4, 4 * sizeof(float));
                 if (ctx->state.lighting) memcpy(dst + GLM_ATTR_NORMAL * 4, src + GLM_ATTR_NORMAL * 4, 4 * sizeof(float));
+                if (ctx->state.lighting && ctx->vertex_materials)
+                    dst[GLM_ATTR_MATERIAL_INDEX * 4] = src[GLM_ATTR_MATERIAL_INDEX * 4];
             }
         }
         draw.vertices = expanded;
@@ -1513,7 +1832,9 @@ static void submit(struct glm_context *ctx, GLenum mode, float *vertices, uint32
         draw.indices = list.data;
         draw.index_count = list.count;
     }
-    if (draw.index_count && !linear_clip_draw(ctx, &draw) && !wide_line_draw(ctx, &draw)) glm_backend_draw(ctx, &draw);
+    if (draw.index_count && !linear_clip_draw(ctx, &draw) && (draw.stipple || !wide_line_draw(ctx, &draw)))
+        glm_backend_draw(ctx, &draw);
+    free(stipple);
     free(expanded);
     free(list.data);
     free(seq);
@@ -1526,18 +1847,28 @@ void glm_draw_arrays_internal(struct glm_context *ctx, GLenum mode, GLint first,
     if (ctx->immediate) return glm_error(ctx, GL_INVALID_OPERATION);
     if (!valid_mode(mode)) return glm_error(ctx, GL_INVALID_ENUM);
     if (count < 0 || first < 0 || instances < 0) return glm_error(ctx, GL_INVALID_VALUE);
+    if (glm_arb_draw_invalid(ctx)) return glm_error(ctx, GL_INVALID_OPERATION);
     if (!count || !instances || ctx->conditional_discard) return;
     if (!ctx->draw_framebuffer && !ctx->presents) return glm_error(ctx, GL_INVALID_FRAMEBUFFER_OPERATION);
     if (!glm_feedback_draw_allowed(ctx, mode)) return;
     if (!glm_feedback_capturing(ctx) && !wide_line_stream(ctx, mode) && !linear_clip_stream(ctx, mode) &&
+        !stipple_stream(ctx, mode) && ctx->render_modes.mode == GL_RENDER &&
         !glm_backend_clip_stream(ctx, mode) &&
         glm_backend_draw_gpu(ctx, mode, first, count, 0, NULL, instances, 0)) return;
+    bool outlines = ctx->state.polygon_mode[0] != GL_FILL || ctx->state.polygon_mode[1] != GL_FILL;
+    uint8_t *flags = outlines ? fetch_edge_flags(ctx, (uint32_t)first, (uint32_t)count) : NULL;
     for (GLsizei instance = 0; instance < instances; ++instance) {
         float *vertices = fetch_vertices(ctx, (uint32_t)first, (uint32_t)count, (uint32_t)instance);
-        if (!vertices) return glm_error(ctx, GL_OUT_OF_MEMORY);
+        if (!vertices) {
+            free(flags);
+            return glm_error(ctx, GL_OUT_OF_MEMORY);
+        }
+        ctx->edge_flags = flags;
         submit(ctx, mode, vertices, (uint32_t)count, NULL, 0, (uint32_t)instance, (uint32_t)first);
+        ctx->edge_flags = NULL;
         free(vertices);
     }
+    free(flags);
 }
 
 static uint32_t read_index(const void *indices, GLenum type, GLsizei i)
@@ -1631,11 +1962,12 @@ void glm_draw_elements_internal(struct glm_context *ctx, GLenum mode, GLsizei co
         return glm_error(ctx, GL_INVALID_ENUM);
     if (ctx->conditional_discard) return;
     if (count < 0 || instances < 0) return glm_error(ctx, GL_INVALID_VALUE);
+    if (glm_arb_draw_invalid(ctx)) return glm_error(ctx, GL_INVALID_OPERATION);
     if (!count || !instances) return;
     if (!ctx->draw_framebuffer && !ctx->presents) return glm_error(ctx, GL_INVALID_FRAMEBUFFER_OPERATION);
     if (!glm_feedback_draw_allowed(ctx, mode)) return;
     if (!glm_feedback_capturing(ctx) && !wide_line_stream(ctx, mode) && !linear_clip_stream(ctx, mode) &&
-        !glm_backend_clip_stream(ctx, mode) &&
+        !stipple_stream(ctx, mode) && ctx->render_modes.mode == GL_RENDER && !glm_backend_clip_stream(ctx, mode) &&
         glm_backend_draw_gpu(ctx, mode, 0, count, type, indices, instances, base_vertex))
         return;
     const void *source = indices;
@@ -1659,9 +1991,15 @@ void glm_draw_elements_internal(struct glm_context *ctx, GLenum mode, GLsizei co
         if (index > high) high = index;
     }
     if (low > high) return;
+    bool outlines = ctx->state.polygon_mode[0] != GL_FILL || ctx->state.polygon_mode[1] != GL_FILL;
+    uint8_t *flags = outlines ? fetch_edge_flags(ctx, low, high - low + 1) : NULL;
     for (GLsizei instance = 0; instance < instances; ++instance) {
         float *vertices = fetch_vertices(ctx, low, high - low + 1, (uint32_t)instance);
-        if (!vertices) return glm_error(ctx, GL_OUT_OF_MEMORY);
+        if (!vertices) {
+            free(flags);
+            return glm_error(ctx, GL_OUT_OF_MEMORY);
+        }
+        ctx->edge_flags = flags;
         uint32_t *run = malloc((size_t)count * sizeof(uint32_t));
         GLsizei start = 0;
         while (start < count) {
@@ -1675,9 +2013,11 @@ void glm_draw_elements_internal(struct glm_context *ctx, GLenum mode, GLsizei co
             if (n) submit(ctx, mode, vertices, high - low + 1, run, n, (uint32_t)instance, low);
             start = i + 1;
         }
+        ctx->edge_flags = NULL;
         free(run);
         free(vertices);
     }
+    free(flags);
 }
 
 GLM_EXPORT void glDrawArrays(GLenum mode, GLint first, GLsizei count)

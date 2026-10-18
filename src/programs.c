@@ -425,6 +425,7 @@ bool glm_program_link_sources(struct glm_context *ctx, struct glm_program *p, co
         free(p->linked_sources[s]);
         p->linked_sources[s] = sources[s] ? duplicate(sources[s]) : NULL;
     }
+    glm_bindable_link(p);
     const char *fragment_msl = p->result.msl[GLM_STAGE_FRAGMENT];
     p->color_inputs = fragment_msl && (strstr(fragment_msl, " glm_Color [[user") || strstr(fragment_msl, " glm_SecondaryColor [[user"));
     p->linked = true;
@@ -454,6 +455,7 @@ void glm_program_free(struct glm_context *ctx, struct glm_program *p)
     glm_backend_program_release(p);
     free(p->globals);
     free(p->locations);
+    glm_bindable_free(p);
     free(p->log);
     for (int i = 0; i < p->attribute_binding_count; ++i) free((char *)p->attribute_bindings[i].name);
     for (int i = 0; i < p->output_binding_count; ++i) free((char *)p->output_bindings[i].name);
@@ -947,6 +949,21 @@ static void set_uniform_in(struct glm_context *ctx, struct glm_program *p, GLint
     bool is_boolean = u->type == GL_BOOL || (u->type >= GL_BOOL_VEC2 && u->type <= GL_BOOL_VEC4);
     if (!is_boolean && (is_int ? kind != VALUE_INT : is_uint ? kind != VALUE_UINT : kind != VALUE_FLOAT))
         return glm_error(ctx, GL_INVALID_OPERATION);
+    if (p->bindable_locations && p->bindable_locations[location].bindable >= 0) {
+        /* Bindable uniforms load into their buffers (booleans as 0 / 1). */
+        if (!is_boolean) {
+            glm_bindable_store(ctx, p, location, count, 1, n, values);
+            return;
+        }
+        uint32_t *bits = malloc((size_t)count * (size_t)n * 4 + 4);
+        for (size_t i = 0; i < (size_t)count * (size_t)n; ++i) {
+            if (kind == VALUE_FLOAT) bits[i] = ((const float *)values)[i] != 0;
+            else bits[i] = ((const int32_t *)values)[i] != 0;
+        }
+        glm_bindable_store(ctx, p, location, count, 1, n, bits);
+        free(bits);
+        return;
+    }
     p->globals_dirty = true;
     ++p->uniform_serial;
     bool is_bool = u->type == GL_BOOL || u->type == GL_BOOL_VEC2 || u->type == GL_BOOL_VEC3 || u->type == GL_BOOL_VEC4;
@@ -983,6 +1000,18 @@ static void set_matrix_in(struct glm_context *ctx, struct glm_program *p, GLint 
     if (double_type(u->type)) return glm_error(ctx, GL_INVALID_OPERATION);
     int urows, ucolumns = matrix_shape(u->type, &urows);
     if (ucolumns != columns || urows != rows || u->offset < 0) return glm_error(ctx, GL_INVALID_OPERATION);
+    if (p->bindable_locations && p->bindable_locations[location].bindable >= 0) {
+        float *m = malloc((size_t)count * (size_t)(columns * rows) * sizeof *m + 4);
+        for (GLsizei e = 0; e < count; ++e)
+            for (int c = 0; c < columns; ++c)
+                for (int r = 0; r < rows; ++r) {
+                    const GLfloat *src = values + (size_t)e * columns * rows;
+                    m[(size_t)e * columns * rows + c * rows + r] = transpose ? src[r * columns + c] : src[c * rows + r];
+                }
+        glm_bindable_store(ctx, p, location, count, columns, rows, m);
+        free(m);
+        return;
+    }
     p->globals_dirty = true;
     ++p->uniform_serial;
     int matrix_stride = u->matrix_stride ? u->matrix_stride : 16;
@@ -995,6 +1024,49 @@ static void set_matrix_in(struct glm_context *ctx, struct glm_program *p, GLint 
                 float v = transpose ? m[r * columns + c] : m[c * rows + r];
                 memcpy(dst + c * matrix_stride + r * 4, &v, 4);
             }
+    }
+}
+
+int glm_uniform_type_slots(GLenum type)
+{
+    int rows, columns = matrix_shape(type, &rows);
+    return columns ? columns : 1;
+}
+
+void glm_program_load_slots(struct glm_program *p, GLint location, const uint8_t *data)
+{
+    struct glm_location loc = p->locations[location];
+    const struct glm_uniform_info *u = &p->result.uniforms[loc.uniform];
+    if (u->offset < 0 || is_sampler(u->type) || double_type(u->type)) return;
+    int rows, columns = matrix_shape(u->type, &rows);
+    uint8_t *dst;
+    if (columns) {
+        int matrix_stride = u->matrix_stride ? u->matrix_stride : 16;
+        int stride = u->array_stride ? u->array_stride : matrix_stride * columns;
+        dst = p->globals + u->offset + loc.element * stride;
+        for (int c = 0; c < columns; ++c)
+            if (memcmp(dst + c * matrix_stride, data + c * 16, (size_t)rows * 4)) {
+                memcpy(dst + c * matrix_stride, data + c * 16, (size_t)rows * 4);
+                p->globals_dirty = true;
+            }
+        return;
+    }
+    int n = components(u->type);
+    int stride = u->array_stride ? u->array_stride : n * 4;
+    dst = p->globals + u->offset + loc.element * stride;
+    uint8_t value[16];
+    memcpy(value, data, (size_t)n * 4);
+    bool is_bool = u->type == GL_BOOL || (u->type >= GL_BOOL_VEC2 && u->type <= GL_BOOL_VEC4);
+    if (is_bool)
+        for (int c = 0; c < n; ++c) {
+            uint32_t v;
+            memcpy(&v, value + c * 4, 4);
+            v = v != 0;
+            memcpy(value + c * 4, &v, 4);
+        }
+    if (memcmp(dst, value, (size_t)n * 4)) {
+        memcpy(dst, value, (size_t)n * 4);
+        p->globals_dirty = true;
     }
 }
 

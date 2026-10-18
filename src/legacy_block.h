@@ -48,11 +48,8 @@ struct glm_legacy_block {
     float normal_scale, alpha_ref, two_side, pad2;        /* glm_NormalScale, glm_AlphaRef, glm_TwoSide */
 };
 
-enum { GLM_ARB_PARAMETERS = 256 };
-
-struct glm_arb_block {
-    float env[GLM_ARB_PARAMETERS][4];
-    float local[GLM_ARB_PARAMETERS][4];
-};
+/* ARB program parameters, as many as Apple's implementation takes:
+   256 vertex and 128 fragment environment parameters, 1024 local ones. */
+enum { GLM_ARB_ENV_PARAMETERS = 256, GLM_ARB_FRAGMENT_ENV_PARAMETERS = 128, GLM_ARB_LOCAL_PARAMETERS = 1024 };
 
 #endif

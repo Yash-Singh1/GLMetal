@@ -117,7 +117,8 @@ GLM_EXPORT void glVertexAttribP4uiv(GLuint i, GLenum t, GLboolean n, const GLuin
 
 /* ---- generic attribute queries ------------------------------------------- */
 
-/* Up to 4 values of `pname` for attribute `index`; 0 when unknown. */
+/* The values of `pname` for attribute `index` (up to 4, or an attribute
+   map's coefficients); 0 when unknown. */
 static int vertex_attrib_query(struct glm_context *ctx, GLuint index, GLenum pname, double *v)
 {
     if (index >= GLM_MAX_ATTRIBS) {
@@ -142,6 +143,8 @@ static int vertex_attrib_query(struct glm_context *ctx, GLuint index, GLenum pna
         for (int c = 0; c < 4; ++c) v[c] = ctx->state.current[index][c];
         return 4;
     }
+    int map = glm_eval_attrib_query(ctx, index, pname, v);
+    if (map >= 0) return map;
     glm_error(ctx, GL_INVALID_ENUM);
     return 0;
 }
@@ -150,7 +153,7 @@ static int vertex_attrib_query(struct glm_context *ctx, GLuint index, GLenum pna
     GLM_EXPORT void glGetVertexAttrib##suffix(GLuint index, GLenum pname, T *params) \
     {                                                                                 \
         GLM_CONTEXT(ctx);                                                             \
-        double v[4];                                                                  \
+        double v[GLM_MAX_EVAL_ORDER * GLM_MAX_EVAL_ORDER * 4];                         \
         int n = vertex_attrib_query(ctx, index, pname, v);                            \
         for (int i = 0; i < n; ++i) params[i] = (T)v[i];                              \
     }

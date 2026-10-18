@@ -376,8 +376,18 @@ std::string assign_locations(const std::string &text, const char *storage, const
         if (c == '}') --depth;
         if (depth == 0 && parentheses == 0 && text.compare(i, 6, "layout") == 0 && (i == 0 || !ident_char(text[i - 1])) &&
             (i + 6 >= text.size() || !ident_char(text[i + 6]))) {
-            // Already qualified: copy the declaration unchanged.
-            size_t end = text.find(';', i);
+            // Already qualified: copy the declaration unchanged, a block's
+            // members included (their ';' must not end it early, or its
+            // closing brace would unbalance the depth for the rest).
+            size_t end = text.find_first_of(";{", i);
+            if (end != std::string::npos && text[end] == '{') {
+                int nesting = 0;
+                for (; end < text.size(); ++end) {
+                    if (text[end] == '{') ++nesting;
+                    else if (text[end] == '}' && --nesting == 0) break;
+                }
+                end = end < text.size() ? text.find(';', end) : std::string::npos;
+            }
             end = end == std::string::npos ? text.size() : end + 1;
             out.append(text, i, end - i);
             i = end;
@@ -848,6 +858,39 @@ Prepared prepare_stage(const char *source, glm_stage stage, Bindings *bindings);
 // glm_kw_<word> unless called (texture1D() is a legacy built-in), and the
 // prefix dropped again from every name the program reports.
 const char *const kw_prefix = "glm_kw_";
+/* EXT_bindable_uniform: `bindable uniform` declarations as plain uniforms
+   (bindable.c feeds them from buffer objects) and the extension's
+   #extension lines dropped, keeping line numbers. */
+static std::string without_bindable(const std::string &text)
+{
+    if (text.find("bindable") == std::string::npos) return text;
+    std::string out;
+    size_t i = 0;
+    while (i < text.size()) {
+        size_t line_end = text.find('\n', i);
+        if (line_end == std::string::npos) line_end = text.size();
+        std::string line = text.substr(i, line_end - i);
+        size_t first = line.find_first_not_of(" \t");
+        if (first != std::string::npos && line[first] == '#' && line.find("extension") != std::string::npos &&
+            line.find("GL_EXT_bindable_uniform") != std::string::npos) {
+            out += std::string(line.size(), ' ');
+        } else {
+            for (size_t k = 0; k < line.size();) {
+                if (!line.compare(k, 8, "bindable") && (k == 0 || !ident_char(line[k - 1])) &&
+                    (k + 8 >= line.size() || !ident_char(line[k + 8]))) {
+                    out += "        ";
+                    k += 8;
+                } else {
+                    out += line[k++];
+                }
+            }
+        }
+        if (line_end < text.size()) out += '\n';
+        i = line_end + 1;
+    }
+    return out;
+}
+
 std::string rename_vulkan_keywords(const std::string &text)
 {
     static const std::set<std::string> words = [] {
@@ -931,7 +974,7 @@ Prepared prepare_stage(const char *source, glm_stage stage, Bindings *bindings)
         p.text = lower_subroutines(text, p);
         return p;
     }
-    std::string text = rename_vulkan_keywords(normalize_newlines(source ? source : ""));
+    std::string text = rename_vulkan_keywords(without_bindable(normalize_newlines(source ? source : "")));
     if (!bindings || !bindings->fp64) text = without_doubles(text);
     text = lower_subroutines(text, p);
     std::string profile;

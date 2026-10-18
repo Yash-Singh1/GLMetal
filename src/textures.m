@@ -382,7 +382,7 @@ GLM_EXPORT void glGetTexParameteriv(GLenum target, GLenum pname, GLint *params)
     case GL_TEXTURE_COMPARE_FUNC: *params = (GLint)s->compare_func; break;
     case GL_GENERATE_MIPMAP: *params = t->generate_mipmap; break;
     case GL_DEPTH_TEXTURE_MODE: *params = (GLint)t->depth_texture_mode; break;
-    case GL_TEXTURE_RESIDENT: *params = GL_FALSE; break; /* as Apple answers */
+    case GL_TEXTURE_RESIDENT: *params = glm_texture_resident(t); break;
     case GL_TEXTURE_STORAGE_HINT_APPLE: *params = t->storage_hint ? (GLint)t->storage_hint : GL_STORAGE_PRIVATE_APPLE; break;
     case GL_TEXTURE_MINIMIZE_STORAGE_APPLE: *params = t->minimize_storage; break;
     case GL_TEXTURE_SWIZZLE_R: case GL_TEXTURE_SWIZZLE_G: case GL_TEXTURE_SWIZZLE_B: case GL_TEXTURE_SWIZZLE_A:
@@ -1232,6 +1232,43 @@ static bool image_size_valid(GLenum target, GLint level, GLsizei w, GLsizei h, G
     }
 }
 
+/* The imaging operations (imaging.c) on colour images of colour textures:
+   the texture takes the processed image, which convolution can resize. */
+static bool imaging_applies(struct glm_context *ctx, int dims, GLenum internal, GLenum format, bool transfer)
+{
+    if (ctx->pixels_raw || !(glm_imaging_active(ctx, dims) || (transfer && !glm_transfer_identity(ctx)))) return false;
+    struct glm_format_info info;
+    if (internal && (!glm_format_lookup(internal, &info) || info.depth || info.stencil || info.integer)) return false;
+    switch (format) {
+    case GL_DEPTH_COMPONENT: case GL_STENCIL_INDEX: case GL_DEPTH_STENCIL: case GL_RED_INTEGER: case GL_GREEN_INTEGER:
+    case GL_BLUE_INTEGER: case GL_ALPHA_INTEGER_EXT: case GL_RG_INTEGER: case GL_RGB_INTEGER: case GL_RGBA_INTEGER:
+    case GL_BGR_INTEGER: case GL_BGRA_INTEGER: case GL_LUMINANCE_INTEGER_EXT: case GL_LUMINANCE_ALPHA_INTEGER_EXT:
+        return false;
+    }
+    return true;
+}
+
+/* Client pixels processed for an upload: NULL when they cannot be read
+   (the call then reports its error) or are discarded (`*discarded`). */
+static float *imaging_image(struct glm_context *ctx, int dims, GLsizei *w, GLsizei *h, GLsizei d, GLenum format,
+                            GLenum type, const GLvoid *pixels, bool *discarded)
+{
+    *discarded = false;
+    float *rgba = glm_unpack_rgba(ctx, *w, *h, d, format, type, pixels, true);
+    if (!rgba) return NULL;
+    GLsizei rows = *h * d;
+    if (dims == 3) {
+        if (!glm_imaging_apply(ctx, 3, &rgba, w, &rows)) *discarded = true;
+    } else if (!glm_imaging_apply(ctx, dims, &rgba, w, h)) {
+        *discarded = true;
+    }
+    if (*discarded) {
+        free(rgba);
+        return NULL;
+    }
+    return rgba;
+}
+
 static void tex_image(int dims, GLenum target, GLint level, GLint internal, GLsizei w, GLsizei h, GLsizei d, GLint border,
                       GLenum format, GLenum type, const GLvoid *pixels);
 
@@ -1246,6 +1283,24 @@ static void tex_image(int dims, GLenum target, GLint level, GLint internal, GLsi
 {
     GLM_CONTEXT(ctx);
     if (!image_target(target, dims, false)) return glm_error(ctx, GL_INVALID_ENUM);
+    if (imaging_applies(ctx, dims, (GLenum)internal, format, false) &&
+        !glm_tex_image_error((GLenum)internal, format, type, ctx->profile == GLM_PROFILE_CORE)) {
+        if (proxy_index(target) >= 0 || (!pixels && !ctx->pixel_unpack_buffer)) {
+            glm_imaging_size(ctx, dims, &w, &h);
+        } else {
+            bool discarded;
+            float *rgba = imaging_image(ctx, dims, &w, &h, d, format, type, pixels, &discarded);
+            if (rgba) {
+                struct glm_pixels_raw saved;
+                glm_pixels_raw_begin(ctx, &saved);
+                tex_image(dims, target, level, internal, w, h, d, border, GL_RGBA, GL_FLOAT, rgba);
+                glm_pixels_raw_end(ctx, &saved);
+                free(rgba);
+                return;
+            }
+            if (discarded) return;
+        }
+    }
     /* Uncompressed uploads may request RGTC for a volume. GL 4.1 section
        3.8.3 requires uncompressed fallback when that compression format cannot
        represent the target; the CompressedTexImage target restrictions do not
@@ -1404,6 +1459,21 @@ static void tex_sub_image(int dims, GLenum target, GLint level, GLint x, GLint y
     if (!image_target(target, dims, true)) return glm_error(ctx, GL_INVALID_ENUM);
     struct glm_texture *t = glm_texture_bound(ctx, target);
     if (!t || level < 0 || level >= GLM_MAX_LEVELS) return glm_error(ctx, GL_INVALID_VALUE);
+    if (t->levels[face_index(target)][level].defined && (pixels || ctx->pixel_unpack_buffer) &&
+        imaging_applies(ctx, dims, t->levels[face_index(target)][level].internal_format, format, false) &&
+        !glm_format_type_error(format, type, ctx->profile == GLM_PROFILE_CORE)) {
+        bool discarded;
+        float *rgba = imaging_image(ctx, dims, &w, &h, d, format, type, pixels, &discarded);
+        if (rgba) {
+            struct glm_pixels_raw saved;
+            glm_pixels_raw_begin(ctx, &saved);
+            tex_sub_image(dims, target, level, x, y, z, w, h, d, GL_RGBA, GL_FLOAT, rgba);
+            glm_pixels_raw_end(ctx, &saved);
+            free(rgba);
+            return;
+        }
+        if (discarded) return;
+    }
     struct glm_texture_level *l = &t->levels[face_index(target)][level];
     GLenum error = glm_format_type_error(format, type, ctx->profile == GLM_PROFILE_CORE);
     if (error) return glm_error(ctx, error);
@@ -1570,6 +1640,20 @@ static void copy_tex_sub_image(int dims, GLenum target, GLint level, GLint xoffs
     if (!t || !t->levels[face][level].defined) return glm_error(ctx, GL_INVALID_OPERATION);
     GLenum error = copy_error(ctx, t->levels[face][level].internal_format);
     if (error) return glm_error(ctx, error);
+    if (imaging_applies(ctx, dims == 3 ? 3 : dims, t->levels[face][level].internal_format, GL_RGBA, true)) {
+        /* Read, then through glPixelTransfer and the imaging operations. */
+        float *rgba = glm_read_rgba(ctx, x, y, w, h);
+        if (!rgba) return glm_error(ctx, GL_OUT_OF_MEMORY);
+        glm_transfer_rgba(ctx, rgba, (size_t)w * (size_t)h);
+        if (glm_imaging_apply(ctx, dims, &rgba, &w, &h) && w && h) {
+            struct glm_pixels_raw saved;
+            glm_pixels_raw_begin(ctx, &saved);
+            tex_sub_image(dims, target, level, xoffset, yoffset, zoffset, w, h, 1, GL_RGBA, GL_FLOAT, rgba);
+            glm_pixels_raw_end(ctx, &saved);
+        }
+        free(rgba);
+        return;
+    }
     if (dims == 3) {
         if (!glm_backend_texture_ensure_storage(ctx, t)) return glm_error(ctx, GL_INVALID_OPERATION);
         glm_backend_copy_framebuffer_to_texture(ctx, t, 0, level, xoffset, yoffset, zoffset, x, y, w, h);
@@ -1632,6 +1716,19 @@ static void copy_tex_image(int dims, GLenum target, GLint level, GLenum internal
     if (!t) return glm_error(ctx, GL_INVALID_ENUM);
     GLenum error = copy_error(ctx, internal);
     if (error) return glm_error(ctx, error);
+    if (imaging_applies(ctx, dims, internal, GL_RGBA, true) && w >= 0 && h >= 0) {
+        float *rgba = glm_read_rgba(ctx, x, y, w, h);
+        if (!rgba) return glm_error(ctx, GL_OUT_OF_MEMORY);
+        glm_transfer_rgba(ctx, rgba, (size_t)w * (size_t)h);
+        if (glm_imaging_apply(ctx, dims, &rgba, &w, &h)) {
+            struct glm_pixels_raw saved;
+            glm_pixels_raw_begin(ctx, &saved);
+            tex_image(dims, target, level, (GLint)internal, w, h, 1, 0, GL_RGBA, GL_FLOAT, rgba);
+            glm_pixels_raw_end(ctx, &saved);
+        }
+        free(rgba);
+        return;
+    }
     if (!image_size_valid(target, level, w, h, 1)) return glm_error(ctx, GL_INVALID_VALUE);
     if (!t->target) t->target = binding_target(target);
     if (!define_level(ctx, t, target, level, internal, w, h, 1)) return;

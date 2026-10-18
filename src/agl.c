@@ -11,6 +11,7 @@
 #define GL_SILENCE_DEPRECATION 1
 #include <OpenGL/OpenGL.h>
 #include <OpenGL/gl.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "glm_internal.h"
@@ -71,8 +72,8 @@ EXPORT AGLPixelFormat aglCreatePixelFormat(const GLint *attribs)
        CGL's numbering; AGL_RGBA and AGL_LEVEL have no CGL counterpart. */
     CGLPixelFormatAttribute cgl[128];
     size_t used = 0;
-    GLint red = 0, green = 0, blue = 0, buffer = 0;
-    for (const GLint *a = attribs; a && *a && used + 3 < 128; ++a) {
+    GLint red = 0, green = 0, blue = 0, buffer = 0, accum = 0;
+    for (const GLint *a = attribs; a && *a && used + 5 < 128; ++a) {
         switch (*a) {
         case AGL_RGBA: case AGL_ALL_RENDERERS: case AGL_FULLSCREEN: case AGL_WINDOW:
         case AGL_SINGLE_RENDERER: case AGL_OFFSCREEN:
@@ -84,7 +85,7 @@ EXPORT AGLPixelFormat aglCreatePixelFormat(const GLint *attribs)
         case AGL_BUFFER_SIZE: case AGL_PIXEL_SIZE: buffer = *++a; break;
         case AGL_ACCUM_RED_SIZE: case AGL_ACCUM_GREEN_SIZE: case AGL_ACCUM_BLUE_SIZE:
         case AGL_ACCUM_ALPHA_SIZE:
-            ++a;
+            accum += *++a;
             break;
         case AGL_AUX_BUFFERS: case AGL_ALPHA_SIZE: case AGL_DEPTH_SIZE: case AGL_STENCIL_SIZE:
         case AGL_SAMPLE_BUFFERS_ARB: case AGL_SAMPLES_ARB: case AGL_RENDERER_ID:
@@ -104,11 +105,22 @@ EXPORT AGLPixelFormat aglCreatePixelFormat(const GLint *attribs)
         cgl[used++] = kCGLPFAColorSize;
         cgl[used++] = (CGLPixelFormatAttribute)color;
     }
+    if (accum) {
+        cgl[used++] = kCGLPFAAccumSize;
+        cgl[used++] = (CGLPixelFormatAttribute)accum;
+    }
     cgl[used] = 0;
     CGLPixelFormatObj pix = NULL;
     GLint count = 0;
     CGLError error = CGLChoosePixelFormat(cgl, &pix, &count);
     agl_error = (GLenum)error;
+    if (!pix) {
+        char list[512];
+        int length = 0;
+        for (size_t i = 0; i < used && length < (int)sizeof list - 12; ++i)
+            length += snprintf(list + length, sizeof list - (size_t)length, " %d", (int)cgl[i]);
+        glm_log("aglChoosePixelFormat: no format (CGL error %d) for CGL attributes%s", (int)error, list);
+    }
     return pix;
 }
 
@@ -137,9 +149,12 @@ EXPORT GLboolean aglDescribePixelFormat(AGLPixelFormat pix, GLint attrib, GLint 
     case AGL_BUFFER_SIZE: case AGL_PIXEL_SIZE:
         return result(CGLDescribePixelFormat(pix, 0, kCGLPFAColorSize, value));
     case AGL_ACCUM_RED_SIZE: case AGL_ACCUM_GREEN_SIZE: case AGL_ACCUM_BLUE_SIZE:
-    case AGL_ACCUM_ALPHA_SIZE:
-        *value = 0;
-        return result(kCGLNoError);
+    case AGL_ACCUM_ALPHA_SIZE: {
+        GLint accum = 0;
+        CGLError error = CGLDescribePixelFormat(pix, 0, kCGLPFAAccumSize, &accum);
+        *value = accum / 4;
+        return result(error);
+    }
     default:
         return result(CGLDescribePixelFormat(pix, 0, (CGLPixelFormatAttribute)attrib, value));
     }

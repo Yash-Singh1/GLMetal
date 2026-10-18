@@ -22,6 +22,20 @@ struct glm_location {
 
 struct glm_program;
 
+/* EXT_bindable_uniform (bindable.c): a bindable uniform, laid out as Apple
+   lays it out in its buffer (a vec4 slot per scalar, vector or matrix
+   column, in declaration order), and the buffer bound to it. */
+struct glm_bindable {
+    char *name;
+    int slots;
+    GLuint buffer;
+    bool active; /* has locations */
+};
+/* Per location: its bindable uniform (-1: none) and first slot there. */
+struct glm_bindable_location {
+    int bindable, slot;
+};
+
 struct glm_clip_state {
     void *vs_capture; /* retained MTLFunction */
     void *kernel;     /* retained MTLComputePipelineState */
@@ -91,9 +105,24 @@ struct glm_program {
     void *globals_buffer, *globals_backend;
     size_t globals_offset;
     uint64_t globals_generation;
+    struct glm_bindable *bindables;
+    int bindable_count;
+    struct glm_bindable_location *bindable_locations; /* location_count, NULL without bindables */
 };
 
 GLM_HIDDEN struct glm_program *glm_program_get(struct glm_context *ctx, GLuint name);
+GLM_HIDDEN void glm_bindable_link(struct glm_program *p);
+GLM_HIDDEN void glm_bindable_free(struct glm_program *p);
+/* Before a draw: the bound buffers' contents into the bindable uniforms. */
+GLM_HIDDEN void glm_bindable_update(struct glm_context *ctx, struct glm_program *p);
+/* glUniform* of a bindable uniform: `count` elements of `columns` x `rows`
+   32-bit values (column-major) into its buffer; false after an error. */
+GLM_HIDDEN bool glm_bindable_store(struct glm_context *ctx, struct glm_program *p, GLint location, GLsizei count,
+                                   int columns, int rows, const void *values);
+/* Location `location`'s value from `columns` vec4 slots of raw 32-bit data. */
+GLM_HIDDEN void glm_program_load_slots(struct glm_program *p, GLint location, const uint8_t *data);
+/* The vec4 slots one element of a uniform type takes (matrix columns). */
+GLM_HIDDEN int glm_uniform_type_slots(GLenum type);
 GLM_HIDDEN struct glm_program *glm_current_program(struct glm_context *ctx);
 /* Links `p` from per-stage sources (NULL: absent), as glLinkProgram does. */
 GLM_HIDDEN bool glm_program_link_sources(struct glm_context *ctx, struct glm_program *p, const char *const *sources);

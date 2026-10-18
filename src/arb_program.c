@@ -30,6 +30,22 @@ struct glm_arb_program *glm_arb_current(struct glm_context *ctx, int index)
     return p && p->valid ? p : NULL;
 }
 
+/* An enabled ARB program stage whose program failed to load (or was never
+   loaded) makes glBegin and draws fail with INVALID_OPERATION
+   (ARB_vertex_program 2.14.7), unless a GLSL program replaces it. */
+bool glm_arb_draw_invalid(struct glm_context *ctx)
+{
+    if (ctx->current_program) return glm_bindable_draw_invalid(ctx);
+    for (int index = 0; index < 2; ++index) {
+        bool enabled = index == 0 ? ctx->state.vertex_program : ctx->state.fragment_program;
+        if (!enabled) continue;
+        struct glm_arb_program *p = ctx->arb_bound[index] ? glm_arb_program_get(ctx, ctx->arb_bound[index])
+                                                          : ctx->arb_default[index];
+        if (!p || !p->valid) return true;
+    }
+    return false;
+}
+
 GLM_EXPORT void glGenProgramsARB(GLsizei n, GLuint *names)
 {
     GLM_CONTEXT(ctx);
@@ -99,6 +115,11 @@ GLM_EXPORT void glProgramStringARB(GLenum target, GLenum format, GLsizei length,
     int index = target_index(target);
     if (index < 0) return glm_error(ctx, GL_INVALID_ENUM);
     if (format != GL_PROGRAM_FORMAT_ASCII_ARB) return glm_error(ctx, GL_INVALID_ENUM);
+    /* Apple rejects strings containing NUL with INVALID_VALUE. */
+    if (length < 0 || (length && memchr(string, 0, (size_t)length))) {
+        ctx->arb_error_position = 0;
+        return glm_error(ctx, GL_INVALID_VALUE);
+    }
     struct glm_arb_program *p = glm_arb_program_get(ctx, ctx->arb_bound[index]);
     if (!p) {
         /* Program 0 is the default program object; give it storage. */
@@ -122,7 +143,7 @@ GLM_EXPORT void glProgramStringARB(GLenum target, GLenum format, GLsizei length,
     ctx->arb_error_position = -1;
     struct glm_arb_translation translation;
     if (!glm_arb_translate(p->source, p->length, index == 0, &translation)) {
-        ctx->arb_error_position = translation.error_position;
+        ctx->arb_error_position = 0; /* Apple reports 0 for every error; the message has the line */
         ctx->arb_error_string = strdup(translation.error);
         glm_log("ARB program rejected at %d: %s", translation.error_position, translation.error);
         return glm_error(ctx, GL_INVALID_OPERATION);
@@ -130,6 +151,8 @@ GLM_EXPORT void glProgramStringARB(GLenum target, GLenum format, GLsizei length,
     p->glsl = translation.glsl;
     p->env_count = translation.env_count;
     p->local_count = translation.local_count;
+    p->counts = translation;
+    p->counts.glsl = NULL;
 
     struct glm_name_location attributes[16];
     int attribute_count = 0;
@@ -195,7 +218,7 @@ static float *env_slot(struct glm_context *ctx, GLenum target, GLuint index)
         glm_error(ctx, GL_INVALID_ENUM);
         return NULL;
     }
-    if (index >= GLM_ARB_PARAMETERS) {
+    if (index >= (t ? GLM_ARB_FRAGMENT_ENV_PARAMETERS : GLM_ARB_ENV_PARAMETERS)) {
         glm_error(ctx, GL_INVALID_VALUE);
         return NULL;
     }
@@ -209,7 +232,7 @@ static float *local_slot(struct glm_context *ctx, GLenum target, GLuint index)
         glm_error(ctx, GL_INVALID_ENUM);
         return NULL;
     }
-    if (index >= GLM_ARB_PARAMETERS) {
+    if (index >= GLM_ARB_LOCAL_PARAMETERS) {
         glm_error(ctx, GL_INVALID_VALUE);
         return NULL;
     }
@@ -245,7 +268,7 @@ GLM_EXPORT void glProgramEnvParameter4dvARB(GLenum target, GLuint index, const G
 GLM_EXPORT void glProgramEnvParameters4fvEXT(GLenum target, GLuint index, GLsizei count, const GLfloat *v)
 {
     GLM_CONTEXT(ctx);
-    if (count < 0 || index + (GLuint)count > GLM_ARB_PARAMETERS) return glm_error(ctx, GL_INVALID_VALUE);
+    if (count < 0) return glm_error(ctx, GL_INVALID_VALUE);
     for (GLsizei i = 0; i < count; ++i) {
         float *dst = env_slot(ctx, target, index + (GLuint)i);
         if (!dst) return;
@@ -267,7 +290,7 @@ GLM_EXPORT void glProgramLocalParameter4dvARB(GLenum target, GLuint index, const
 GLM_EXPORT void glProgramLocalParameters4fvEXT(GLenum target, GLuint index, GLsizei count, const GLfloat *v)
 {
     GLM_CONTEXT(ctx);
-    if (count < 0 || index + (GLuint)count > GLM_ARB_PARAMETERS) return glm_error(ctx, GL_INVALID_VALUE);
+    if (count < 0) return glm_error(ctx, GL_INVALID_VALUE);
     for (GLsizei i = 0; i < count; ++i) {
         float *dst = local_slot(ctx, target, index + (GLuint)i);
         if (!dst) return;
@@ -310,31 +333,40 @@ GLM_EXPORT void glGetProgramivARB(GLenum target, GLenum pname, GLint *params)
     struct glm_arb_program *p = glm_arb_program_get(ctx, ctx->arb_bound[t]);
     if (!p) p = ctx->arb_default[t];
     bool vertex = t == 0;
+    /* Limits and counters as Apple's implementation answers them (native
+       counters are all 0, and the program is always under native limits). */
+    const struct glm_arb_translation *c = p && p->valid ? &p->counts : NULL;
     switch (pname) {
     case GL_PROGRAM_LENGTH_ARB: *params = p ? (GLint)p->length : 0; return;
-    case GL_PROGRAM_FORMAT_ARB: *params = GL_PROGRAM_FORMAT_ASCII_ARB; return;
+    case GL_PROGRAM_FORMAT_ARB: *params = p && p->source ? GL_PROGRAM_FORMAT_ASCII_ARB : 0; return;
     case GL_PROGRAM_BINDING_ARB: *params = (GLint)ctx->arb_bound[t]; return;
-    case GL_PROGRAM_UNDER_NATIVE_LIMITS_ARB: *params = p && p->valid; return;
-    case GL_MAX_PROGRAM_ENV_PARAMETERS_ARB: case GL_MAX_PROGRAM_LOCAL_PARAMETERS_ARB: *params = GLM_ARB_PARAMETERS; return;
-    case GL_MAX_PROGRAM_INSTRUCTIONS_ARB: case GL_MAX_PROGRAM_NATIVE_INSTRUCTIONS_ARB:
+    case GL_PROGRAM_UNDER_NATIVE_LIMITS_ARB: *params = 1; return;
+    case GL_MAX_PROGRAM_ENV_PARAMETERS_ARB: *params = vertex ? GLM_ARB_ENV_PARAMETERS : GLM_ARB_FRAGMENT_ENV_PARAMETERS; return;
+    case GL_MAX_PROGRAM_LOCAL_PARAMETERS_ARB: *params = GLM_ARB_LOCAL_PARAMETERS; return;
+    case GL_MAX_PROGRAM_INSTRUCTIONS_ARB: case GL_MAX_PROGRAM_NATIVE_INSTRUCTIONS_ARB: *params = 262144; return;
     case GL_MAX_PROGRAM_ALU_INSTRUCTIONS_ARB: case GL_MAX_PROGRAM_NATIVE_ALU_INSTRUCTIONS_ARB:
     case GL_MAX_PROGRAM_TEX_INSTRUCTIONS_ARB: case GL_MAX_PROGRAM_NATIVE_TEX_INSTRUCTIONS_ARB:
     case GL_MAX_PROGRAM_TEX_INDIRECTIONS_ARB: case GL_MAX_PROGRAM_NATIVE_TEX_INDIRECTIONS_ARB:
-        *params = vertex ? 65536 : 65536; return;
-    case GL_MAX_PROGRAM_TEMPORARIES_ARB: case GL_MAX_PROGRAM_NATIVE_TEMPORARIES_ARB: *params = 256; return;
-    case GL_MAX_PROGRAM_PARAMETERS_ARB: case GL_MAX_PROGRAM_NATIVE_PARAMETERS_ARB: *params = GLM_ARB_PARAMETERS; return;
-    case GL_MAX_PROGRAM_ATTRIBS_ARB: case GL_MAX_PROGRAM_NATIVE_ATTRIBS_ARB: *params = vertex ? 16 : 10; return;
-    case GL_MAX_PROGRAM_ADDRESS_REGISTERS_ARB: case GL_MAX_PROGRAM_NATIVE_ADDRESS_REGISTERS_ARB: *params = vertex ? 1 : 0; return;
-    case GL_PROGRAM_INSTRUCTIONS_ARB: case GL_PROGRAM_NATIVE_INSTRUCTIONS_ARB: case GL_PROGRAM_TEMPORARIES_ARB:
-    case GL_PROGRAM_NATIVE_TEMPORARIES_ARB: case GL_PROGRAM_PARAMETERS_ARB: case GL_PROGRAM_NATIVE_PARAMETERS_ARB:
-    case GL_PROGRAM_ATTRIBS_ARB: case GL_PROGRAM_NATIVE_ATTRIBS_ARB: case GL_PROGRAM_ADDRESS_REGISTERS_ARB:
-    case GL_PROGRAM_NATIVE_ADDRESS_REGISTERS_ARB: case GL_PROGRAM_ALU_INSTRUCTIONS_ARB:
-    case GL_PROGRAM_NATIVE_ALU_INSTRUCTIONS_ARB: case GL_PROGRAM_TEX_INSTRUCTIONS_ARB:
-    case GL_PROGRAM_NATIVE_TEX_INSTRUCTIONS_ARB: case GL_PROGRAM_TEX_INDIRECTIONS_ARB:
+        *params = vertex ? 0 : 262144; return;
+    case GL_MAX_PROGRAM_TEMPORARIES_ARB: case GL_MAX_PROGRAM_NATIVE_TEMPORARIES_ARB: *params = 65535; return;
+    case GL_MAX_PROGRAM_PARAMETERS_ARB: case GL_MAX_PROGRAM_NATIVE_PARAMETERS_ARB: *params = 1024; return;
+    case GL_MAX_PROGRAM_ATTRIBS_ARB: *params = 32; return;
+    case GL_MAX_PROGRAM_NATIVE_ATTRIBS_ARB: *params = vertex ? 16 : 32; return;
+    case GL_MAX_PROGRAM_ADDRESS_REGISTERS_ARB: *params = vertex ? 2 : 0; return;
+    case GL_MAX_PROGRAM_NATIVE_ADDRESS_REGISTERS_ARB: *params = vertex ? 1 : 0; return;
+    case GL_PROGRAM_INSTRUCTIONS_ARB: *params = c ? c->instructions : 0; return;
+    case GL_PROGRAM_TEMPORARIES_ARB: *params = c ? c->temporaries : 0; return;
+    case GL_PROGRAM_PARAMETERS_ARB: *params = c ? c->parameters : 0; return;
+    case GL_PROGRAM_ATTRIBS_ARB: *params = c ? c->attribs : 0; return;
+    case GL_PROGRAM_ADDRESS_REGISTERS_ARB: *params = c ? c->address_registers : 0; return;
+    case GL_PROGRAM_ALU_INSTRUCTIONS_ARB: *params = c && !vertex ? c->alu_instructions : 0; return;
+    case GL_PROGRAM_TEX_INSTRUCTIONS_ARB: *params = c && !vertex ? c->tex_instructions : 0; return;
+    case GL_PROGRAM_TEX_INDIRECTIONS_ARB: *params = c && !vertex ? c->tex_indirections : 0; return;
+    case GL_PROGRAM_NATIVE_INSTRUCTIONS_ARB: case GL_PROGRAM_NATIVE_TEMPORARIES_ARB: case GL_PROGRAM_NATIVE_PARAMETERS_ARB:
+    case GL_PROGRAM_NATIVE_ATTRIBS_ARB: case GL_PROGRAM_NATIVE_ADDRESS_REGISTERS_ARB:
+    case GL_PROGRAM_NATIVE_ALU_INSTRUCTIONS_ARB: case GL_PROGRAM_NATIVE_TEX_INSTRUCTIONS_ARB:
     case GL_PROGRAM_NATIVE_TEX_INDIRECTIONS_ARB:
         *params = 0; return;
-    case GL_MAX_PROGRAM_MATRICES_ARB: *params = 8; return;
-    case GL_MAX_PROGRAM_MATRIX_STACK_DEPTH_ARB: *params = 1; return;
     }
     glm_error(ctx, GL_INVALID_ENUM);
 }

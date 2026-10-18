@@ -88,6 +88,12 @@ CUSTOM = {
     'glLinkProgram', 'glGetProgramiv', 'glGetProgramInfoLog', 'glGetAttribLocation', 'glGetUniformLocation',
     'glGetQueryObjectiv', 'glGetQueryObjectivARB', 'glGetQueryObjectuiv', 'glGetQueryObjectuivARB',
 }
+# Read client pixels: compiled into display lists by marshal_custom.c
+# (glm_list_<name>, with the compile-time unpack state).
+LIST_PIXELS = {'glBitmap', 'glDrawPixels', 'glPolygonStipple', 'glTexImage1D', 'glTexImage2D', 'glTexImage3D',
+               'glTexSubImage1D', 'glTexSubImage2D', 'glTexSubImage3D', 'glColorTable', 'glColorTableEXT',
+               'glColorSubTable', 'glColorSubTableEXT', 'glConvolutionFilter1D', 'glConvolutionFilter2D',
+               'glSeparableFilter2D'}
 # Change texture objects (not bindings): texture queries answered on the
 # calling thread wait for these (pending counter 1).
 TEXOBJ = re.compile(r'^gl(TexParameter|GenerateMipmap|CopyTexImage|CopyTexSubImage|TexSubImage|TexImage|'
@@ -106,6 +112,7 @@ SHADOW = {
     'glClientActiveTextureARB', 'glVertexAttribPointer', 'glVertexAttribPointerARB', 'glVertexAttribIPointer',
     'glVertexAttribIPointerEXT', 'glVertexPointer', 'glNormalPointer', 'glColorPointer', 'glSecondaryColorPointer',
     'glSecondaryColorPointerEXT', 'glFogCoordPointer', 'glFogCoordPointerEXT', 'glTexCoordPointer', 'glUseProgram',
+    'glEdgeFlagPointer', 'glIndexPointer', 'glWeightPointerARB', 'glPointSizePointerAPPLE',
     'glUseProgramObjectARB', 'glActiveTexture', 'glActiveTextureARB', 'glBindTexture', 'glBindTextureEXT',
     'glBindFramebuffer', 'glBindFramebufferEXT', 'glBindRenderbuffer', 'glBindRenderbufferEXT', 'glDeleteBuffers',
     'glDeleteBuffersARB', 'glViewport', 'glVertexAttribDivisor', 'glVertexAttribDivisorARB', 'glScissor',
@@ -168,7 +175,7 @@ PNAME_CHECKED = {'glGetBooleanv', 'glGetFloatv', 'glGetDoublev'}
 # the object/buffer/client-state commands of later versions).
 NOT_LISTED = re.compile(
     r'^gl(Gen|Delete|Is|Get|Are|Bind(Buffer|Framebuffer|Renderbuffer|VertexArray|TransformFeedback|ProgramPipeline)|'
-    r'Buffer|Map|Unmap|FlushMapped|Flush$|Finish$|FeedbackBuffer|SelectBuffer|RenderMode|ReadPixels|PixelStore|'
+    r'Buffer|Map(?![12]|Grid|VertexAttrib)|Unmap|FlushMapped|Flush$|Finish$|FeedbackBuffer|SelectBuffer|RenderMode|ReadPixels|PixelStore|'
     r'\w*Pointer|InterleavedArrays|EnableClientState|DisableClientState|EnableVertexAttribArray|'
     r'DisableVertexAttribArray|ClientActiveTexture|PushClientAttrib|PopClientAttrib|Fence|ClientWaitSync|WaitSync|'
     r'Create|ShaderSource|CompileShader|LinkProgram|AttachShader|DetachShader|ValidateProgram|Framebuffer|'
@@ -221,6 +228,21 @@ def pointer_sizes(name, params):
         return {0: str(16 * TYPE_SIZE[m.group(3)])}
     if name == 'glClipPlane':
         return {1: '32'}
+    if re.match(r'^glColorTableParameter(f|i)v(EXT|SGI)?$', name):
+        return {2: '16'}
+    if re.match(r'^glConvolutionParameter(f|i)v(EXT)?$', name):
+        return {2: f'({pn[1]} == 0x8013 /* GL_CONVOLUTION_BORDER_MODE */ ? 4 : 16)'}
+    m = re.match(r'^glMap([12])(f|d)$', name)
+    if m:
+        strides = f'{pn[3]}, {pn[4]}, 0, 1' if m.group(1) == '1' else f'{pn[3]}, {pn[4]}, {pn[7]}, {pn[8]}'
+        return {last(): f'glm_map_points_bytes({pn[0]}, {strides}, {TYPE_SIZE[m.group(2)]})'}
+    m = re.match(r'^glMapVertexAttrib([12])(f|d)APPLE$', name)
+    if m:
+        strides = f'{pn[4]}, {pn[5]}, 0, 1' if m.group(1) == '1' else f'{pn[4]}, {pn[5]}, {pn[8]}, {pn[9]}'
+        return {last(): f'glm_attrib_map_bytes({pn[1]}, {strides}, {TYPE_SIZE[m.group(2)]})'}
+    m = re.match(r'^glEvalCoord([12])(f|d)v$', name)
+    if m:
+        return {0: str(int(m.group(1)) * TYPE_SIZE[m.group(2)])}
     m = re.match(r'^glRect(s|i|f|d)v$', name)
     if m:
         return {0: str(2 * TYPE_SIZE[m.group(1)]), 1: str(2 * TYPE_SIZE[m.group(1)])}
@@ -289,6 +311,9 @@ for name in sorted(set(e for e in exports if e.startswith('gl'))):
         stats['custom'] += 1
         continue
     guard = profile_guard(name, ret)
+    if name in LIST_PIXELS:
+        decls.append(f'bool glm_list_{name}(struct glm_context *ctx{"".join(", " + t + " " + n for (t, _), n in zip(params, names))});')
+        guard += f'    if (ctx && GLM_LISTING(ctx) && glm_list_{name}(ctx{"".join(", " + n for n in names)})) return;\n'
     shadow = f'    if (ctx) glm_shadow_{name}(ctx{"".join(", " + n for n in names)});\n' if name in SHADOW else ''
     # The state serial moves when the call executes (worker or caller), never
     # when it is recorded: a draw executing earlier must not see it.
@@ -310,7 +335,7 @@ for name in sorted(set(e for e in exports if e.startswith('gl'))):
                           f'    if (ctx) glm_shadow_refresh(ctx);\n}}\n')
             continue
         bump_line = '    if (ctx) GLM_STATE_CHANGED(ctx);\n' if bump else ''
-        if ret == 'void' and not NOT_LISTED.match(name):
+        if ret == 'void' and not NOT_LISTED.match(name) and name not in LIST_PIXELS:
             # Listable, but its data size is only known to the implementation:
             # executed at compile time instead (glm_list_unsupported logs it).
             bump_line = f'    if (ctx && GLM_LISTING(ctx)) glm_list_unsupported(ctx, "{name}");\n' + bump_line
@@ -341,7 +366,7 @@ for name in sorted(set(e for e in exports if e.startswith('gl'))):
     exec_fn = (f'static void glm_exec_{name}(const void *payload)\n{{\n'
                f'    const struct glm_cmd_{name} *c = payload;\n'
                f'    (void)c;\n{exec_bump}    glm_impl_{name}({", ".join("c->" + n for n in names)});\n{exec_free}{exec_done}}}\n')
-    listed = not NOT_LISTED.match(name)
+    listed = not NOT_LISTED.match(name) and name not in LIST_PIXELS
     list_branch = ''
     if listed:
         # Display lists replay the same payload without stream accounting.

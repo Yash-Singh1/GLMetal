@@ -147,6 +147,13 @@ before freeing the backend. It also clears surviving shared buffers' references
 to that backend. Default textures belong to their context; named textures and
 cube aliases are released when their last shared context closes.
 
+## Legacy features
+
+[docs/LEGACY_GL.md](docs/LEGACY_GL.md) covers the OpenGL 2.1 features with no Metal
+counterpart (aux and accumulation buffers, stipples, selection and feedback,
+display lists, evaluators, pixel rectangles): references, Apple's observed
+behaviour, GLMetal's implementation and the tests comparing them.
+
 ## Testing
 
 `tests/probes/run_shadow_border_cpu.sh` validates shadow-border translation and

@@ -185,6 +185,159 @@ $(OUT)/libglcases.dylib: $(GLC_CASES) $(GLC)/glc_util.c $(GLC)/glcompare.h $(OUT
 	$(CC) $(CFLAGS) -I$(GLC) -I$(OUT)/gen -dynamiclib $(GLC_CASES) $(GLC)/glc_util.c \
 		-Wl,-undefined,dynamic_lookup -o $@
 
+# Default-framebuffer aux buffers: validation must print what Apple's GL
+# does; the GLMetal run also renders into a windowless view.
+$(OUT)/aux_buffers: tests/probes/aux_buffers.m
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w -fobjc-arc -framework Cocoa $< -o $@
+.PHONY: test-aux-buffers
+test-aux-buffers: lib $(OUT)/aux_buffers
+	@$(OUT)/aux_buffers > $(OUT)/aux-buffers-apple.txt
+	@$(OUT)/aux_buffers $(OUT)/libGLMetal.dylib > $(OUT)/aux-buffers-glmetal.txt 2>/dev/null || \
+		{ grep WRONG $(OUT)/aux-buffers-glmetal.txt; echo "aux buffers: GLMetal rendering failed"; exit 1; }
+	@GLMETAL_THREAD_ALL=1 $(OUT)/aux_buffers $(OUT)/libGLMetal.dylib > /dev/null 2>&1 || \
+		{ echo "aux buffers: threaded GLMetal rendering failed"; exit 1; }
+	@grep -v '^glmetal:' $(OUT)/aux-buffers-glmetal.txt | diff $(OUT)/aux-buffers-apple.txt - && \
+		echo "aux buffers: matches Apple, rendering ok"
+
+# Window-system framebuffer (front/back/aux buffers, swaps, colour
+# broadcast, accumulation buffer) on Apple's GL and on GLMetal, diffed. The
+# probe links the headless shim: its window is transparent, click-through,
+# behind everything, and the app never activates.
+SHIM := $(OUT)/external/libheadless_shim.dylib
+$(OUT)/default_framebuffer: tests/probes/default_framebuffer.m
+	@test -f $(SHIM) || { echo "build the headless shim first: tests/external/piglit.sh build"; exit 1; }
+	$(CC) -arch arm64 -w -fobjc-arc -framework Cocoa -framework OpenGL -Wl,-needed_library,$(SHIM) $< -o $@
+.PHONY: test-default-framebuffer
+test-default-framebuffer: lib inject $(OUT)/default_framebuffer
+	@otool -L $(OUT)/default_framebuffer | grep -qF $(SHIM) || { echo "refusing: probe does not link the headless shim"; exit 1; }
+	@$(OUT)/default_framebuffer > $(OUT)/default-framebuffer-apple.txt
+	@DYLD_INSERT_LIBRARIES=$(OUT)/libGLMetalInject.dylib $(OUT)/default_framebuffer > $(OUT)/default-framebuffer-glmetal.txt
+	@diff $(OUT)/default-framebuffer-apple.txt $(OUT)/default-framebuffer-glmetal.txt > $(OUT)/default-framebuffer.diff && \
+		echo "default framebuffer: GLMetal matches Apple ($$(wc -l < $(OUT)/default-framebuffer-apple.txt) lines)" || \
+		{ echo "default framebuffer: GLMetal differs from Apple ($(OUT)/default-framebuffer.diff)"; exit 1; }
+
+# ARB program queries (limits and per-program counters of the programs in
+# tests/probes/arb_programs.txt) and load errors against Apple's answers.
+$(OUT)/arb_program_queries: tests/probes/arb_program_queries.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -o $@
+$(OUT)/arb_program_errors: tests/probes/arb_program_errors.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -o $@
+.PHONY: test-arb-queries
+test-arb-queries: lib $(OUT)/arb_program_queries $(OUT)/arb_program_errors
+	@$(OUT)/arb_program_errors > $(OUT)/arb-errors-apple.txt
+	@$(OUT)/arb_program_errors $(OUT)/libGLMetal.dylib 2>/dev/null | diff $(OUT)/arb-errors-apple.txt - && \
+		echo "ARB program errors: match Apple" 
+	@$(OUT)/arb_program_queries < tests/probes/arb_programs.txt > $(OUT)/arb-queries-apple.txt
+	@$(OUT)/arb_program_queries $(OUT)/libGLMetal.dylib < tests/probes/arb_programs.txt > $(OUT)/arb-queries-glmetal.txt 2>/dev/null
+	@GLMETAL_THREAD_ALL=1 $(OUT)/arb_program_queries $(OUT)/libGLMetal.dylib < tests/probes/arb_programs.txt \
+		> $(OUT)/arb-queries-threaded.txt 2>/dev/null
+	@diff $(OUT)/arb-queries-apple.txt $(OUT)/arb-queries-glmetal.txt && \
+		diff $(OUT)/arb-queries-apple.txt $(OUT)/arb-queries-threaded.txt && \
+		echo "ARB program queries: direct/threaded match Apple ($$(wc -l < $(OUT)/arb-queries-apple.txt) lines)"
+
+# Small legacy entry points (colour index, texture residency, vertex blend
+# state, unadvertised extensions) against Apple's answers.
+$(OUT)/legacy_misc: tests/probes/legacy_misc.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -o $@
+.PHONY: test-legacy-misc
+test-legacy-misc: lib $(OUT)/legacy_misc
+	@$(OUT)/legacy_misc > $(OUT)/legacy-misc-apple.txt
+	@$(OUT)/legacy_misc $(OUT)/libGLMetal.dylib 2>/dev/null | diff $(OUT)/legacy-misc-apple.txt - && \
+		GLMETAL_THREAD_ALL=1 $(OUT)/legacy_misc $(OUT)/libGLMetal.dylib 2>/dev/null | diff $(OUT)/legacy-misc-apple.txt - && \
+		echo "legacy entry points: direct/threaded match Apple ($$(wc -l < $(OUT)/legacy-misc-apple.txt) lines)"
+
+# The imaging subset against Apple's answers, less the documented lines
+# where Apple contradicts the extensions (tests/probes/imaging_quirks.txt).
+$(OUT)/imaging: tests/probes/imaging.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -o $@
+.PHONY: test-imaging
+test-imaging: lib $(OUT)/imaging
+	@$(OUT)/imaging > $(OUT)/imaging-apple.txt
+	@$(OUT)/imaging $(OUT)/libGLMetal.dylib 2>/dev/null > $(OUT)/imaging-direct.txt
+	@GLMETAL_THREAD_ALL=1 $(OUT)/imaging $(OUT)/libGLMetal.dylib 2>/dev/null > $(OUT)/imaging-threaded.txt
+	@python3 tests/probes/quirkdiff.py $(OUT)/imaging-apple.txt $(OUT)/imaging-direct.txt tests/probes/imaging_quirks.txt && \
+		python3 tests/probes/quirkdiff.py $(OUT)/imaging-apple.txt $(OUT)/imaging-threaded.txt tests/probes/imaging_quirks.txt && \
+		echo "imaging: direct/threaded match Apple ($$(wc -l < $(OUT)/imaging-apple.txt) lines, $$(grep -c '^apple:' tests/probes/imaging_quirks.txt) documented quirks)"
+
+# Attribute evaluators (APPLE_vertex_program_evaluators) against Apple's answers.
+$(OUT)/attrib_evaluators: tests/probes/attrib_evaluators.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -o $@
+.PHONY: test-attrib-evaluators
+test-attrib-evaluators: lib $(OUT)/attrib_evaluators
+	@$(OUT)/attrib_evaluators > $(OUT)/attrib-evaluators-apple.txt
+	@$(OUT)/attrib_evaluators $(OUT)/libGLMetal.dylib 2>/dev/null > $(OUT)/attrib-evaluators-direct.txt
+	@GLMETAL_THREAD_ALL=1 $(OUT)/attrib_evaluators $(OUT)/libGLMetal.dylib 2>/dev/null > $(OUT)/attrib-evaluators-threaded.txt
+	@python3 tests/probes/quirkdiff.py $(OUT)/attrib-evaluators-apple.txt $(OUT)/attrib-evaluators-direct.txt tests/probes/attrib_evaluators_quirks.txt && \
+		python3 tests/probes/quirkdiff.py $(OUT)/attrib-evaluators-apple.txt $(OUT)/attrib-evaluators-threaded.txt tests/probes/attrib_evaluators_quirks.txt && \
+		echo "attribute evaluators: direct/threaded match Apple ($$(wc -l < $(OUT)/attrib-evaluators-apple.txt) lines, $$(grep -c '^apple:' tests/probes/attrib_evaluators_quirks.txt) documented quirks)"
+
+# Vertex blending and per-vertex point sizes against Apple's answers.
+$(OUT)/vertex_blend: tests/probes/vertex_blend.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -o $@
+.PHONY: test-vertex-blend
+test-vertex-blend: lib $(OUT)/vertex_blend
+	@$(OUT)/vertex_blend > $(OUT)/vertex-blend-apple.txt
+	@$(OUT)/vertex_blend $(OUT)/libGLMetal.dylib 2>/dev/null > $(OUT)/vertex-blend-direct.txt
+	@GLMETAL_THREAD_ALL=1 $(OUT)/vertex_blend $(OUT)/libGLMetal.dylib 2>/dev/null > $(OUT)/vertex-blend-threaded.txt
+	@python3 tests/probes/numdiff.py $(OUT)/vertex-blend-apple.txt $(OUT)/vertex-blend-direct.txt && \
+		python3 tests/probes/numdiff.py $(OUT)/vertex-blend-apple.txt $(OUT)/vertex-blend-threaded.txt && \
+		echo "vertex blend: direct/threaded match Apple ($$(wc -l < $(OUT)/vertex-blend-apple.txt) lines)"
+
+# Bindable uniforms (EXT_bindable_uniform) against Apple's answers.
+$(OUT)/bindable_uniform: tests/probes/bindable_uniform.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -o $@
+.PHONY: test-bindable-uniform
+test-bindable-uniform: lib $(OUT)/bindable_uniform
+	@$(OUT)/bindable_uniform > $(OUT)/bindable-uniform-apple.txt
+	@$(OUT)/bindable_uniform $(OUT)/libGLMetal.dylib 2>/dev/null > $(OUT)/bindable-uniform-direct.txt
+	@GLMETAL_THREAD_ALL=1 $(OUT)/bindable_uniform $(OUT)/libGLMetal.dylib 2>/dev/null > $(OUT)/bindable-uniform-threaded.txt
+	@python3 tests/probes/quirkdiff.py $(OUT)/bindable-uniform-apple.txt $(OUT)/bindable-uniform-direct.txt tests/probes/bindable_uniform_quirks.txt && \
+		python3 tests/probes/quirkdiff.py $(OUT)/bindable-uniform-apple.txt $(OUT)/bindable-uniform-threaded.txt tests/probes/bindable_uniform_quirks.txt && \
+		echo "bindable uniforms: direct/threaded match Apple ($$(wc -l < $(OUT)/bindable-uniform-apple.txt) lines, $$(grep -c '^apple:' tests/probes/bindable_uniform_quirks.txt) documented quirk)"
+
+# Element arrays (APPLE_element_array) against Apple's answers.
+$(OUT)/element_array: tests/probes/element_array.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -o $@
+.PHONY: test-element-array
+test-element-array: lib $(OUT)/element_array
+	@$(OUT)/element_array > $(OUT)/element-array-apple.txt
+	@$(OUT)/element_array $(OUT)/libGLMetal.dylib 2>/dev/null | diff $(OUT)/element-array-apple.txt - && \
+		GLMETAL_THREAD_ALL=1 $(OUT)/element_array $(OUT)/libGLMetal.dylib 2>/dev/null | diff $(OUT)/element-array-apple.txt - && \
+		echo "element arrays: direct/threaded match Apple ($$(wc -l < $(OUT)/element-array-apple.txt) lines)"
+
+# Evaluators against Apple's answers.
+$(OUT)/evaluators: tests/probes/evaluators.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -o $@
+.PHONY: test-evaluators
+test-evaluators: lib $(OUT)/evaluators
+	@$(OUT)/evaluators > $(OUT)/evaluators-apple.txt
+	@$(OUT)/evaluators $(OUT)/libGLMetal.dylib 2>/dev/null > $(OUT)/evaluators-direct.txt
+	@GLMETAL_THREAD_ALL=1 $(OUT)/evaluators $(OUT)/libGLMetal.dylib 2>/dev/null > $(OUT)/evaluators-threaded.txt
+	@python3 tests/probes/numdiff.py $(OUT)/evaluators-apple.txt $(OUT)/evaluators-direct.txt && \
+		python3 tests/probes/numdiff.py $(OUT)/evaluators-apple.txt $(OUT)/evaluators-threaded.txt && \
+		echo "evaluators: direct/threaded match Apple ($$(wc -l < $(OUT)/evaluators-apple.txt) lines)"
+
+# Selection and feedback render modes against Apple's answers.
+$(OUT)/render_modes: tests/probes/render_modes.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -o $@
+.PHONY: test-render-modes
+test-render-modes: lib $(OUT)/render_modes
+	@$(OUT)/render_modes > $(OUT)/render-modes-apple.txt
+	@$(OUT)/render_modes $(OUT)/libGLMetal.dylib 2>/dev/null | diff $(OUT)/render-modes-apple.txt - && \
+		GLMETAL_THREAD_ALL=1 $(OUT)/render_modes $(OUT)/libGLMetal.dylib 2>/dev/null | diff $(OUT)/render-modes-apple.txt - && \
+		echo "render modes: direct/threaded match Apple ($$(wc -l < $(OUT)/render-modes-apple.txt) lines)"
+
 check: glcompare check-reference
 	python3 $(GLC)/compare.py
 

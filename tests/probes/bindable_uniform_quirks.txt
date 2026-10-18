@@ -1,0 +1,7 @@
+# Lines of tests/probes/bindable_uniform.c where Apple's OpenGL contradicts EXT_bindable_uniform:
+# what Apple prints, then what GLMetal prints.
+
+# glUniform* at the location of an array element past the first: Apple loads nothing
+# (glUniform1fv at the array's location loads every element); the extension loads the element.
+apple: fa buffer: 0.640625
+spec: fa buffer: 0.625

@@ -18,13 +18,14 @@
 #define GLM_HIDDEN __attribute__((visibility("hidden")))
 
 enum { GLM_MAX_ATTRIBS = 16, GLM_MAX_TEXTURE_UNITS = 16, GLM_MAX_CLIP_PLANES = 8,
-       GLM_MAX_LIGHTS = 8, GLM_MAX_DRAW_BUFFERS = 8, GLM_MATRIX_STACK_DEPTH = 32, GLM_MAX_PATCH_VERTICES = 32, GLM_MAX_VIEWPORTS = 16 };
+       GLM_MAX_LIGHTS = 8, GLM_MAX_DRAW_BUFFERS = 8, GLM_MATRIX_STACK_DEPTH = 32, GLM_MAX_PATCH_VERTICES = 32, GLM_MAX_VIEWPORTS = 16,
+       GLM_MAX_AUX_BUFFERS = 2 };
 
 /* Fixed attribute slots for legacy arrays; generic attributes share them the
    way NVIDIA-style aliasing does on Apple (0 = position, 3 = color...). */
 enum glm_attrib {
     GLM_ATTR_POSITION = 0, GLM_ATTR_WEIGHT = 1, GLM_ATTR_NORMAL = 2, GLM_ATTR_COLOR = 3,
-    GLM_ATTR_SECONDARY_COLOR = 4, GLM_ATTR_FOG = 5, GLM_ATTR_TEX0 = 8,
+    GLM_ATTR_SECONDARY_COLOR = 4, GLM_ATTR_FOG = 5, GLM_ATTR_POINT_SIZE = 7, GLM_ATTR_TEX0 = 8,
 };
 
 /* ---- objects ------------------------------------------------------------- */
@@ -178,10 +179,15 @@ struct glm_array {
     GLuint divisor;
 };
 
+/* Client arrays outside the attribute slots: edge flags, colour indices,
+   ARB_vertex_blend weights and APPLE_vertex_point_size sizes. */
+enum { GLM_LEGACY_EDGE_FLAG, GLM_LEGACY_INDEX, GLM_LEGACY_WEIGHT, GLM_LEGACY_POINT_SIZE, GLM_LEGACY_ARRAYS };
+
 struct glm_vertex_array {
     GLuint name;
     uint64_t serial; /* glm_vao_changed: bumped by every change of the arrays */
     struct glm_array arrays[GLM_MAX_ATTRIBS];
+    struct glm_array legacy[GLM_LEGACY_ARRAYS];
     GLuint element_buffer;
     GLenum client_active_texture;
 };
@@ -194,9 +200,90 @@ struct glm_light {
     bool enabled;
 };
 
+/* Evaluators (evaluators.c): per dimension GL_MAP*_COLOR_4 ... VERTEX_4. */
+enum { GLM_EVAL_MAPS = 9, GLM_MAX_EVAL_ORDER = 10 };
+struct glm_eval_map {
+    GLint size;      /* components (APPLE_vertex_program_evaluators' attribute maps) */
+    GLint order[2];  /* u, v (1 for one-dimensional maps) */
+    float domain[4]; /* u1, u2, v1, v2 */
+    float *points;   /* order[0] * order[1] points of the target's components, v fastest */
+};
+
 struct glm_material {
     float ambient[4], diffuse[4], specular[4], emission[4], shininess;
 };
+/* A vertex's materials: per face emission, ambient, diffuse, specular, then
+   the front and back shininess. */
+enum { GLM_VERTEX_MATERIAL_FLOAT4S = 9, GLM_ATTR_MATERIAL_INDEX = 6 };
+struct glm_context;
+GLM_HIDDEN void glm_immediate_material(struct glm_context *ctx);
+GLM_HIDDEN bool glm_ff_vertex_extras(struct glm_context *ctx);
+/* EXT_bindable_uniform: draws fail while a bindable uniform of the current
+   program has no buffer, too small a buffer, or one another shares. */
+GLM_HIDDEN bool glm_bindable_draw_invalid(struct glm_context *ctx);
+GLM_HIDDEN void glm_eval_init(struct glm_context *ctx);
+GLM_HIDDEN void glm_eval_destroy(struct glm_context *ctx);
+GLM_HIDDEN bool *glm_eval_capability(struct glm_context *ctx, GLenum cap);
+GLM_HIDDEN int glm_eval_query(struct glm_context *ctx, GLenum pname, double *v);
+GLM_HIDDEN int glm_eval_components(GLenum target);
+/* glGetVertexAttrib*v of the attribute maps: the count of values, -1 for other pnames. */
+GLM_HIDDEN int glm_eval_attrib_query(struct glm_context *ctx, GLuint index, GLenum pname, double *v);
+struct glm_texture;
+GLM_HIDDEN GLboolean glm_texture_resident(const struct glm_texture *t);
+
+/* The imaging subset (imaging.c; ARB_imaging, GL 2.1 3.6.3, 3.6.5): the
+   colour tables, convolution filters, histogram and minmax enables in this
+   order, and their parameters (the pixel attribute group). Tables, filter
+   images and counters live in glm_context.imaging. */
+enum {
+    GLM_IMAGING_COLOR_TABLE, GLM_IMAGING_POST_CONVOLUTION_TABLE, GLM_IMAGING_POST_COLOR_MATRIX_TABLE,
+    GLM_IMAGING_CONVOLUTION_1D, GLM_IMAGING_CONVOLUTION_2D, GLM_IMAGING_SEPARABLE_2D, GLM_IMAGING_HISTOGRAM,
+    GLM_IMAGING_MINMAX, GLM_IMAGING_ENABLES
+};
+struct glm_imaging_state {
+    bool enabled[GLM_IMAGING_ENABLES];
+    float table_scale[3][4], table_bias[3][4];
+    GLenum border_mode[3]; /* 1D, 2D, separable */
+    float border_color[3][4], filter_scale[3][4], filter_bias[3][4];
+    float post_convolution_scale[4], post_convolution_bias[4];
+    float post_color_matrix_scale[4], post_color_matrix_bias[4];
+};
+struct glm_imaging_objects;
+GLM_HIDDEN void glm_imaging_init(struct glm_context *ctx);
+GLM_HIDDEN void glm_imaging_destroy(struct glm_context *ctx);
+GLM_HIDDEN bool *glm_imaging_capability(struct glm_context *ctx, GLenum cap);
+GLM_HIDDEN int glm_imaging_query(struct glm_context *ctx, GLenum pname, double *v);
+GLM_HIDDEN bool glm_imaging_transfer(struct glm_context *ctx, GLenum pname, GLfloat value);
+/* Whether colour images of `dims` dimensions (1: 1D textures; 2: images;
+   3: 3D texture slices, never convolved) go through the imaging operations. */
+GLM_HIDDEN bool glm_imaging_active(const struct glm_context *ctx, int dims);
+/* Runs the imaging operations on a float RGBA image (replaced when its size
+   changes). False when the histogram or minmax sink discards it. */
+GLM_HIDDEN bool glm_imaging_apply(struct glm_context *ctx, int dims, float **rgba, GLsizei *width, GLsizei *height);
+/* The size of a `dims`-dimensional image after convolution. */
+GLM_HIDDEN void glm_imaging_size(const struct glm_context *ctx, int dims, GLsizei *width, GLsizei *height);
+/* glReadPixels' colour data: glPixelTransfer, then the imaging operations
+   (false: nothing is returned). */
+GLM_HIDDEN bool glm_imaging_read(struct glm_context *ctx, float **rgba, GLsizei *width, GLsizei *height);
+/* Pixel data passed on without pixel transfer or imaging, tightly packed
+   and from client memory: around calls that re-enter the GL with images the
+   imaging operations already processed. */
+struct glm_pixels_raw {
+    GLint unpack[8];
+    bool swap_bytes, lsb_first, client_storage, raw;
+    GLuint unpack_buffer;
+};
+GLM_HIDDEN void glm_pixels_raw_begin(struct glm_context *ctx, struct glm_pixels_raw *saved);
+GLM_HIDDEN void glm_pixels_raw_end(struct glm_context *ctx, const struct glm_pixels_raw *saved);
+/* pixels.c: client (or unpack buffer) pixels as float RGBA, through
+   glPixelTransfer when `transfer`; NULL if nothing can be read. */
+GLM_HIDDEN float *glm_unpack_rgba(struct glm_context *ctx, GLsizei width, GLsizei height, GLsizei depth, GLenum format,
+                                  GLenum type, const void *pixels, bool transfer);
+/* pixels.c: glPixelTransfer's RGBA scale, bias and colour maps on `count` pixels. */
+GLM_HIDDEN void glm_transfer_rgba(struct glm_context *ctx, float *rgba, size_t count);
+GLM_HIDDEN bool glm_transfer_identity(const struct glm_context *ctx);
+/* raster.c: the read buffer's pixels as float RGBA (default pack state). */
+GLM_HIDDEN float *glm_read_rgba(struct glm_context *ctx, GLint x, GLint y, GLsizei width, GLsizei height);
 
 struct glm_texenv {
     GLenum mode;
@@ -263,7 +350,7 @@ struct glm_state {
          color_logic_op, polygon_offset_fill, polygon_offset_line, polygon_offset_point, depth_clamp,
          rasterizer_discard, primitive_restart, program_point_size, multisample, sample_alpha_to_coverage,
          framebuffer_srgb, lighting, color_material, normalize, rescale_normal, fog, point_sprite,
-         line_smooth, polygon_smooth, vertex_program, fragment_program, vertex_program_two_side, stencil_two_side,
+         line_smooth, polygon_smooth, polygon_stipple, line_stipple, vertex_program, fragment_program, vertex_program_two_side, stencil_two_side,
          stencil_back_ext, texture_cube_seamless;
     bool clip_plane_enabled[GLM_MAX_CLIP_PLANES];
     double clip_planes[GLM_MAX_CLIP_PLANES][4]; /* eye space */
@@ -281,6 +368,23 @@ struct glm_state {
        GL_STENCIL_TEST_TWO_SIDE_EXT is enabled). glm_stencil_back picks. */
     struct glm_stencil_face stencil[3];
     float clear_color[4];
+    float clear_accum[4];   /* glClearAccum, clamped to [-1, 1] */
+    uint8_t polygon_stipple_pattern[128]; /* glPolygonStipple: 32 rows of 4 bytes, MSB first */
+    bool edge_flag;         /* glEdgeFlag */
+    GLint line_stipple_factor;
+    GLushort line_stipple_pattern;
+    float current_index, clear_index; /* colour-index state, kept in RGBA mode (legacy_misc.c) */
+    GLuint index_mask;
+    GLint clear_color_integer[4];     /* glClearColorIiEXT / glClearColorIuiEXT */
+    float current_weight[4];          /* ARB_vertex_blend: GL_CURRENT_WEIGHT_ARB */
+    GLint active_vertex_units;
+    float current_point_size;         /* APPLE_vertex_point_size */
+    bool vertex_blend, weight_sum_unity, vertex_point_size; /* GL_VERTEX_BLEND_ARB, ..._SUM_UNITY_ARB, GL_VERTEX_POINT_SIZE_APPLE */
+    bool map_enabled[2][GLM_EVAL_MAPS]; /* GL_MAP1_*, GL_MAP2_* */
+    uint16_t attrib_maps_enabled[2]; /* GL_VERTEX_ATTRIB_MAP1/2_APPLE per attribute */
+    bool auto_normal;
+    GLint eval_grid_segments[2][2]; /* glMapGrid1: [0][0]; glMapGrid2: [1][0..1] */
+    float eval_grid_domain[2][4];
     double clear_depth;
     GLint clear_stencil;
 
@@ -291,6 +395,7 @@ struct glm_state {
     bool raster_valid;
     float raster_color[4];
     float raster_texcoord[8][4]; /* GL_CURRENT_RASTER_TEXTURE_COORDS per unit */
+    float raster_distance;  /* eye depth (or the fog coordinate) fogging pixel rectangles */
     float pixel_scale[4], pixel_bias[4]; /* glPixelTransfer RGBA scale and bias */
     /* glPixelMap tables, GL_PIXEL_MAP_I_TO_I (0) .. GL_PIXEL_MAP_A_TO_A (9),
        and the rest of glPixelTransfer. */
@@ -300,10 +405,12 @@ struct glm_state {
     GLint index_shift, index_offset;
     float depth_scale, depth_bias;
     float pixel_zoom[2];
+    struct glm_imaging_state imaging;
 
     /* transforms */
     GLenum matrix_mode;
     struct glm_matrix_stack modelview, projection, texture[GLM_MAX_TEXTURE_UNITS], color;
+    struct glm_matrix_stack vertex_units[3]; /* ARB_vertex_blend: GL_MODELVIEW1_ARB .. GL_MODELVIEW3_ARB */
 
     /* lighting */
     struct glm_light lights[GLM_MAX_LIGHTS];
@@ -357,6 +464,25 @@ static inline void glm_sampling_resource_changed(struct glm_share_group *share)
 enum glm_profile { GLM_PROFILE_LEGACY, GLM_PROFILE_CORE };
 
 struct glm_begin_end;
+
+/* GL_SELECT / GL_FEEDBACK render modes (render_modes.c). */
+enum { GLM_MAX_NAME_STACK = 128 };
+struct glm_render_modes {
+    GLenum mode;                   /* GL_RENDER, GL_SELECT, GL_FEEDBACK */
+    GLuint *select_buffer;
+    GLsizei select_size, select_used;
+    GLint hits;
+    bool hit, select_overflow;
+    float hit_min, hit_max;        /* window depths of the pending hit */
+    GLuint names[GLM_MAX_NAME_STACK];
+    int name_depth;
+    GLfloat *feedback_buffer;
+    GLsizei feedback_size, feedback_used;
+    GLenum feedback_type;
+    bool feedback_overflow;
+    float eye_planes[GLM_MAX_CLIP_PLANES][4]; /* this draw's enabled user clip planes */
+    int eye_plane_count;
+};
 struct glm_backend_context;
 
 struct glm_context {
@@ -387,6 +513,7 @@ struct glm_context {
     GLuint list_base;                       /* glListBase */
     GLenum apple_element_type;              /* glElementPointerAPPLE (application thread) */
     const void *apple_element_pointer;
+    bool apple_element_enabled;             /* GL_ELEMENT_ARRAY_APPLE (application thread) */
     bool conditional_render_active, conditional_discard; /* glBeginConditionalRender: skip draws and clears */
     GLenum clamp_read_color;
     float point_size_min, point_size_max, point_fade_threshold, point_distance[3];
@@ -417,6 +544,21 @@ struct glm_context {
     struct glm_indexed_buffer feedback_default_bindings[4]; /* object 0's, while another is bound */
     bool presents;
     bool polygon_split;     /* vertex.c: drawing one face group of a split polygon draw */
+    const uint8_t *edge_flags;     /* vertex.c: the vertices' edge flags while submitting, NULL: all set */
+    /* vertex.c: while submitting a glBegin/glEnd whose materials changed
+       between vertices, GLM_VERTEX_MATERIAL_FLOAT4S per vertex (attribute 6's
+       x holds each vertex's index); NULL otherwise. */
+    const float *vertex_materials;
+    uint8_t pixel_rect; /* metal_backend.m: drawing a pixel rectangle (1 image, 2 bitmap; ffgen.c) */
+    uint32_t vertex_material_count;
+    struct glm_render_modes render_modes;
+    struct glm_eval_map eval_maps[2][GLM_EVAL_MAPS];
+    struct glm_eval_map attrib_maps[2][GLM_MAX_ATTRIBS]; /* APPLE_vertex_program_evaluators */
+    struct glm_imaging_objects *imaging; /* imaging.c: colour tables, filters, histogram, minmax */
+    /* Pixel data skips glPixelTransfer and the imaging operations
+       (glm_pixels_raw_begin); glReadPixels applies them (read_transfer). */
+    bool pixels_raw, read_transfer;
+    const uint8_t *stipple_resets; /* vertex.c: per line, whether the stipple counter restarts (outlines) */
     bool user_clip_preprocessed; /* linear FF user planes were already clipped on the CPU */
     bool wide_line_expansion; /* vertex.c: fog.yz carry a fixed-function clip-space offset */
     struct glm_matrix_stack invalid_stack; /* texture matrix ops on units past GL_MAX_TEXTURE_COORDS land here */          /* has had a window surface (cgl.m) */
@@ -424,6 +566,11 @@ struct glm_context {
     uint8_t default_depth_bits, default_stencil_bits;
     bool default_bits_known;
     bool default_single_buffered; /* the pixel format has only a front buffer */
+    /* GL_AUX0.. colour buffers of the default framebuffer (legacy pixel
+       formats offer up to GLM_MAX_AUX_BUFFERS, as Apple's do). */
+    uint8_t default_aux_buffers;
+    uint8_t default_accum_bits;     /* per component: 32 (float) or 0 */
+    bool default_aux_depth_stencil; /* each aux buffer has its own depth/stencil */
     /* Proxy texture targets (textures.m): what the last glTexImage on each
        would have defined. */
     struct glm_texture_level proxy_levels[10][GLM_MAX_LEVELS];
@@ -458,6 +605,17 @@ GLM_HIDDEN struct glm_context *glm_context_create(enum glm_profile profile, stru
 GLM_HIDDEN void glm_context_destroy(struct glm_context *ctx);
 GLM_HIDDEN void glm_log(const char *format, ...) __attribute__((format(printf, 1, 2)));
 GLM_HIDDEN void glm_unimplemented(const char *name);
+/* cgl.m: shows front-buffer drawing on glFlush/glFinish. */
+GLM_HIDDEN void glm_cgl_present_front(struct glm_context *ctx);
+/* render_modes.c: a draw (vertex.c submit) or a raster operation (`token`
+   GL_BITMAP_TOKEN..., 0 for glRasterPos) in GL_SELECT/GL_FEEDBACK mode. */
+GLM_HIDDEN void glm_render_mode_submit(struct glm_context *ctx, GLenum mode, const float *vertices, uint32_t vertex_count,
+                                       const uint32_t *indices, uint32_t index_count, uint32_t instance,
+                                       uint32_t vertex_id_base);
+GLM_HIDDEN void glm_render_mode_raster(struct glm_context *ctx, GLenum token);
+/* metal_backend.m: an accumulation buffer operation over the scissored
+   window (GL_ACCUM ... GL_ADD, or 0 to clear it to `clear`). */
+GLM_HIDDEN void glm_backend_accum(struct glm_context *ctx, GLenum op, float value, const float clear[4]);
 
 /* Every entry point starts with this: the current context, or return. */
 #define GLM_CONTEXT(ctx, ...)                                                  \
@@ -507,6 +665,10 @@ struct glm_draw {
     uint32_t base_instance;       /* gl_InstanceID of the first instance */
     uint32_t vertex_id_base;      /* original ID offset for affine compact streams */
     const uint32_t *original_vertex_ids; /* deindexed user IDs, vertex_count entries */
+    /* Line stipple: (factor, pattern) then per line primitive its first
+       vertex's window x, y and stipple counter (vertex.c); NULL for none. */
+    const float *stipple;
+    uint32_t stipple_count;
 };
 
 GLM_HIDDEN bool glm_feedback_draw_allowed(struct glm_context *ctx, GLenum mode);
@@ -520,6 +682,10 @@ GLM_HIDDEN void glm_draw_elements_internal(struct glm_context *ctx, GLenum mode,
 /* ---- backend (metal_backend.m) ------------------------------------------- */
 
 GLM_HIDDEN bool glm_backend_initialize(void);
+/* The current vertex stage's outputs for `draw`'s vertices: clip position,
+   front colour and first texture coordinate, as Metal sees the position
+   (y inverted, z in [0, w]); 12 floats each into `out`. Waits for the GPU. */
+GLM_HIDDEN bool glm_backend_vertex_outputs(struct glm_context *ctx, const struct glm_draw *draw, float *out);
 GLM_HIDDEN void *glm_backend_device(void);
 GLM_HIDDEN void *glm_backend_new_queue(void);
 GLM_HIDDEN struct glm_backend_context *glm_backend_context_create(struct glm_context *ctx);

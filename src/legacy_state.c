@@ -130,6 +130,7 @@ GLM_HIDDEN void glm_color_material_sync(struct glm_context *ctx)
 GLM_EXPORT void glMaterialfv(GLenum face, GLenum pname, const GLfloat *params)
 {
     GLM_CONTEXT(ctx);
+    if (ctx->immediate) glm_immediate_material(ctx);
     for (int f = 0; f < 2; ++f) {
         if (f == 0 && face == GL_BACK) continue;
         if (f == 1 && face == GL_FRONT) continue;

@@ -31,6 +31,9 @@ GLM_HIDDEN void glm_list_note_shadowed(struct glm_context *ctx);
 GLM_HIDDEN void glm_list_unsupported(struct glm_context *ctx, const char *name);
 /* Client bytes a glTex(Sub)Image upload reads; 0 with an unpack buffer,
    (size_t)-1 when unknown (marshal_custom.c). */
+/* Bytes glMap1/glMap2 read from `points`; 0 when the call fails before reading. */
+GLM_HIDDEN size_t glm_map_points_bytes(unsigned target, int ustride, int uorder, int vstride, int vorder, size_t size);
+GLM_HIDDEN size_t glm_attrib_map_bytes(unsigned components, int ustride, int uorder, int vstride, int vorder, size_t size);
 GLM_HIDDEN size_t glm_marshal_image_size(struct glm_context *ctx, int w, int h, int d, unsigned format, unsigned type);
 /* Values glLightfv, glTexParameterfv... read for `pname`. */
 GLM_HIDDEN size_t glm_param_count(unsigned pname);

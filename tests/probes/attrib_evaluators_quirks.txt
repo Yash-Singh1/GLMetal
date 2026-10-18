@@ -1,0 +1,11 @@
+# Lines of tests/probes/attrib_evaluators.c where Apple's OpenGL contradicts
+# APPLE_vertex_program_evaluators: what Apple prints, then what GLMetal prints.
+
+# Attribute maps of size 1-3: Apple's unused components are neither the map's values nor
+# 0, 0, 1; the extension evaluates them as glVertexAttrib1-3 do (filling 0, 0, 1).
+apple:   : 1793.000 8.621 8.966 0.517 1.160 0.140 0.530 0.160 0.600 0.900 0.800 0.700 0.600
+spec:   : 1793.000 8.621 8.966 0.517 1.160 0.140 0.000 0.000 1.000 0.900 0.800 0.700 0.600
+apple:   : 1793.000 8.621 8.966 0.517 1.160 0.000 0.230 0.610 0.510 0.900 0.800 0.700 0.600
+spec:   : 1793.000 8.621 8.966 0.517 1.160 0.140 0.350 0.000 1.000 0.900 0.800 0.700 0.600
+apple:   : 1793.000 8.621 8.966 0.517 1.160 0.580 0.470 0.000 0.330 0.900 0.800 0.700 0.600
+spec:   : 1793.000 8.621 8.966 0.517 1.160 0.140 0.350 0.565 1.000 0.900 0.800 0.700 0.600

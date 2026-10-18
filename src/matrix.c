@@ -61,6 +61,9 @@ struct glm_matrix_stack *glm_matrix_stack(struct glm_context *ctx)
     case GL_PROJECTION: return &s->projection;
     case GL_TEXTURE: return &s->texture[s->active_texture - GL_TEXTURE0];
     case GL_COLOR: return &s->color;
+    case GL_MODELVIEW1_ARB: return &s->vertex_units[0];
+    case GL_MODELVIEW2_ARB: return &s->vertex_units[1];
+    case GL_MODELVIEW3_ARB: return &s->vertex_units[2];
     default: return &s->modelview;
     }
 }
@@ -80,7 +83,10 @@ static void multiply_current(struct glm_context *ctx, const float *m)
 GLM_EXPORT void glMatrixMode(GLenum mode)
 {
     GLM_CONTEXT(ctx);
-    if (mode != GL_MODELVIEW && mode != GL_PROJECTION && mode != GL_TEXTURE && mode != GL_COLOR)
+    /* GL_MODELVIEW1_ARB .. GL_MODELVIEW3_ARB: the vertex units past the
+       first (GL_MAX_VERTEX_UNITS_ARB is 4). */
+    if (mode != GL_MODELVIEW && mode != GL_PROJECTION && mode != GL_TEXTURE && mode != GL_COLOR &&
+        mode != GL_MODELVIEW1_ARB && mode != GL_MODELVIEW2_ARB && mode != GL_MODELVIEW3_ARB)
         return glm_error(ctx, GL_INVALID_ENUM);
     ctx->state.matrix_mode = mode;
 }

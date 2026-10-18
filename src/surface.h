@@ -19,7 +19,11 @@ GLM_HIDDEN void glm_surface_configure(struct glm_surface *surface, const GLint *
 GLM_HIDDEN void glm_surface_set_swap_interval(struct glm_surface *surface, int interval);
 
 /* metal_backend.m */
-GLM_HIDDEN bool glm_backend_present(struct glm_context *ctx, void *layer, bool opaque);
+/* `swap`: CGLFlushDrawable, which exchanges the back and front images (as
+   Apple's swap does); otherwise the front image is shown as it is. */
+GLM_HIDDEN bool glm_backend_present(struct glm_context *ctx, void *layer, bool opaque, bool swap);
+/* The displayed (front) image was drawn since the last present. */
+GLM_HIDDEN bool glm_backend_front_drawn(struct glm_context *ctx);
 GLM_HIDDEN void glm_backend_default_size(struct glm_context *ctx, GLsizei *width, GLsizei *height);
 GLM_HIDDEN void glm_backend_default_framebuffer_resize(struct glm_context *ctx, GLsizei width, GLsizei height);
 

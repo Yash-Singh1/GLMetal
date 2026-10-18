@@ -61,7 +61,7 @@ static GLuint *buffer_binding(struct glm_context *ctx, GLenum target)
     case GL_ELEMENT_ARRAY_BUFFER: return &ctx->vao->element_buffer;
     case GL_PIXEL_PACK_BUFFER: return &ctx->pixel_pack_buffer;
     case GL_PIXEL_UNPACK_BUFFER: return &ctx->pixel_unpack_buffer;
-    case GL_UNIFORM_BUFFER: return &ctx->uniform_buffer;
+    case GL_UNIFORM_BUFFER: case GL_UNIFORM_BUFFER_EXT: return &ctx->uniform_buffer;
     case GL_COPY_READ_BUFFER: return &ctx->copy_read_buffer;
     case GL_COPY_WRITE_BUFFER: return &ctx->copy_write_buffer;
     case GL_TEXTURE_BUFFER: return &ctx->texture_buffer;
@@ -767,8 +767,9 @@ GLM_HIDDEN GLenum glm_framebuffer_status_of(struct glm_context *ctx, GLuint name
 
 /* Which colour buffer names glDrawBuffer, glDrawBuffers and glReadBuffer
    take, as Apple's implementation answers (build/probes/drawbuf.c): the
-   window-system buffers its pixel format has (never stereo or aux) on
-   framebuffer 0, attachments below GL_MAX_COLOR_ATTACHMENTS on objects. */
+   window-system buffers its pixel format has (never stereo; GL_AUX<n> below
+   its aux buffer count) on framebuffer 0, attachments below
+   GL_MAX_COLOR_ATTACHMENTS on objects. */
 GLM_HIDDEN GLenum glm_color_buffer_error(const struct glm_context *ctx, bool fbo, GLenum buffer, int call)
 {
     if (buffer == GL_NONE) return GL_NO_ERROR;
@@ -776,7 +777,8 @@ GLM_HIDDEN GLenum glm_color_buffer_error(const struct glm_context *ctx, bool fbo
         if (buffer >= GL_COLOR_ATTACHMENT0 + GLM_MAX_DRAW_BUFFERS) return GL_INVALID_ENUM;
         return fbo ? GL_NO_ERROR : GL_INVALID_OPERATION;
     }
-    if (buffer >= 0x0409 && buffer <= 0x040C) return GL_INVALID_OPERATION; /* GL_AUX0..3 */
+    if (buffer >= GL_AUX0 && buffer <= GL_AUX3)
+        return !fbo && buffer - GL_AUX0 < ctx->default_aux_buffers ? GL_NO_ERROR : GL_INVALID_OPERATION;
     if (buffer < GL_FRONT_LEFT || buffer > GL_FRONT_AND_BACK) return GL_INVALID_ENUM;
     /* GL_FRONT, GL_BACK, GL_LEFT, GL_RIGHT, GL_FRONT_AND_BACK name several buffers. */
     if (call == GLM_CALL_DRAW_BUFFERS && buffer >= GL_FRONT)
@@ -904,7 +906,8 @@ static void default_attachment_parameter(struct glm_context *ctx, GLenum attachm
     case GL_STENCIL: exists = stencil > 0; break;
     case GL_AUX0: case GL_AUX1: case GL_AUX2: case GL_AUX3:
         if (ctx->profile == GLM_PROFILE_CORE) return glm_error(ctx, GL_INVALID_ENUM);
-        exists = false;
+        exists = attachment - GL_AUX0 < ctx->default_aux_buffers;
+        color = true;
         break;
     default: return glm_error(ctx, GL_INVALID_ENUM);
     }
@@ -1097,4 +1100,18 @@ GLM_EXPORT void glBindBufferBase(GLenum target, GLuint index, GLuint name)
     *buffer_binding(ctx, target) = name;
 }
 GLM_EXPORT void glBindBufferRangeEXT(GLenum t, GLuint i, GLuint n, GLintptr o, GLsizeiptr s) { glBindBufferRange(t, i, n, o, s); }
+
+/* EXT_transform_feedback: the buffer from `offset` to its end (as Apple
+   reports it, negative past the end); offsets are multiples of 4. */
+GLM_EXPORT void glBindBufferOffsetEXT(GLenum target, GLuint index, GLuint name, GLintptr offset)
+{
+    GLM_CONTEXT(ctx);
+    if (target != GL_TRANSFORM_FEEDBACK_BUFFER) return glm_error(ctx, GL_INVALID_ENUM);
+    struct glm_indexed_buffer *b = indexed_binding(ctx, target, index);
+    if (!b || offset < 0 || offset % 4) return glm_error(ctx, GL_INVALID_VALUE);
+    if (name && !buffer_for_bind(ctx, name)) return;
+    struct glm_buffer *buffer = name ? glm_buffer_get(ctx, name) : NULL;
+    *b = (struct glm_indexed_buffer){name, offset, buffer ? (GLsizeiptr)buffer->size - offset : 0};
+    *buffer_binding(ctx, target) = name;
+}
 GLM_EXPORT void glBindBufferBaseEXT(GLenum t, GLuint i, GLuint n) { glBindBufferBase(t, i, n); }

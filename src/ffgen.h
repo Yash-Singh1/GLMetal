@@ -5,7 +5,19 @@
 #include "glm_internal.h"
 #include "shader_compiler.h"
 
-enum { GLM_FF_UNITS = 8 };
+enum { GLM_FF_UNITS = 8, GLM_SLOT_FF_MATERIALS = 28, GLM_SLOT_FF_PIXELS = 29, GLM_TEXTURE_FF_PIXELS = 30 };
+
+/* A pixel rectangle's fragments (GL 2.1 3.6.4, 3.7): the window rectangle,
+   the raster colour, texture coordinates and fog coordinate. Matches
+   `struct GLMPixels` in the generated shaders. */
+struct glm_ff_pixels {
+    float rect[4];  /* window x0, y0, x1, y1 */
+    float color[4]; /* the raster colour (bitmaps) */
+    float size[2];  /* framebuffer width, height */
+    float depth;    /* window z */
+    float fog;      /* the raster distance or fog coordinate */
+    float texcoord[GLM_FF_UNITS][4];
+};
 
 /* Everything the generated code depends on. Two draws with equal keys use
    the same MTLFunctions; values that vary without changing the code (colours,
@@ -27,6 +39,13 @@ struct glm_ff_key {
     uint8_t front_only;               /* fragment ignores back colours (non-FF vertex stage) */
     uint8_t wide_line_expansion;      /* streamed fog.yz contain a window-space line offset */
     uint8_t logic_op;                 /* GL_COLOR_LOGIC_OP: op - GL_CLEAR + 1, applied to the fetched framebuffer */
+    uint8_t vertex_materials;         /* materials per vertex (buffer GLM_SLOT_FF_MATERIALS) */
+    uint8_t pixel_rect;               /* 1 glDrawPixels/glCopyPixels image, 2 glBitmap: a window rectangle (GLMPixels) */
+    uint8_t vertex_blend;             /* ARB_vertex_blend: active vertex units (weights in attribute 1), 0 off */
+    uint8_t weight_sum_unity;         /* the last unit's weight is 1 - the others' */
+    uint8_t vertex_point_size;        /* APPLE_vertex_point_size: sizes in attribute 7 */
+    uint8_t point_attenuation;        /* GL_POINT_DISTANCE_ATTENUATION and the size clamps apply */
+    uint8_t point_round;              /* aliased points: sizes rounded to whole pixels */
     struct {
         uint8_t target;               /* 0 none, 1 1D, 2 2D, 3 3D, 4 cube, 5 rect */
         uint8_t gen[4];               /* 0 off, 1 object, 2 eye, 3 sphere, 4 reflection, 5 normal */
@@ -58,6 +77,9 @@ struct glm_ff_uniforms {
     float fog_params[4];  /* density, start, end, 1/(end-start) */
     float alpha_ref[4];
     float point_size[4];
+    float point_attenuation[4]; /* constant, linear, quadratic; GL_POINT_FADE_THRESHOLD_SIZE */
+    float point_clamp[4];       /* GL_POINT_SIZE_MIN, GL_POINT_SIZE_MAX */
+    float blend_projection[16], blend_modelview[4][16], blend_normal[4][16]; /* vertex units */
     float rescale[4];     /* x: rescale-normal factor */
 };
 

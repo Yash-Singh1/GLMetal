@@ -1,0 +1,174 @@
+# Lines of tests/probes/imaging.c where Apple's OpenGL contradicts the extensions it advertises:
+# what Apple prints, then what GLMetal (following the extension) prints. tests/probes/quirkdiff.py
+# accepts exactly these differences.
+
+# Apple accepts glHistogram with a colour-table target (EXT_histogram: GL_INVALID_ENUM).
+apple: histogram bad target: error 0x0000
+spec: histogram bad target: error 0x0500
+
+# Apple's glHistogram(GL_PROXY_HISTOGRAM) defines GL_HISTOGRAM; EXT_histogram: proxies change no histogram.
+apple: histogram after proxy params: 0x40 0x190a 0x20 0x20 0x20 0x20 0x20 0
+spec: histogram after proxy params: 0x2000 0x1908 0x20 0x20 0x20 0x20 0x20 0
+
+# Apple applies glPixelTransfer's scale and bias after GL_COLOR_TABLE; SGI_color_table: the table follows them.
+apple: lookup clamped: ff005f43 ff005f43 ff005c43 ff005c43 ff005d43 ff005d43 ff005d43 ff005243
+spec: lookup clamped: fa315f43 fa2a5f43 fa2a5c43 fa2a5c43 f92a5d43 f92a5d43 f92a5d43 f92a5243
+
+# Apple skips the post-colour-matrix scale and bias; SGI_color_matrix: always applied.
+apple: color matrix scale bias: ff000080 ff041081 ff082082 ff0c3083 ff104084 ff145085 ff186086 ff1c7087
+spec: color matrix scale bias: 8f00407f 8e04507e 8c08607d 8a0c707c 8810807b 8614907a 8418a079 821cb078
+apple: post matrix scale only: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087
+spec: post matrix scale only: 00800080 047e2081 087c4082 0c7a6083 10788084 1476a085 1874c086 1c72e087
+
+# Apple convolves one-row glDrawPixels images with the 1D filter (writing REDUCE results in place, leaving
+# REPLICATE edges unfiltered, summing the components ALPHA, LUMINANCE and RGB filters pass through);
+# EXT_convolution: 1D filters apply to 1D textures only.
+apple: convolve 1d mode 0x8016: 04fc2080 08f84081 0cf46082 10f08083 14eca084 18e8c085 18e7c086 1ce3e087 00000000
+spec: convolve 1d mode 0x8016: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087 00000000
+apple: convolve 1d mode 0x8151: 41be00ff 04fc2080 08f84081 0cf46082 10f08083 14eca084 18e8c085 54cce086 00000000
+spec: convolve 1d mode 0x8151: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087 00000000
+apple: convolve 1d mode 0x8153: 00ff0080 04fc2080 08f84081 0cf46082 10f08083 14eca084 18e8c085 1ce3e087 00000000
+spec: convolve 1d mode 0x8153: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087 00000000
+apple: filter 0x1906: 00ff0080 0cff601f 18ffc020 24ffff20 30ffff20 3cffff20 48ffff21 1ce3e087
+spec: filter 0x1906: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087
+apple: filter 0x1909: 00ff0080 08ff40ff 10ff80ff 18ffc0ff 20ffffff 28ffffff 30ffffff 1ce3e087
+spec: filter 0x1909: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087
+apple: filter 0x190a: 00ff0080 08ff401f 10ff8020 18ffc020 20ffff20 28ffff20 30ffff21 1ce3e087
+spec: filter 0x190a: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087
+apple: filter 0x1907: 00ff0080 08ff1000 10ff2000 18ff3000 20ff4000 28ff5000 30ff6000 1ce3e087
+spec: filter 0x1907: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087
+apple: filter 0x1908: 00ff0080 08ff101f 10ff2020 18ff3020 20ff4020 28ff5020 30ff6021 1ce3e087
+spec: filter 0x1908: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087
+
+# Apple does not scale and bias INTENSITY filters; EXT_convolution: scale and bias come before the conversion.
+apple: filter 0x8049: 0.250 0.250 0.250 1.000 0.500 0.500 0.500 1.000 0.250 0.250 0.250 1.000
+spec: filter 0x8049: 0.500 0.500 0.500 1.000 1.000 1.000 1.000 1.000 0.500 0.500 0.500 1.000
+
+# Apple's REPLICATE_BORDER leaves the edge pixels unfiltered (IGNORE_BORDER_HP);
+# HP_convolution_border_modes: the edge pixels are replicated outward.
+apple: convolve 2d mode 0x8153: 00000000 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087 00000000
+spec: convolve 2d mode 0x8153: 00000000 11ff185f 15ff4460 1bff8061 21ffbc61 27fff862 2dffff63 33ffff64 37ffff64 00000000
+apple: convolve 2d mode 0x8153: 00000000 20df0088 33ff4466 39ff8066 3fffbc67 45fff868 4bffff69 51ffff69 3cc3e08f 00000000
+spec: convolve 2d mode 0x8153: 00000000 2fff1865 33ff4466 39ff8066 3fffbc67 45fff868 4bffff69 51ffff69 55ffff6a 00000000
+apple: convolve 2d mode 0x8153: 00000000 40bf0090 63ff446b 69ff806c 6fffbc6d 75fff86e 7bffff6e 81ffff6f 5ca3e097 00000000
+spec: convolve 2d mode 0x8153: 00000000 5fff186b 63ff446b 69ff806c 6fffbc6d 75fff86e 7bffff6e 81ffff6f 84ffff70 00000000
+apple: convolve 2d mode 0x8153: 00000000 609f0098 93ff4471 99ff8072 9ffbbc73 a5f4f873 abeeff74 b1e7ff75 7c83e09f 00000000
+spec: convolve 2d mode 0x8153: 00000000 8fff1871 93ff4471 99ff8072 9ffbbc73 a5f4f873 abeeff74 b1e7ff75 b4e3ff76 00000000
+apple: convolve 2d mode 0x8153: 00000000 807f00a0 c3d34477 c9cc8078 cfc5bc78 d5bef879 dbb8ff7a e1b1ff7b 9c63e0a7 00000000
+spec: convolve 2d mode 0x8153: 00000000 bfd81877 c3d34477 c9cc8078 cfc5bc78 d5bef879 dbb8ff7a e1b1ff7b e4adff7b 00000000
+apple: convolve 2d mode 0x8153: 00000000 a05f00a8 f39d447d f996807e ff8fbc7e ff88f87f ff82ff80 ff7bff80 bc43e0af 00000000
+spec: convolve 2d mode 0x8153: 00000000 eea2187c f39d447d f996807e ff8fbc7e ff88f87f ff82ff80 ff7bff80 ff77ff81 00000000
+apple: convolve 2d mode 0x8153: 00000000 c03f00b0 ff674483 ff608083 ff59bc84 ff52f885 ff4cff86 ff45ff86 dc23e0b7 00000000
+spec: convolve 2d mode 0x8153: 00000000 ff6c1882 ff674483 ff608083 ff59bc84 ff52f885 ff4cff86 ff45ff86 ff41ff87 00000000
+apple: convolve 2d mode 0x8153: 00000000 e01f00b8 e41b20b9 e81740ba ec1360bb f00f80bc f40ba0bd f807c0be fc03e0bf 00000000
+spec: convolve 2d mode 0x8153: 00000000 ff461885 ff414486 ff3a8087 ff33bc87 ff2cf888 ff26ff89 ff1fff89 ff1bff8a 00000000
+apple: separable mode 0x8153: 00000000 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087 00000000
+spec: separable mode 0x8153: 00000000 09fe00ff 0bfb00ff 0ff720ff 13f340ff 17ef60ff 1beb80ff 1fe7a0ff 22e4c0ff 00000000
+apple: separable mode 0x8153: 00000000 20df0088 23fb00ff 27f720ff 2bf340ff 2fef60ff 33eb80ff 37e7a0ff 3cc3e08f 00000000
+spec: separable mode 0x8153: 00000000 21fe00ff 23fb00ff 27f720ff 2bf340ff 2fef60ff 33eb80ff 37e7a0ff 3ae4c0ff 00000000
+apple: separable mode 0x8153: 00000000 40bf0090 43db00ff 47d720ff 4bd340ff 4fcf60ff 53cb80ff 57c7a0ff 5ca3e097 00000000
+spec: separable mode 0x8153: 00000000 41de00ff 43db00ff 47d720ff 4bd340ff 4fcf60ff 53cb80ff 57c7a0ff 5ac4c0ff 00000000
+apple: separable mode 0x8153: 00000000 609f0098 63bb00ff 67b720ff 6bb340ff 6faf60ff 73ab80ff 77a7a0ff 7c83e09f 00000000
+spec: separable mode 0x8153: 00000000 61be00ff 63bb00ff 67b720ff 6bb340ff 6faf60ff 73ab80ff 77a7a0ff 7aa4c0ff 00000000
+apple: separable mode 0x8153: 00000000 807f00a0 839b00ff 879720ff 8b9340ff 8f8f60ff 938b80ff 9787a0ff 9c63e0a7 00000000
+spec: separable mode 0x8153: 00000000 819e00ff 839b00ff 879720ff 8b9340ff 8f8f60ff 938b80ff 9787a0ff 9a84c0ff 00000000
+apple: separable mode 0x8153: 00000000 a05f00a8 a37b00ff a77720ff ab7340ff af6f60ff b36b80ff b767a0ff bc43e0af 00000000
+spec: separable mode 0x8153: 00000000 a17e00ff a37b00ff a77720ff ab7340ff af6f60ff b36b80ff b767a0ff ba64c0ff 00000000
+apple: separable mode 0x8153: 00000000 c03f00b0 c35b00ff c75720ff cb5340ff cf4f60ff d34b80ff d747a0ff dc23e0b7 00000000
+spec: separable mode 0x8153: 00000000 c15e00ff c35b00ff c75720ff cb5340ff cf4f60ff d34b80ff d747a0ff da44c0ff 00000000
+apple: separable mode 0x8153: 00000000 e01f00b8 e41b20b9 e81740ba ec1360bb f00f80bc f40ba0bd f807c0be fc03e0bf 00000000
+spec: separable mode 0x8153: 00000000 d93e00ff db3b00ff df3720ff e33340ff e72f60ff eb2b80ff ef27a0ff f224c0ff 00000000
+apple: 1d and 2d enabled: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087 00000000
+spec: 1d and 2d enabled: 06ff0080 07ff0c81 09ff2e82 0bff5083 0dff7284 0fff9485 11ffb686 14ffd887 00000000
+apple: 1d and 2d enabled: 20df0088 15ff0cff 17ff2eff 19ff50ff 1bff72ff 1dff94ff 1fffb6ff 3cc3e08f 00000000
+spec: 1d and 2d enabled: 14ff0088 15ff0c89 17ff2e8a 19ff508b 1bff728c 1dff948d 1fffb68e 22ffd88f 00000000
+apple: 1d and 2d enabled: 40bf0090 44bb2091 48b74092 4cb36093 50af8094 54aba095 58a7c096 5ca3e097 00000000
+spec: 1d and 2d enabled: 1fff0090 20ff0c91 22ff2e92 24ff5093 26ff7294 28fe9495 2afab696 2df6d897 00000000
+
+# Apple applies the separable filter when GL_CONVOLUTION_2D is enabled too; EXT_convolution: the 2D filter.
+apple: 2d and separable: 00000000 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087 00000000
+spec: 2d and separable: 00000000 0cff0080 0eff0c81 12fd2e82 16f95083 1af57284 1ff09485 23ecb686 27e8d887 00000000
+apple: 2d and separable: 00000000 20df0088 23fb00ff 27f720ff 2bf340ff 2fef60ff 33eb80ff 37e7a0ff 3cc3e08f 00000000
+spec: 2d and separable: 00000000 28e70088 2ae50c89 2ee12e8a 32dd508b 36d9728c 3bd4948d 3fd0b68e 43ccd88f 00000000
+
+# Apple's glCopyConvolutionFilter2D takes luminance as R + G + B; EXT_convolution: luminance is R.
+apple: copied 2d: ffffff89 ffffff8a ffffff8b ffffff91 ffffff92 ffffff93
+spec: copied 2d: 24242489 2828288a 2c2c2c8b 44444491 48484892 4c4c4c93
+
+# Apple draws images a histogram or minmax sink discards; EXT_histogram: no fragments.
+apple: histogram sink: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087
+spec: histogram sink: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+apple: minmax sink: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087
+spec: minmax sink: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+
+# Apple counts and tracks every component whatever the histogram's or minmax's format and returns them;
+# EXT_histogram: only the format's components (luminance from R), the others returned as 0.
+apple: luminance histogram: 8 0 2 0 0 0 2 0 0 0 3 8 0 8 1 0
+spec: luminance histogram: 8 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+apple: luminance histogram rgb float: 8.000 0.000 2.000 0.000 0.000 2.000 0.000 0.000 3.000 0.000 8.000 1.000
+spec: luminance histogram rgb float: 8.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000
+apple: alpha histogram: 32 32 32 0 32 32 32 64
+spec: alpha histogram: 0 0 0 0 0 0 0 64
+apple: luminance minmax: 0.000 0.890 0.000 0.502 0.110 1.000 0.878 0.529
+spec: luminance minmax: 0.000 0.000 0.000 0.000 0.110 0.000 0.000 0.000
+apple: reset minmax: 1.000 1.000 1.000 1.000 0.000 0.000 0.000 0.000
+spec: reset minmax: 1.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000
+
+# Apple's glReadPixels writes nothing while an imaging operation is enabled; SGI_color_table, EXT_convolution
+# and SGI_color_matrix apply to the pixels read (a 1D filter does not).
+apple: read color table: eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee
+spec: read color table: fa385f43 fa385f43 fa385c43 fa385c43 fa385d43 fa385d43 fa385d43 fa385243
+apple: read color table float: -7.000 -7.000 -7.000 -7.000 -7.000 -7.000 -7.000 -7.000
+spec: read color table float: 0.980 0.220 0.373 0.263 0.980 0.220 0.373 0.263
+apple: read color matrix: eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee
+spec: read color matrix: ff000080 ff041081 ff082082 ff0c3083 ff104084 ff145085 ff186086 ff1c7087
+apple: read color matrix luminance: eeeeeeee eeeeeeee
+spec: read color matrix luminance: ffffffff ffffffff
+apple: read convolve reduce: eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee
+spec: read convolve reduce: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087
+apple: read convolve replicate: eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee
+spec: read convolve replicate: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087
+apple: read convolve 2d reduce: eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee
+spec: read convolve 2d reduce: 33ff4466 39ff8066 63ff446b 69ff806c eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee eeeeeeee
+
+# Apple's glCopyPixels skips the imaging operations; they apply once to the pixels copied.
+apple: copy color table: 00ff4080 02fb6081 04f78082 06f3a083 08efc084 0aebe085 0ce7ff86 0ee3ff87
+spec: copy color table: fa385f43 fa385f43 fa385c43 fa385c43 fa385d43 fa385d43 fa385d43 fa385243
+apple: copy convolve: 00ff4080 02fb6081 04f78082 06f3a083 08efc084 0aebe085 0ce7ff86 0ee3ff87
+spec: copy convolve: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087
+apple: copy color matrix: 00ff4080 02fb6081 04f78082 06f3a083 08efc084 0aebe085 0ce7ff86 0ee3ff87
+spec: copy color matrix: ff000080 ff041081 ff082082 ff0c3083 ff104084 ff145085 ff186086 ff1c7087
+
+# Apple's texture images and copies come out zero or unprocessed while imaging is enabled;
+# the operations apply to them (convolution resizing 1D and 2D images, never 3D ones).
+apple: texture color table: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+spec: texture color table: fa385f43 fa385f43 fa385c43 fa385c43 fa385d43 fa385d43 fa385d43 fa385243
+apple: subtexture color table: 00ff0080 04fb2081 08f74082 0cf36083 10ef8084 14eba085 18e7c086 1ce3e087
+spec: subtexture color table: 00ff0080 04fb2081 f9315f43 f9315f43 f9315c43 f9315c43 18e7c086 1ce3e087
+apple: luminance texture color matrix: 000000ff 040000ff 080000ff 0c0000ff 100000ff 140000ff 180000ff 1c0000ff
+spec: luminance texture color matrix: ff0000ff ff0000ff ff0000ff ff0000ff 100000ff 140000ff 180000ff 1c0000ff
+apple: convolved texture: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+spec: convolved texture: 28ffc464 2efff064 34ff7c65 3aff8866 4cffff68 52fff869 58ffc469 5efff06a 70ffc46c 76ffff6d 7cffff6e 82fff86e 94ff7c71 9aff8871 a0fac472 a6f3ff73
+apple: convolved subtexture: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+spec: convolved subtexture: f3ff9c85 9affa460 9dffca61 daff9877 6eff6080 ffff8a8c d4ff926b fff5807f 80ffc082 b3ffc287 78ff8c6c e8ff8074 b5ff7890 ddfbbc94 ccffc48f ffefd688
+apple: convolved 1d texture: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+spec: convolved 1d texture: 04fc2080 08f84081 0cf46082 10f08083 14eca084 18e8c085 1ce4e086 20e00087
+apple: 3d texture: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+spec: 3d texture: fa385f43 fa385f43 fa385c43 fa385c43 fa385d43 fa385d43 fa385d43 fa385243
+apple: copied texture: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+spec: copied texture: fa315f43 fa2a5f43 fa2a5c43 fa2a5c43 fa2a5d43 fa2a5d43 fa2a5d43 fa2a5243
+apple: copied subtexture: 00804080 047e6081 087c8082 0c7aa083 1078c084 1476e085 1874ff86 1c72ff87
+spec: copied subtexture: 00804080 047e6081 087c8082 0c7aa083 ff000080 ff041081 ff082082 ff0c3083
+apple: copied convolved texture: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+spec: copied convolved texture: f6ff5486 a1ff5c62 a4ff8262 a8ffa863 acffce64 e3ffa478 7aff3882 33ff4466
+
+# Apple's glPushAttrib saves no imaging state; GL 2.1 tables 6.17-6.19: GL_PIXEL_MODE_BIT (enables and
+# parameters) and GL_ENABLE_BIT (enables).
+apple: pixel mode bit: 0 0 0 0 0 0 0 0 1 0
+spec: pixel mode bit: 1 0 0 0 0 0 1 0 3 0.5
+apple: enable bit: 0 0 0 0 0 0 0 0 1
+spec: enable bit: 1 0 0 0 0 0 1 0 1
+apple: table scale after pop params: 0x1908 0x4 0x8 0x8 0x8 0x8 0x8 0x8 scale 1 1 1 1 bias 0 0 0 0
+spec: table scale after pop params: 0x1908 0x4 0x8 0x8 0x8 0x8 0x8 0x8 scale 0.5 2 1 -1 bias 0 0 0 0
+apple: convolution after pop params: 0x8016 0x1908 0x3 0xfffffff9 0xb 0xfffffff9 color 1 0.5 0.25 1 scale 1 1 1 1 bias 0 0 0 0
+spec: convolution after pop params: 0x8151 0x1908 0x3 0xfffffff9 0xb 0xfffffff9 color 1 0.5 0.25 1 scale 1 1 1 1 bias 0 0 0 0

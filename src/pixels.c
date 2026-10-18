@@ -1060,6 +1060,17 @@ static void transfer_rgba(const struct glm_state *s, float *rgba)
     }
 }
 
+bool glm_transfer_identity(const struct glm_context *ctx)
+{
+    return ctx->pixels_raw || transfer_identity(&ctx->state);
+}
+
+void glm_transfer_rgba(struct glm_context *ctx, float *rgba, size_t count)
+{
+    if (glm_transfer_identity(ctx)) return;
+    for (size_t i = 0; i < count; ++i) transfer_rgba(&ctx->state, rgba + i * 4);
+}
+
 /* One index of GL_BITMAP data (a bit per pixel, unpack state applied). */
 static int bitmap_bit(const struct glm_state *s, const uint8_t *pixels, GLsizei width, GLint x, GLint y)
 {
@@ -1076,6 +1087,7 @@ void *glm_convert_upload(struct glm_context *ctx, const struct glm_format_info *
                          size_t *image_bytes)
 {
     const struct glm_state *s = &ctx->state;
+    bool identity = ctx->pixels_raw || transfer_identity(s);
     if (type == GL_BITMAP && format == GL_COLOR_INDEX && !info->compressed && !info->integer) {
         /* One bit per pixel: indices 0 and 1 through the colour maps. */
         size_t texel = glm_metal_format_bytes(info->metal_format);
@@ -1146,7 +1158,7 @@ void *glm_convert_upload(struct glm_context *ctx, const struct glm_format_info *
           ((format == GL_RG && info->swizzle[0] == 0 && info->swizzle[1] == 1) ||
            (format == GL_LUMINANCE_ALPHA && info->swizzle[0] == 0 && info->swizzle[1] != 1 &&
             info->swizzle[2] != 1 && info->swizzle[3] == 1))));
-    if (out && !no_fast && raw_narrow && transfer_identity(s)) {
+    if (out && !no_fast && raw_narrow && identity) {
         for (GLsizei z = 0; z < (depth ? depth : 1); ++z)
             for (GLsizei y = 0; y < height; ++y)
                 memcpy(out + (size_t)z * *image_bytes + (size_t)y * *row_bytes,
@@ -1154,7 +1166,7 @@ void *glm_convert_upload(struct glm_context *ctx, const struct glm_format_info *
         return out;
     }
     if (out && !no_fast && rgba8_storage && bytes8 && !s->unpack_swap_bytes && (format == GL_RGBA || format == GL_BGRA) &&
-        transfer_identity(s)) {
+        identity) {
         for (GLsizei z = 0; z < (depth ? depth : 1); ++z)
             for (GLsizei y = 0; y < height; ++y) {
                 const uint8_t *src = base + (size_t)z * source_image + (size_t)y * source_row;
@@ -1218,9 +1230,9 @@ void *glm_convert_upload(struct glm_context *ctx, const struct glm_format_info *
                     select_channels(info, row + x * 4);
                     continue;
                 }
-                decode_pixel(format, type, pixel, c, components, narrow && transfer_identity(s));
+                decode_pixel(format, type, pixel, c, components, narrow && identity);
                 to_rgba(format, c, row + x * 4);
-                if (!transfer_identity(s)) transfer_rgba(s, row + x * 4);
+                if (!identity) transfer_rgba(s, row + x * 4);
                 if (format == GL_LUMINANCE_ALPHA && info->swizzle[0] == 0 && info->swizzle[3] == 3) {
                     /* luminance-alpha data into an RGBA texture: L L L A */
                     row[x * 4 + 1] = row[x * 4 + 2] = row[x * 4];
@@ -1233,6 +1245,26 @@ void *glm_convert_upload(struct glm_context *ctx, const struct glm_format_info *
         }
     free(row);
     return out;
+}
+
+float *glm_unpack_rgba(struct glm_context *ctx, GLsizei width, GLsizei height, GLsizei depth, GLenum format,
+                       GLenum type, const void *pixels, bool transfer)
+{
+    struct glm_format_info info;
+    if (!glm_format_lookup(GL_RGBA32F, &info)) return NULL;
+    if (ctx->pixel_unpack_buffer) {
+        struct glm_buffer *buffer = glm_buffer_get(ctx, ctx->pixel_unpack_buffer);
+        const uint8_t *contents = buffer ? glm_backend_buffer_contents(ctx, buffer, false) : NULL;
+        if (!contents) return NULL;
+        pixels = contents + (uintptr_t)pixels;
+    }
+    if (!pixels) return NULL;
+    bool raw = ctx->pixels_raw;
+    ctx->pixels_raw = raw || !transfer;
+    size_t row_bytes, image_bytes;
+    float *rgba = glm_convert_upload(ctx, &info, width, height, depth, format, type, pixels, &row_bytes, &image_bytes);
+    ctx->pixels_raw = raw;
+    return rgba;
 }
 
 /* ---- pack (read back to client memory) ----------------------------------- */
@@ -1377,5 +1409,8 @@ GLM_EXPORT void glReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GL
         if (!contents) return glm_error(ctx, GL_INVALID_OPERATION);
         destination = contents + (uintptr_t)pixels;
     }
+    /* glPixelTransfer and the imaging operations apply to what is read. */
+    ctx->read_transfer = true;
     glm_backend_read_pixels(ctx, x, y, width, height, format, type, destination);
+    ctx->read_transfer = false;
 }

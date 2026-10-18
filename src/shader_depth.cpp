@@ -108,6 +108,180 @@ extern "C" char *glm_depth_clamp_msl(const char *source, const char *entry)
     return copy;
 }
 
+/* Polygon stipple (GL 2.1 3.5.2): fragments whose window position's bit of
+   the 32x32 pattern (buffer 26: a row per window y mod 32, bit 31 for
+   x mod 32 = 0) is clear are discarded before the shader runs its body. */
+extern "C" char *glm_polygon_stipple_msl(const char *source, const char *entry)
+{
+    if (!source || !entry) return nullptr;
+    std::string text(source);
+    std::smatch match;
+    std::regex declaration(std::string("\\bfragment\\s+(\\w+)\\s+") + entry + "\\s*\\(");
+    if (!std::regex_search(text, match, declaration)) return nullptr;
+    size_t signature_start = static_cast<size_t>(match.position());
+    size_t argument_start = static_cast<size_t>(match.position() + match.length());
+    size_t signature_end = argument_start;
+    int nesting = 1;
+    for (; signature_end < text.size(); ++signature_end) {
+        if (text[signature_end] == '(') ++nesting;
+        if (text[signature_end] == ')' && !--nesting) break;
+    }
+    if (signature_end == text.size()) return nullptr;
+    size_t body_start = text.find('{', signature_end);
+    if (body_start == std::string::npos) return nullptr;
+    std::string signature = text.substr(argument_start, signature_end - argument_start);
+    std::string position = builtin(signature, "position");
+    std::smatch stage_in;
+    if (position.empty() && std::regex_search(signature, stage_in, std::regex(R"(\b(\w+)\s+(\w+)\s*\[\[stage_in\]\])"))) {
+        std::string member = builtin(structure(text, stage_in[1]), "position");
+        if (!member.empty()) position = stage_in[2].str() + "." + member;
+    }
+    std::string parameters;
+    if (position.empty()) {
+        parameters += ", float4 glm_stipple_position [[position]]";
+        position = "glm_stipple_position";
+    }
+    parameters += ", constant uint* glm_stipple [[buffer(26)]]";
+    if (signature.find_first_not_of(" \t\r\n") == std::string::npos) parameters.erase(0, 2);
+    std::string test = "\n    { uint2 glm_p = uint2(" + position + ".xy) & 31u; "
+                       "if (((glm_stipple[glm_p.y] >> (31u - glm_p.x)) & 1u) == 0u) discard_fragment(); }";
+    std::string header = text.substr(signature_start, argument_start - signature_start);
+    header.replace(header.rfind(entry), std::strlen(entry), "main0");
+    std::string result = text.substr(0, signature_start) + header + signature + parameters + ")" +
+                         text.substr(signature_end + 1, body_start + 1 - (signature_end + 1)) + test +
+                         text.substr(body_start + 1);
+    /* The test discards, so depth must not be written early. */
+    result = std::regex_replace(result, std::regex(R"(\[\[early_fragment_tests\]\])"), "");
+    char *copy = static_cast<char *>(std::malloc(result.size() + 1));
+    if (copy) std::memcpy(copy, result.c_str(), result.size() + 1);
+    return copy;
+}
+
+namespace {
+/* The function `entry` of `kind` ("vertex"/"fragment"): offsets of its
+   signature, argument list end and body start; false if not found. */
+bool function_shape(const std::string &text, const char *kind, const char *entry, size_t *signature_start,
+                    size_t *argument_start, size_t *signature_end, size_t *body_start, std::string *output)
+{
+    std::smatch match;
+    std::regex declaration(std::string("\\b") + kind + "\\s+(\\w+)\\s+" + entry + "\\s*\\(");
+    if (!std::regex_search(text, match, declaration)) return false;
+    *signature_start = static_cast<size_t>(match.position());
+    *argument_start = static_cast<size_t>(match.position() + match.length());
+    if (output) *output = match[1];
+    size_t end = *argument_start;
+    int nesting = 1;
+    for (; end < text.size(); ++end) {
+        if (text[end] == '(') ++nesting;
+        if (text[end] == ')' && !--nesting) break;
+    }
+    if (end == text.size()) return false;
+    *signature_end = end;
+    *body_start = text.find('{', end);
+    return *body_start != std::string::npos;
+}
+
+char *copy_out(const std::string &result)
+{
+    char *copy = static_cast<char *>(std::malloc(result.size() + 1));
+    if (copy) std::memcpy(copy, result.c_str(), result.size() + 1);
+    return copy;
+}
+}
+
+/* A vertex function that also stores, at its vertex ID in buffer 27, each
+   vertex's clip position, front colour ([[user(locn0)]]) and first texture
+   coordinate ([[user(locn5)]]): three float4s, zero for outputs it lacks.
+   Line stipple, selection and feedback read them back. */
+extern "C" char *glm_position_capture_msl(const char *source, const char *entry)
+{
+    if (!source || !entry) return nullptr;
+    std::string text(source), output;
+    size_t signature_start, argument_start, signature_end, body_start;
+    if (!function_shape(text, "vertex", entry, &signature_start, &argument_start, &signature_end, &body_start, &output))
+        return nullptr;
+    std::string members = structure(text, output);
+    std::string position = builtin(members, "position");
+    if (position.empty()) return nullptr;
+    auto float4_member = [&](const char *attribute) {
+        std::smatch match;
+        std::regex declaration(std::string("\\bfloat4\\s+(\\w+)\\s*\\[\\[") + attribute + "\\]\\]");
+        return std::regex_search(members, match, declaration) ? "out." + match[1].str() : std::string("float4(0.0)");
+    };
+    std::string color = float4_member("user\\(locn0\\)"), texcoord = float4_member("user\\(locn5\\)");
+    std::string signature = text.substr(argument_start, signature_end - argument_start);
+    std::string vid = builtin(signature, "vertex_id");
+    std::string parameters;
+    if (vid.empty()) {
+        parameters += ", uint glm_capture_vid [[vertex_id]]";
+        vid = "glm_capture_vid";
+    }
+    parameters += ", device float4* glm_capture_outputs [[buffer(27)]]";
+    if (signature.find_first_not_of(" \t\r\n") == std::string::npos) parameters.erase(0, 2);
+    /* The function's own body (sources may define more functions after it). */
+    size_t body_end = body_start + 1;
+    for (int nesting = 1; body_end < text.size() && nesting; ++body_end) {
+        if (text[body_end] == '{') ++nesting;
+        if (text[body_end] == '}') --nesting;
+    }
+    std::string body = text.substr(body_start, body_end - body_start);
+    if (body.find("return out;") == std::string::npos) return nullptr;
+    /* Without rasterization Metal needs a void vertex function: the local
+       output struct stays, only the captured outputs are stored. */
+    std::string store = "{ glm_capture_outputs[" + vid + " * 3u] = out." + position + "; glm_capture_outputs[" + vid +
+                        " * 3u + 1u] = " + color + "; glm_capture_outputs[" + vid + " * 3u + 2u] = " + texcoord + "; return; }";
+    body = std::regex_replace(body, std::regex(R"(\breturn\s+out\s*;)"), store);
+    std::string header = text.substr(signature_start, argument_start - signature_start);
+    header.replace(header.rfind(entry), std::strlen(entry), "main0");
+    header.replace(header.find(output), output.size(), "void");
+    return copy_out(text.substr(0, signature_start) + header + signature + parameters + ")" +
+                    text.substr(signature_end + 1, body_start - (signature_end + 1)) + body + text.substr(body_end));
+}
+
+/* Line stipple (GL 2.1 3.4.2): buffer 26 holds (factor, pattern) and then,
+   per line primitive, its start along the major axis (x), the stipple
+   counter there (z) and the axis (w, 1 for y). A fragment's counter adds
+   its distance from the start in whole pixels; the pattern bit (counter /
+   factor) mod 16 decides. */
+extern "C" char *glm_line_stipple_msl(const char *source, const char *entry)
+{
+    if (!source || !entry) return nullptr;
+    std::string text(source);
+    size_t signature_start, argument_start, signature_end, body_start;
+    if (!function_shape(text, "fragment", entry, &signature_start, &argument_start, &signature_end, &body_start, nullptr))
+        return nullptr;
+    std::string signature = text.substr(argument_start, signature_end - argument_start);
+    std::string position = builtin(signature, "position");
+    std::smatch stage_in;
+    if (position.empty() && std::regex_search(signature, stage_in, std::regex(R"(\b(\w+)\s+(\w+)\s*\[\[stage_in\]\])"))) {
+        std::string member = builtin(structure(text, stage_in[1]), "position");
+        if (!member.empty()) position = stage_in[2].str() + "." + member;
+    }
+    std::string primitive = builtin(signature, "primitive_id");
+    std::string parameters;
+    if (position.empty()) {
+        parameters += ", float4 glm_stipple_position [[position]]";
+        position = "glm_stipple_position";
+    }
+    if (primitive.empty()) {
+        parameters += ", uint glm_stipple_primitive [[primitive_id]]";
+        primitive = "glm_stipple_primitive";
+    }
+    parameters += ", constant float4* glm_stipple_segments [[buffer(26)]]";
+    if (signature.find_first_not_of(" \t\r\n") == std::string::npos) parameters.erase(0, 2);
+    std::string test = "\n    { float4 glm_h = glm_stipple_segments[0]; float4 glm_s = glm_stipple_segments[1u + " + primitive +
+                       "]; float glm_d = abs((glm_s.w > 0.5 ? " + position + ".y : " + position + ".x) - glm_s.x); "
+                       "uint glm_c = uint(glm_s.z + floor(glm_d + 0.5)); "
+                       "if (((uint(glm_h.y) >> ((glm_c / uint(glm_h.x)) & 15u)) & 1u) == 0u) discard_fragment(); }";
+    std::string header = text.substr(signature_start, argument_start - signature_start);
+    header.replace(header.rfind(entry), std::strlen(entry), "main0");
+    std::string result = text.substr(0, signature_start) + header + signature + parameters + ")" +
+                         text.substr(signature_end + 1, body_start + 1 - (signature_end + 1)) + test +
+                         text.substr(body_start + 1);
+    result = std::regex_replace(result, std::regex(R"(\[\[early_fragment_tests\]\])"), "");
+    return copy_out(result);
+}
+
 extern "C" char *glm_clip_mask_msl(const char *source, const char *entry, unsigned enabled)
 {
     if (!source || !entry) return nullptr;
