@@ -4535,7 +4535,11 @@ static bool build_layout(struct glm_context *ctx, struct gpu_layout *L, uint32_t
             if (k == constant_slot || v->stride != stride || v->divisor != a->divisor || v->buffer != buffer) continue;
             if (buffer) {
                 if (offset >= v->offset && offset + element <= v->offset + stride) { slot = k; break; }
-            } else if (client >= v->client && client + element <= v->client + stride) {
+            } else if (client >= v->client && client + element <= v->client + stride &&
+                       (uintptr_t)(client - v->client) % 4 == 0) {
+                /* A client attribute at an unaligned offset in its vertex
+                   (Gangstar's interleaved arrays) gets its own slot: client
+                   slots are copied, so its own copy starts aligned. */
                 slot = k;
                 break;
             }

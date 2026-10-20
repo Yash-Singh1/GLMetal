@@ -171,6 +171,13 @@ QUERY_DIRECT = {
     'glGetString', 'glGetStringi', 'glGetActiveUniformARB', 'glGetActiveAttribARB',
 }
 PNAME_CHECKED = {'glGetBooleanv', 'glGetFloatv', 'glGetDoublev'}
+# Queries whose answer for these arguments is fixed when the context is
+# created: they never wait for the stream, whatever is pending (Gangstar
+# asks for GL_EXTENSIONS on every game-loop pass).
+QUERY_CONSTANT = {
+    # GL_VENDOR, GL_RENDERER, GL_VERSION, GL_EXTENSIONS, GL_SHADING_LANGUAGE_VERSION
+    'glGetString': '((p0 >= 0x1F00 && p0 <= 0x1F03) || p0 == 0x8B8C)',
+}
 # Executed immediately, never compiled into display lists (GL 2.1 5.4 and
 # the object/buffer/client-state commands of later versions).
 NOT_LISTED = re.compile(
@@ -345,6 +352,8 @@ for name in sorted(set(e for e in exports if e.startswith('gl'))):
             if name in PNAME_CHECKED:
                 cond += ' && !glm_cheap_pname(p0)'
             settled = f'!({cond}) && '
+        if name in QUERY_CONSTANT:
+            settled = f'!{QUERY_CONSTANT[name]} && ' + settled
         bodies.append(f'GLM_EXPORT {ret} {name}({sig})\n{{\n    struct glm_context *ctx = glm_current();\n{guard}{shadow}'
                       f'    if (ctx && GLM_STREAM(ctx) && {settled}1) glm_thread_sync_named(ctx, "{name}");\n{bump_line}    {ret_kw}glm_impl_{name}({call});\n}}\n')
         continue

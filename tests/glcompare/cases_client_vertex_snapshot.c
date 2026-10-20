@@ -132,3 +132,49 @@ GLC_CASE(client_vertex_snapshot_grouped_prefix, .profile = GLC_LEGACY)
     glDisableClientState(GL_VERTEX_ARRAY); glDisableClientState(GL_COLOR_ARRAY);
     glPointSize(1); glUseProgram(0); glDeleteProgram(program); free(vertices);
 }
+
+/* Gangstar's fixed-function meshes: interleaved client vertices with a colour
+   at an offset that is not a multiple of 4, drawn from index ranges larger
+   than the 256 KiB a whole prefix may take. Dense draws copy [low, high]
+   once, sparse ones element by element; both must survive immediate reuse
+   and render the unaligned colour. */
+static const char *const range_kinds[] = {"dense", "sparse"};
+GLC_CASE_VARIANTS(client_vertex_snapshot_unaligned_range, range_kinds, .profile = GLC_LEGACY)
+{
+    struct __attribute__((packed)) vertex { float position[2]; unsigned char pad[2], color[4], tail[2]; };
+    enum { VERTICES = 30000 };
+    _Static_assert(sizeof(struct vertex) == 16, "16-byte stride, colour at offset 10");
+    struct vertex *vertices = calloc(VERTICES, sizeof *vertices);
+    unsigned int *indices = calloc(VERTICES, sizeof *indices);
+    if (!vertices || !indices) glc_fail("allocation failed");
+    static const float triangle[3][2] = {{-1,-1}, {0,-1}, {-.5f,1}};
+    unsigned int corner[3] = {VERTICES - 3, VERTICES - 2, VERTICES - 1};
+    if (glc_variant == 1) corner[0] = 10, corner[1] = 15000;
+    for (int i = 0; i < 3; ++i) {
+        memcpy(vertices[corner[i]].position, triangle[i], sizeof triangle[i]);
+        vertices[corner[i]].color[1] = vertices[corner[i]].color[3] = 255;
+    }
+    GLsizei count = 3;
+    if (glc_variant == 0) {
+        /* Every vertex is referenced; all but the last triangle are degenerate. */
+        count = VERTICES;
+        for (unsigned int i = 0; i < VERTICES; ++i) indices[i] = i;
+    } else {
+        memcpy(indices, corner, sizeof corner);
+    }
+    glUseProgram(0);
+    glBindBuffer(GL_ARRAY_BUFFER,0); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
+    glVertexPointer(2,GL_FLOAT,sizeof *vertices,vertices[0].position);
+    glColorPointer(4,GL_UNSIGNED_BYTE,sizeof *vertices,vertices[0].color);
+    glEnableClientState(GL_VERTEX_ARRAY); glEnableClientState(GL_COLOR_ARRAY);
+    glClearColor(0,0,0,1); glClear(GL_COLOR_BUFFER_BIT);
+    glDrawElements(GL_TRIANGLES,count,GL_UNSIGNED_INT,indices);
+    memset(vertices,0,VERTICES * sizeof *vertices); memset(indices,0,VERTICES * sizeof *indices);
+    unsigned char inside[4], outside[4];
+    glReadPixels(16,8,1,1,GL_RGBA,GL_UNSIGNED_BYTE,inside);
+    glReadPixels(56,56,1,1,GL_RGBA,GL_UNSIGNED_BYTE,outside);
+    if (inside[0] || inside[1] != 255 || outside[1] || glGetError())
+        glc_fail("unaligned client range: inside=%u,%u outside=%u", inside[0], inside[1], outside[1]);
+    glDisableClientState(GL_VERTEX_ARRAY); glDisableClientState(GL_COLOR_ARRAY);
+    free(vertices); free(indices);
+}

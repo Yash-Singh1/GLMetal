@@ -895,24 +895,33 @@ static size_t snapshot_element(const struct glm_array *a)
     }
     return width * (size_t)a->size;
 }
+static bool client_reject(const char *why, uint64_t detail)
+{
+    static int stats = -1;
+    static unsigned logged;
+    if (stats < 0) stats = getenv("GLMETAL_STREAM_STATS") != NULL;
+    if (stats && logged++ < 40) glm_log("client vertices not recorded: %s (%llu)", why, (unsigned long long)detail);
+    return false;
+}
 static bool record_client_vertices(struct glm_context *ctx, GLenum mode, GLsizei count, GLenum type,
                                    const void *indices, GLsizei instances, GLint base, size_t width)
 {
     struct glm_shadow *s = shadow(ctx);
     struct shadow_vao *v = s->vao;
-    if (ctx->profile != GLM_PROFILE_LEGACY || instances != 1 || base < 0 || s->primitive_restart) return false;
+    if (ctx->profile != GLM_PROFILE_LEGACY || instances != 1 || base < 0 || s->primitive_restart)
+        return client_reject("profile/instances/base/restart", 0);
     uint32_t mask = 0;
     for (uint32_t bits = v->enabled; bits; bits &= bits - 1) {
         unsigned i = __builtin_ctz(bits);
         if (!v->buffer[i]) mask |= 1u << i;
     }
-    if (!mask || (mask & ~v->arrays_known)) return false;
+    if (!mask || (mask & ~v->arrays_known)) return client_reject("unknown arrays", mask & ~v->arrays_known);
     size_t element[GLM_MAX_ATTRIBS] = {0}, stride[GLM_MAX_ATTRIBS] = {0};
     for (uint32_t bits = mask; bits; bits &= bits - 1) {
         unsigned i = __builtin_ctz(bits);
         const struct glm_array *a = &v->arrays[i];
         element[i] = snapshot_element(a);
-        if (!element[i] || !a->pointer || a->divisor) return false;
+        if (!element[i] || !a->pointer || a->divisor) return client_reject("array layout", i);
         stride[i] = a->stride ? (size_t)a->stride : element[i];
     }
     /* Preserve interleaved fetch layouts. Sort by numeric address so the
@@ -944,36 +953,61 @@ static bool record_client_vertices(struct glm_context *ctx, GLenum mode, GLsizei
         }
         group_for[i] = group;
     }
-    uint64_t high = 0;
+    /* Only [low, high] is copied; the snapshot pointers are rebased so the
+       original indices still address it (every reader starts at low). */
+    uint64_t low = UINT64_MAX, high = 0;
     for (GLsizei i = 0; i < count; ++i) {
         uint64_t index = (uint64_t)snapshot_index(indices, width, i) + (uint32_t)base;
         if (index > high) high = index;
+        if (index < low) low = index;
     }
+    enum { SNAPSHOT_LIMIT = 4u << 20 };
     size_t total = sizeof(struct client_vertices_cmd) + (size_t)count * width;
     for (unsigned i = 0; i < group_count; ++i) {
         struct snapshot_group *g = &groups[i];
         total = (total + 7) & ~(size_t)7;
         g->offset = total;
-        if (high > (256u << 10) / g->stride) return false;
-        size_t extent = (size_t)high * g->stride + g->end;
-        if (extent > (256u << 10) || total > (256u << 10) - extent ||
-            g->source > UINTPTR_MAX - extent) return false;
+        if (high - low > SNAPSHOT_LIMIT / g->stride) return client_reject("index range", (high - low) * g->stride);
+        size_t extent = (size_t)(high - low) * g->stride + g->end;
+        if (extent > SNAPSHOT_LIMIT || total > SNAPSHOT_LIMIT - extent ||
+            g->source > UINTPTR_MAX - (size_t)high * g->stride - g->end) return client_reject("extent", extent);
         total += extent;
     }
+    /* A mesh's indices usually cover most of their range: then each
+       interleaved group is one copy of [low, high], which also carries the
+       unreferenced vertices in between. Sparse draws copy element by element
+       and leave holes zero. */
+    bool dense = high - low < 4 * (uint64_t)count;
     struct client_vertices_cmd *c = glm_thread_alloc(ctx, total, client_vertices_exec);
-    memset(c, 0, total);
+    if (dense) memset(c, 0, sizeof *c);
+    else memset(c, 0, total);
     void *index_copy = c + 1;
     memcpy(index_copy, indices, (size_t)count * width);
     c->draw = (struct draw_elements_cmd){mode, count, type, index_copy, instances, base};
     c->mask = mask;
+    if (dense) {
+        for (unsigned i = 0; i < group_count; ++i) {
+            struct snapshot_group *g = &groups[i];
+            memcpy((unsigned char *)c + g->offset, (const unsigned char *)g->source + (size_t)low * g->stride,
+                   (size_t)(high - low) * g->stride + g->end);
+        }
+        for (uint32_t bits = mask; bits; bits &= bits - 1) {
+            unsigned i = __builtin_ctz(bits);
+            unsigned char *data = (unsigned char *)c + groups[group_for[i]].offset + relative[i];
+            c->arrays[i] = v->arrays[i];
+            c->arrays[i].pointer = (const void *)((uintptr_t)data - (uintptr_t)(low * stride[i]));
+        }
+        return true;
+    }
     for (uint32_t bits = mask; bits; bits &= bits - 1) {
         unsigned i = __builtin_ctz(bits);
         unsigned char *data = (unsigned char *)c + groups[group_for[i]].offset + relative[i];
         c->arrays[i] = v->arrays[i];
-        c->arrays[i].pointer = data;
+        c->arrays[i].pointer = (const void *)((uintptr_t)data - (uintptr_t)(low * stride[i]));
         for (GLsizei j = 0; j < count; ++j) {
             size_t index = (size_t)snapshot_index(index_copy, width, j) + (uint32_t)base;
-            memcpy(data + index * stride[i], (const unsigned char *)v->arrays[i].pointer + index * stride[i], element[i]);
+            memcpy(data + (index - low) * stride[i], (const unsigned char *)v->arrays[i].pointer + index * stride[i],
+                   element[i]);
         }
     }
     return true;
