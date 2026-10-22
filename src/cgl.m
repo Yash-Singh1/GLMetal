@@ -1,6 +1,7 @@
 /* CGL: pixel formats, renderer info, contexts and parameters, answering the
  * way Apple's CGL does on Apple silicon. */
 #import <Foundation/Foundation.h>
+#import <IOSurface/IOSurface.h>
 #import <Metal/Metal.h>
 
 #include "glm_internal.h"
@@ -625,6 +626,79 @@ GLM_EXPORT CGLError CGLSetParameter(CGLContextObj ctx, CGLContextParameter pname
     return kCGLNoError;
 }
 
+/* The current rectangle texture becomes an image the IOSurface's plane
+   holds: sampling reads the surface, and drawing into or uploading to the
+   texture writes it (textures.m). */
+GLM_EXPORT CGLError CGLTexImageIOSurface2D(CGLContextObj ctx, GLenum target, GLenum internal_format, GLsizei width,
+                                           GLsizei height, GLenum format, GLenum type, IOSurfaceRef surface, GLuint plane)
+{
+    if (!valid_context(ctx)) return kCGLBadContext;
+    drain(ctx);
+    return (CGLError)glm_texture_iosurface(ctx->gl, target, internal_format, width, height, format, type, (void *)surface, plane);
+}
+
+/* The OpenCL device of a renderer: the GPU's for the accelerated renderer
+   (any of its IDs under kCGLRendererIDMatchingMask), as Apple's answers.
+   Apple leaves other IDs undefined; GLMetal answers NULL. */
+GLM_EXPORT cl_device_id CGLGetDeviceFromGLRenderer(GLint renderer)
+{
+    static cl_device_id gpu;
+    static dispatch_once_t once;
+    cl_device_id device = NULL;
+    if (((GLuint)renderer & kCGLRendererIDMatchingMask) != (RENDERER_ID & kCGLRendererIDMatchingMask)) return device;
+    dispatch_once(&once, ^{
+        void *opencl = dlopen("/System/Library/Frameworks/OpenCL.framework/OpenCL", RTLD_NOW | RTLD_LOCAL);
+        int (*get_devices)(void *, uint64_t, uint32_t, cl_device_id *, uint32_t *) = opencl ? dlsym(opencl, "clGetDeviceIDs") : NULL;
+        if (get_devices && get_devices(NULL, 1u << 2 /* CL_DEVICE_TYPE_GPU */, 1, &gpu, NULL) != 0) gpu = NULL;
+    });
+    device = gpu;
+    return device;
+}
+
+/* Pbuffers: Apple's renderer on Apple silicon has none (arm64 and x86_64
+   alike; tests/probes/pbuffer.c). Creation fails, so programs fall back
+   to framebuffer objects, and the rest answers for a NULL pbuffer. */
+GLM_EXPORT CGLError CGLCreatePBuffer(GLsizei width, GLsizei height, GLenum target, GLenum internal_format, GLint max_level,
+                                     CGLPBufferObj *pbuffer)
+{
+    (void)width, (void)height, (void)target, (void)internal_format, (void)max_level;
+    if (pbuffer) *pbuffer = NULL;
+    return kCGLBadDrawable;
+}
+GLM_EXPORT CGLError CGLDestroyPBuffer(CGLPBufferObj pbuffer) { (void)pbuffer; return kCGLBadAddress; }
+GLM_EXPORT CGLError CGLDescribePBuffer(CGLPBufferObj obj, GLsizei *width, GLsizei *height, GLenum *target,
+                                       GLenum *internal_format, GLint *mipmap)
+{
+    (void)obj, (void)width, (void)height, (void)target, (void)internal_format, (void)mipmap;
+    return kCGLBadAddress;
+}
+GLM_EXPORT CGLPBufferObj CGLRetainPBuffer(CGLPBufferObj pbuffer) { return pbuffer; }
+GLM_EXPORT void CGLReleasePBuffer(CGLPBufferObj pbuffer) { (void)pbuffer; }
+GLM_EXPORT GLuint CGLGetPBufferRetainCount(CGLPBufferObj pbuffer) { (void)pbuffer; return 0; }
+
+GLM_EXPORT CGLError CGLSetPBuffer(CGLContextObj ctx, CGLPBufferObj pbuffer, GLenum face, GLint level, GLint screen)
+{
+    (void)pbuffer, (void)face, (void)level, (void)screen;
+    return valid_context(ctx) ? kCGLBadAddress : kCGLBadContext;
+}
+
+/* The pbuffer a context draws into: none. The screen is left as it was. */
+GLM_EXPORT CGLError CGLGetPBuffer(CGLContextObj ctx, CGLPBufferObj *pbuffer, GLenum *face, GLint *level, GLint *screen)
+{
+    (void)screen;
+    if (!valid_context(ctx)) return kCGLBadContext;
+    if (pbuffer) *pbuffer = NULL;
+    if (face) *face = 0;
+    if (level) *level = 0;
+    return kCGLNoError;
+}
+
+GLM_EXPORT CGLError CGLTexImagePBuffer(CGLContextObj ctx, CGLPBufferObj pbuffer, GLenum source)
+{
+    (void)pbuffer, (void)source;
+    return valid_context(ctx) ? kCGLBadAddress : kCGLBadContext;
+}
+
 GLM_EXPORT CGLError CGLGetParameter(CGLContextObj ctx, CGLContextParameter pname, GLint *params)
 {
     if (!valid_context(ctx)) return kCGLBadContext;
@@ -754,10 +828,5 @@ GLM_EXPORT const char *CGLErrorString(CGLError error)
     default: return "unknown error";
     }
 }
-
-/* Pbuffers are gone from Apple's modern GL; report no support. */
-GLM_EXPORT CGLError CGLCreatePBuffer(GLsizei w, GLsizei h, GLenum target, GLenum format, GLint max_level, CGLPBufferObj *pbuffer)
-{ (void)w; (void)h; (void)target; (void)format; (void)max_level; if (pbuffer) *pbuffer = NULL; return kCGLBadAlloc; }
-GLM_EXPORT CGLError CGLDestroyPBuffer(CGLPBufferObj pbuffer) { (void)pbuffer; return kCGLBadAddress; }
 
 GLM_HIDDEN struct glm_context *glm_cgl_gl(CGLContextObj ctx) { return valid_context(ctx) ? ctx->gl : NULL; }

@@ -19,7 +19,7 @@ enum {
     RG32Sint = 104, RG32Float = 105, RGBA16Unorm = 110, RGBA16Uint = 113, RGBA16Sint = 114, RGBA16Float = 115,
     RGBA32Uint = 123, RGBA32Sint = 124, RGBA32Float = 125, Depth16Unorm = 250, Depth32Float = 252, Stencil8 = 253,
     Depth32Float_Stencil8 = 260, R8Unorm_sRGB = 11, RG8Unorm_sRGB = 31, R16Snorm = 22, RG16Snorm = 62,
-    RGBA16Snorm = 112, RGB10A2Uint = 91,
+    RGBA16Snorm = 112, RGB10A2Uint = 91, BGR10A2Unorm = 94,
 };
 
 size_t glm_metal_format_bytes(uint32_t f);
@@ -32,7 +32,7 @@ size_t glm_metal_format_bytes(uint32_t f)
     case B5G6R5Unorm: case A1BGR5Unorm: case ABGR4Unorm: case BGR5A1Unorm: case Depth16Unorm: return 2;
     case RG16Float: case RG16Unorm: case RG16Snorm: case RG16Uint: case RG16Sint: case R32Uint: case R32Sint:
     case R32Float: case RGB10A2Uint: case RGBA8Unorm: case RGBA8Unorm_sRGB: case RGBA8Snorm: case RGBA8Uint: case RGBA8Sint: case BGRA8Unorm:
-    case BGRA8Unorm_sRGB: case RGB10A2Unorm: case RG11B10Float: case RGB9E5Float: case Depth32Float: return 4;
+    case BGRA8Unorm_sRGB: case RGB10A2Unorm: case BGR10A2Unorm: case RG11B10Float: case RGB9E5Float: case Depth32Float: return 4;
     case RG32Uint: case RG32Sint: case RG32Float: case RGBA16Unorm: case RGBA16Snorm: case RGBA16Uint: case RGBA16Sint: case RGBA16Float:
     case Depth32Float_Stencil8: return 8;
     case RGBA32Uint: case RGBA32Sint: case RGBA32Float: return 16;
@@ -173,6 +173,11 @@ void glm_unpack_texels(uint32_t f, const uint8_t *src, size_t count, float *out)
             out[0] = unorm(u32 & 1023, 10); out[1] = unorm((u32 >> 10) & 1023, 10);
             out[2] = unorm((u32 >> 20) & 1023, 10); out[3] = unorm(u32 >> 30, 2);
             break;
+        case BGR10A2Unorm:
+            memcpy(&u32, src, 4);
+            out[2] = unorm(u32 & 1023, 10); out[1] = unorm((u32 >> 10) & 1023, 10);
+            out[0] = unorm((u32 >> 20) & 1023, 10); out[3] = unorm(u32 >> 30, 2);
+            break;
         /* Metal names packed formats least-significant component first. */
         case B5G6R5Unorm:
             memcpy(&s16, src, 2);
@@ -284,6 +289,10 @@ static void pack_texels(uint32_t f, const float *in, size_t count, uint8_t *dst)
             break;
         case RGB10A2Unorm:
             u32 = to_unorm(in[0], 10) | to_unorm(in[1], 10) << 10 | to_unorm(in[2], 10) << 20 | to_unorm(in[3], 2) << 30;
+            memcpy(dst, &u32, 4);
+            break;
+        case BGR10A2Unorm:
+            u32 = to_unorm(in[2], 10) | to_unorm(in[1], 10) << 10 | to_unorm(in[0], 10) << 20 | to_unorm(in[3], 2) << 30;
             memcpy(dst, &u32, 4);
             break;
         case B5G6R5Unorm:

@@ -130,7 +130,7 @@ $(OUT)/libGLMetal.dylib: $(SRC_C) $(SRC_M) $(wildcard src/*.h) $(GENERATED) $(LI
 	$(CC) $(LIB_CFLAGS) -include $(GEN)/glm_impl_rename.h -dynamiclib $(SRC_C) $(GEN)/attrib_setters.c $(GEN)/stubs.c \
 		$(SRC_M) -fobjc-arc $(LIB_OBJS) $(DEP_LINK) -lc++ \
 		-install_name @rpath/libGLMetal.dylib -framework Metal -framework Foundation -framework QuartzCore \
-		-framework CoreGraphics -framework AppKit -o $@
+		-framework CoreGraphics -framework AppKit -framework IOSurface -o $@
 
 glcompare: $(OUT)/glcompare $(OUT)/libglcases.dylib
 
@@ -407,6 +407,33 @@ test-glsl-builtins: lib $(OUT)/glsl_compile
 			END { if (seen != n) print "missing: " n - seen " shaders"; exit bad || seen != n }' \
 			$(OUT)/glsl-builtins-apple.txt $(OUT)/glsl-builtins-$$mode.txt || exit 1; \
 	done && echo "GLSL built-ins: direct/threaded compile all $$(grep -c ': ok$$' $(OUT)/glsl-builtins-apple.txt) shaders Apple compiles ($$(grep -c '^%%' tests/probes/glsl_builtins.txt) in the corpus)"
+
+# CGLTexImageIOSurface2D (tests/probes/iosurface_texture.c): errors, the
+# levels and texels of each format, and the surface bytes uploads and
+# framebuffer clears leave, against Apple's, direct and threaded.
+$(OUT)/iosurface_texture: tests/probes/iosurface_texture.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -framework IOSurface -framework CoreFoundation -o $@
+.PHONY: test-iosurface
+test-iosurface: lib $(OUT)/iosurface_texture
+	@$(OUT)/iosurface_texture > $(OUT)/iosurface-apple.txt 2>/dev/null
+	@$(OUT)/iosurface_texture $(OUT)/libGLMetal.dylib > $(OUT)/iosurface-direct.txt 2>/dev/null
+	@GLMETAL_THREAD_ALL=1 $(OUT)/iosurface_texture $(OUT)/libGLMetal.dylib > $(OUT)/iosurface-threaded.txt 2>/dev/null
+	@diff $(OUT)/iosurface-apple.txt $(OUT)/iosurface-direct.txt && diff $(OUT)/iosurface-apple.txt $(OUT)/iosurface-threaded.txt && \
+		echo "IOSurface textures: direct/threaded match Apple ($$(wc -l < $(OUT)/iosurface-apple.txt) lines)"
+
+# CGL pbuffers (tests/probes/pbuffer.c): Apple's renderer has none; the
+# errors each call answers, against Apple's, direct and threaded.
+$(OUT)/pbuffer: tests/probes/pbuffer.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -o $@
+.PHONY: test-pbuffer
+test-pbuffer: lib $(OUT)/pbuffer
+	@$(OUT)/pbuffer > $(OUT)/pbuffer-apple.txt 2>/dev/null
+	@$(OUT)/pbuffer $(OUT)/libGLMetal.dylib > $(OUT)/pbuffer-direct.txt 2>/dev/null
+	@GLMETAL_THREAD_ALL=1 $(OUT)/pbuffer $(OUT)/libGLMetal.dylib > $(OUT)/pbuffer-threaded.txt 2>/dev/null
+	@diff $(OUT)/pbuffer-apple.txt $(OUT)/pbuffer-direct.txt && diff $(OUT)/pbuffer-apple.txt $(OUT)/pbuffer-threaded.txt && \
+		echo "pbuffers: direct/threaded match Apple ($$(wc -l < $(OUT)/pbuffer-apple.txt) lines)"
 
 # Which enums each setter, getter and command accepts (tools/apple_enum_sweep.c)
 # against Apple's (data/apple-enum-reference.txt), less the documented

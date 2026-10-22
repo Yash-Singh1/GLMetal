@@ -65,6 +65,9 @@ GLMetal and compare the results:
 | Vertex blending, per-vertex point sizes, attenuation | `make test-vertex-blend` |
 | Bindable uniforms | `make test-bindable-uniform` |
 | Element arrays | `make test-element-array` |
+| GLSL built-in functions, variables and qualifiers | `make test-glsl-builtins`; glcompare `glsl_legacy_builtins` |
+| `CGLTexImageIOSurface2D` | `make test-iosurface` |
+| CGL pbuffers | `make test-pbuffer` |
 
 Where Apple's OpenGL contradicts an extension it advertises (mostly in the
 imaging subset, which is half broken on Apple silicon), GLMetal follows the
@@ -243,6 +246,42 @@ an instanced quad whose colour is read in the vertex stage.
 
 Rectangles are never culled, outlined, offset or polygon-stippled.
 
+## IOSurfaces and pbuffers
+
+**`CGLTexImageIOSurface2D`** (`textures.m`, `make test-iosurface`) makes
+the bound rectangle texture an image held by an IOSurface plane: sampling
+reads the surface, and uploads and drawing into the texture write it.
+Apple's rules:
+
+- Only `GL_TEXTURE_RECTANGLE_ARB`; other targets give `kCGLBadValue`.
+  Texture 0 gives `kCGLBadState` and `GL_INVALID_OPERATION`.
+- Each format takes its own type: BGRA with
+  `GL_UNSIGNED_INT_8_8_8_8_REV` (RGBA8, RGB8 and the sRGB formats) or
+  `GL_UNSIGNED_INT_2_10_10_10_REV`; RED and RG, RGBA and the integer
+  formats with bytes, shorts, halves and floats; LUMINANCE, ALPHA,
+  INTENSITY and LUMINANCE_ALPHA bytes; 4:2:2 pairs as
+  `GL_RGB_RAW_422_APPLE`. The internal format reported is the sized one
+  (`GL_RGBA` reads back as `GL_RGBA8`).
+- The surface's pixel format and element size are not checked. The width
+  must fit the plane's row pitch and the height its height.
+- While a surface is attached, `glTexImage2D` gives `GL_INVALID_OPERATION`;
+  another `CGLTexImageIOSurface2D` replaces the surface.
+- An RGB format keeps the client's alpha bytes in the surface.
+
+`glFinish` waits for everything committed before it, `glFlush` included,
+so a surface (or another context) sees the drawing once it returns.
+
+**Pbuffers** (`make test-pbuffer`): Apple's renderer on Apple silicon has
+none, arm64 and x86_64 alike. `CGLCreatePBuffer` returns
+`kCGLBadDrawable` and a NULL pbuffer for every target, format and size, so
+programs fall back to framebuffer objects. The other calls answer for a
+NULL pbuffer (`kCGLBadAddress`, or `kCGLBadContext` for a bad context), and
+`CGLGetPBuffer` reports none.
+
+**`CGLGetDeviceFromGLRenderer`** returns OpenCL's GPU device for the
+accelerated renderer's IDs, as Apple does, and NULL for others (undefined
+there).
+
 ## Small entry points
 
 `legacy_misc.c` answers as Apple does (`make test-legacy-misc`).
@@ -266,6 +305,14 @@ Rectangles are never culled, outlined, offset or polygon-stippled.
   reported size is negative, as on Apple.
 - An empty `glBegin`/`glEnd` with no drawable raises
   `GL_INVALID_FRAMEBUFFER_OPERATION`, like array draws.
+- **Indirect draws** (glcompare `draw_indirect`): the command's last word,
+  reserved in GL 4.1, is a base instance on Apple. Instanced arrays start
+  that many elements in. `glMultiDrawElementsIndirectAPPLE` and
+  `glMultiDrawElementsIndirectBaseInstanceAPPLE` (not in the SDK headers;
+  GL 4.3's `glMultiDrawElementsIndirect` arguments) draw `drawcount`
+  commands `stride` bytes apart. Apple's single indirect draws also start
+  `gl_InstanceID` at the base instance; GLMetal starts it at 0, as GL 4.2
+  and Apple's multi-draws do.
 
 ## Imaging subset
 
@@ -379,13 +426,14 @@ generic attribute, beside the conventional maps.
 
 - **ARB_shading_language_include:** a stub raising `GL_INVALID_OPERATION`,
   as Apple's legacy profile does.
-- **`glMultiDrawElementsIndirectAPPLE`:** a stub raising
-  `GL_INVALID_OPERATION`, as Apple does in the legacy profile.
 - **`glLabelObjectWithResponsibleProcessAPPLE`:** Apple-private, still a
   stub.
-- **CGL pbuffers and IOSurfaces:** `CGLDescribePBuffer`, `CGLSetPBuffer`,
-  `CGLTexImagePBuffer`, `CGLTexImageIOSurface2D` and the dispatch-table
-  calls are still stubs.
+- **Apple-private CGL calls:** the dispatch-table calls
+  (`CGLSelectDispatch*`, `CGLRestoreDispatch*`, `CGLFrontDispatch`,
+  `CGLBackDispatch`), `CGLGetSurface`/`CGLSetSurface`,
+  `CGLAreContextsShared`, `CGLGetNextContext`, `CGLOpenCLMuxLockDown` and
+  the pbuffer callbacks and volatile state are still stubs. They are not
+  in the SDK headers.
 - **Imaging limits:** colour tables up to 8192 entries; histograms up to
   65536; filters up to 11 x 11.
 

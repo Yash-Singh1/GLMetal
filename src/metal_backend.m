@@ -788,6 +788,9 @@ void glm_backend_flush(struct glm_context *ctx, bool wait)
         b->framebuffer_dirty = true;
     }
     if (wait && commands) [commands waitUntilCompleted];
+    /* glFinish after glFlush: the work glFlush committed must be done too,
+       for readers outside GL (IOSurfaces, other contexts). */
+    if (wait) dispatch_group_wait(b->completions, DISPATCH_TIME_FOREVER);
 }
 
 /* Bump allocator over 4 MB chunks, retained until the command buffer that
@@ -5741,7 +5744,7 @@ void glm_backend_copy_framebuffer_to_texture(struct glm_context *ctx, struct glm
         glm_unpack_texels((uint32_t)source.pixelFormat, (const uint8_t *)mtl_contents(staging) + (size_t)row * region.size.width * texel,
                           (size_t)width, rgba + (size_t)row * width * 4);
     struct glm_format_info info;
-    if (glm_format_lookup(texture->levels[face][level].internal_format, &info)) {
+    if (glm_texture_storage_format(texture, texture->levels[face][level].internal_format, &info)) {
         GLint saved_alignment = ctx->state.unpack_alignment, saved_row = ctx->state.unpack_row_length;
         GLint saved_skip_rows = ctx->state.unpack_skip_rows, saved_skip_pixels = ctx->state.unpack_skip_pixels;
         GLint saved_row_bytes = ctx->state.unpack_row_bytes, saved_image_bytes = ctx->state.unpack_image_bytes;

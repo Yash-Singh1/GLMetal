@@ -132,6 +132,9 @@ struct glm_texture {
     /* Whole-level images the storage could not hold yet (levels defined
        before the base level, out of chain order): uploaded once it can. */
     struct glm_pending_level *pending;
+    /* CGLTexImageIOSurface2D: the IOSurfaceRef (retained) the storage
+       aliases. Level 0 cannot be redefined while it is attached. */
+    void *iosurface;
 };
 
 struct glm_pending_level {
@@ -230,6 +233,14 @@ GLM_HIDDEN int glm_eval_components(GLenum target);
 GLM_HIDDEN int glm_eval_attrib_query(struct glm_context *ctx, GLuint index, GLenum pname, double *v);
 struct glm_texture;
 GLM_HIDDEN GLboolean glm_texture_resident(const struct glm_texture *t);
+/* CGLTexImageIOSurface2D on the current texture of `target`: 0, or
+   kCGLBadValue / kCGLBadState (setting the GL error Apple sets). */
+GLM_HIDDEN int glm_texture_iosurface(struct glm_context *ctx, GLenum target, GLenum internal, GLsizei width, GLsizei height,
+                                     GLenum format, GLenum type, void *surface, GLuint plane);
+/* The format a level's texels are stored in: the internal format's, or
+   the IOSurface's when one is attached. */
+struct glm_format_info;
+GLM_HIDDEN bool glm_texture_storage_format(const struct glm_texture *t, GLenum internal, struct glm_format_info *info);
 
 /* The imaging subset (imaging.c; ARB_imaging, GL 2.1 3.6.3, 3.6.5): the
    colour tables, convolution filters, histogram and minmax enables in this

@@ -7,6 +7,7 @@
  * buffer and a blit in the command stream, so draws already recorded keep
  * sampling the old contents. 1D textures are stored as 2D textures one
  * texel high, because Metal's 1D textures cannot have mipmaps. */
+#import <IOSurface/IOSurface.h>
 #import <Metal/Metal.h>
 #import <objc/message.h>
 
@@ -192,6 +193,7 @@ void glm_texture_destroy(struct glm_texture *t)
     glm_backend_release(t->cube_array_view);
     glm_backend_release(t->view);
     glm_backend_release(t->backend);
+    if (t->iosurface) CFRelease(t->iosurface);
     free(t);
 }
 
@@ -770,6 +772,7 @@ static MTLTextureSwizzleChannels swizzle_for(const struct glm_format_info *info)
    copied across. Returns false when the base level is not defined. */
 bool glm_backend_texture_ensure_storage(struct glm_context *ctx, struct glm_texture *t)
 {
+    if (t->iosurface) return t->backend != NULL; /* the surface is the storage */
     int base = t->base_level >= 0 && t->base_level < GLM_MAX_LEVELS ? t->base_level : 0;
     struct glm_texture_level *b = &t->levels[0][base];
     if (!b->defined) {
@@ -864,6 +867,162 @@ bool glm_backend_texture_ensure_storage(struct glm_context *ctx, struct glm_text
     glm_backend_framebuffer_changed(ctx);
     if (t->pending) flush_pending(ctx, t);
     return true;
+}
+
+bool glm_texture_storage_format(const struct glm_texture *t, GLenum internal, struct glm_format_info *info)
+{
+    if (!glm_format_lookup(internal, info)) return false;
+    if (t->iosurface) {
+        info->metal_format = t->metal_format;
+        /* RGB formats keep the client's alpha in the surface, as Apple's do;
+           sampling still reads it as one. */
+        if (info->swizzle[0] == 0 && info->swizzle[1] == 1 && info->swizzle[2] == 2 && info->swizzle[3] == 5) info->swizzle[3] = 3;
+    }
+    return true;
+}
+
+/* CGLTexImageIOSurface2D: the format and type pairs and internal formats
+   Apple's GL takes (tests/probes/iosurface_texture.c), with the internal
+   format it then reports. The surface's own pixel format and element
+   size are not consulted, as there: its row pitch bounds the width. The
+   BGRA orders need BGRA storage; the others store as the reported format
+   does (two-channel storage for RG data with a one-channel format). Apple
+   also takes BGRA with UNSIGNED_SHORT_1_5_5_5_REV or 4_4_4_4_REV and
+   YCBCR_422 with RGB, then aborts in Metal. GLMetal stores the first as
+   BGR5A1; Metal has no format for the second, so GLMetal refuses it and
+   the third. */
+static const struct {
+    GLenum format, type, internal, reported;
+    MTLPixelFormat metal; /* 0: the reported format's */
+} iosurface_formats[] = {
+    {GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, GL_RGBA, GL_RGBA8, MTLPixelFormatBGRA8Unorm},
+    {GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, GL_RGBA8, GL_RGBA8, MTLPixelFormatBGRA8Unorm},
+    {GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, GL_RGB, GL_RGB8, MTLPixelFormatBGRA8Unorm},
+    {GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, GL_RGB8, GL_RGB8, MTLPixelFormatBGRA8Unorm},
+    {GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, GL_SRGB_ALPHA, GL_SRGB8_ALPHA8, MTLPixelFormatBGRA8Unorm_sRGB},
+    {GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, GL_SRGB8_ALPHA8, GL_SRGB8_ALPHA8, MTLPixelFormatBGRA8Unorm_sRGB},
+    {GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, GL_SRGB, GL_SRGB8, MTLPixelFormatBGRA8Unorm_sRGB},
+    {GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, GL_SRGB8, GL_SRGB8, MTLPixelFormatBGRA8Unorm_sRGB},
+    {GL_BGRA, GL_UNSIGNED_INT_2_10_10_10_REV, GL_RGBA, GL_RGB10_A2, MTLPixelFormatBGR10A2Unorm},
+    {GL_BGRA, GL_UNSIGNED_INT_2_10_10_10_REV, GL_RGB10_A2, GL_RGB10_A2, MTLPixelFormatBGR10A2Unorm},
+    {GL_BGRA, GL_UNSIGNED_SHORT_1_5_5_5_REV, GL_RGBA, GL_RGB5_A1, MTLPixelFormatBGR5A1Unorm},
+    {GL_BGRA, GL_UNSIGNED_SHORT_1_5_5_5_REV, GL_RGB5_A1, GL_RGB5_A1, MTLPixelFormatBGR5A1Unorm},
+    {GL_RGBA, GL_UNSIGNED_SHORT, GL_RGBA, GL_RGBA16, 0},
+    {GL_RGBA, GL_UNSIGNED_SHORT, GL_RGBA16, GL_RGBA16, 0},
+    {GL_RGBA, GL_HALF_FLOAT, GL_RGBA, GL_RGBA16F, 0},
+    {GL_RGBA, GL_HALF_FLOAT, GL_RGBA16F, GL_RGBA16F, 0},
+    {GL_RGBA, GL_HALF_FLOAT, GL_RGB, GL_RGB16F, 0},
+    {GL_RGBA, GL_HALF_FLOAT, GL_RGB16F, GL_RGB16F, 0},
+    {GL_RGBA, GL_FLOAT, GL_RGBA, GL_RGBA32F, 0},
+    {GL_RGBA, GL_FLOAT, GL_RGBA32F, GL_RGBA32F, 0},
+    {GL_RGBA, GL_FLOAT, GL_RGB, GL_RGB32F, 0},
+    {GL_RGBA, GL_FLOAT, GL_RGB32F, GL_RGB32F, 0},
+    {GL_RED, GL_UNSIGNED_BYTE, GL_RED, GL_R8, 0},
+    {GL_RED, GL_UNSIGNED_BYTE, GL_R8, GL_R8, 0},
+    {GL_RED, GL_UNSIGNED_SHORT, GL_RED, GL_R16, 0},
+    {GL_RED, GL_UNSIGNED_SHORT, GL_R16, GL_R16, 0},
+    {GL_RED, GL_HALF_FLOAT, GL_RED, GL_R16F, 0},
+    {GL_RED, GL_HALF_FLOAT, GL_R16F, GL_R16F, 0},
+    {GL_RED, GL_FLOAT, GL_RED, GL_R32F, 0},
+    {GL_RED, GL_FLOAT, GL_R32F, GL_R32F, 0},
+    {GL_RG, GL_UNSIGNED_BYTE, GL_RG, GL_RG8, 0},
+    {GL_RG, GL_UNSIGNED_BYTE, GL_RG8, GL_RG8, 0},
+    {GL_RG, GL_UNSIGNED_SHORT, GL_RG, GL_RG16, 0},
+    {GL_RG, GL_UNSIGNED_SHORT, GL_RG16, GL_RG16, 0},
+    {GL_RG, GL_HALF_FLOAT, GL_RG, GL_RG16F, 0},
+    {GL_RG, GL_HALF_FLOAT, GL_R16F, GL_R16F, MTLPixelFormatRG16Float},
+    {GL_RG, GL_FLOAT, GL_RG, GL_RG32F, 0},
+    {GL_RG, GL_FLOAT, GL_R32F, GL_R32F, MTLPixelFormatRG32Float},
+    {GL_LUMINANCE, GL_UNSIGNED_BYTE, GL_LUMINANCE, GL_LUMINANCE8, 0},
+    {GL_LUMINANCE, GL_UNSIGNED_BYTE, GL_LUMINANCE8, GL_LUMINANCE8, 0},
+    {GL_LUMINANCE, GL_UNSIGNED_BYTE, GL_INTENSITY8, GL_INTENSITY8, 0},
+    {GL_LUMINANCE, GL_UNSIGNED_SHORT, GL_LUMINANCE, GL_LUMINANCE16, 0},
+    {GL_ALPHA, GL_UNSIGNED_BYTE, GL_ALPHA, GL_ALPHA8, 0},
+    {GL_ALPHA, GL_UNSIGNED_BYTE, GL_ALPHA8, GL_ALPHA8, 0},
+    {GL_ALPHA, GL_UNSIGNED_SHORT, GL_ALPHA, GL_ALPHA16, 0},
+    {GL_INTENSITY, GL_UNSIGNED_BYTE, GL_INTENSITY, GL_INTENSITY8, 0},
+    {GL_INTENSITY, GL_UNSIGNED_BYTE, GL_INTENSITY8, GL_INTENSITY8, 0},
+    {GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, GL_LUMINANCE_ALPHA, GL_LUMINANCE8_ALPHA8, 0},
+    {GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, GL_LUMINANCE8_ALPHA8, GL_LUMINANCE8_ALPHA8, 0},
+    /* 4:2:2: Y0 Cb Y1 Cr and Cb Y0 Cr Y1 pairs, sampled without colour
+       conversion as GL_RGB_RAW_422_APPLE (or RGB8, as asked). */
+    {GL_RGB_422_APPLE, GL_UNSIGNED_SHORT_8_8_APPLE, GL_RGB, 0x8A51, MTLPixelFormatBGRG422},
+    {GL_RGB_422_APPLE, GL_UNSIGNED_SHORT_8_8_APPLE, GL_RGB8, GL_RGB8, MTLPixelFormatBGRG422},
+    {GL_RGB_422_APPLE, GL_UNSIGNED_SHORT_8_8_REV_APPLE, GL_RGB, 0x8A51, MTLPixelFormatGBGR422},
+    {GL_RGB_422_APPLE, GL_UNSIGNED_SHORT_8_8_REV_APPLE, GL_RGB8, GL_RGB8, MTLPixelFormatGBGR422},
+    {GL_YCBCR_422_APPLE, GL_UNSIGNED_SHORT_8_8_APPLE, GL_RGB8, GL_RGB8, MTLPixelFormatBGRG422},
+    {GL_YCBCR_422_APPLE, GL_UNSIGNED_SHORT_8_8_REV_APPLE, GL_RGB8, GL_RGB8, MTLPixelFormatGBGR422},
+    {GL_RED_INTEGER, GL_UNSIGNED_BYTE, GL_R8UI, GL_R8UI, 0},
+    {GL_RED_INTEGER, GL_BYTE, GL_R8I, GL_R8I, 0},
+    {GL_RED_INTEGER, GL_UNSIGNED_SHORT, GL_R16UI, GL_R16UI, 0},
+    {GL_RED_INTEGER, GL_UNSIGNED_INT, GL_R32UI, GL_R32UI, 0},
+    {GL_RG_INTEGER, GL_UNSIGNED_BYTE, GL_RG8UI, GL_RG8UI, 0},
+    {GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, GL_RGBA8UI, GL_RGBA8UI, 0},
+    {GL_RGBA_INTEGER, GL_UNSIGNED_SHORT, GL_RGBA16UI, GL_RGBA16UI, 0},
+    {GL_RGBA_INTEGER, GL_UNSIGNED_INT, GL_RGBA32UI, GL_RGBA32UI, 0},
+};
+
+enum { IOSURFACE_BAD_STATE = 10007, IOSURFACE_BAD_VALUE = 10008 }; /* kCGLBadState, kCGLBadValue */
+
+int glm_texture_iosurface(struct glm_context *ctx, GLenum target, GLenum internal, GLsizei width, GLsizei height,
+                          GLenum format, GLenum type, void *surface, GLuint plane)
+{
+    if (target != GL_TEXTURE_RECTANGLE_ARB) return IOSURFACE_BAD_VALUE;
+    struct glm_texture *t = glm_texture_bound(ctx, target);
+    if (!t || !t->name) {
+        glm_error(ctx, GL_INVALID_OPERATION);
+        return IOSURFACE_BAD_STATE;
+    }
+    if (width < 0 || height < 0) {
+        glm_error(ctx, GL_INVALID_VALUE);
+        return IOSURFACE_BAD_VALUE;
+    }
+    size_t entry = 0, entries = sizeof iosurface_formats / sizeof iosurface_formats[0];
+    while (entry < entries && (iosurface_formats[entry].format != format || iosurface_formats[entry].type != type ||
+                               iosurface_formats[entry].internal != internal))
+        ++entry;
+    struct glm_format_info info;
+    if (entry == entries || !glm_format_lookup(iosurface_formats[entry].reported, &info)) return IOSURFACE_BAD_VALUE;
+    MTLPixelFormat pixel_format = iosurface_formats[entry].metal ? iosurface_formats[entry].metal : (MTLPixelFormat)info.metal_format;
+    bool chroma_pairs = pixel_format == MTLPixelFormatBGRG422 || pixel_format == MTLPixelFormatGBGR422;
+    IOSurfaceRef s = surface;
+    if (!s || !width || !height) return IOSURFACE_BAD_VALUE;
+    size_t planes = IOSurfaceGetPlaneCount(s);
+    if (planes ? plane >= planes : plane != 0) return IOSURFACE_BAD_VALUE;
+    size_t row_bytes = planes ? IOSurfaceGetBytesPerRowOfPlane(s, plane) : IOSurfaceGetBytesPerRow(s);
+    size_t rows = planes ? IOSurfaceGetHeightOfPlane(s, plane) : IOSurfaceGetHeight(s);
+    size_t texel = chroma_pairs ? 2 : glm_metal_format_bytes((uint32_t)pixel_format);
+    if ((size_t)width * texel > row_bytes || (size_t)height > rows) return IOSURFACE_BAD_VALUE;
+    MTLTextureDescriptor *d = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:pixel_format width:(NSUInteger)width
+                                                                                height:(NSUInteger)height mipmapped:NO];
+    d.storageMode = MTLStorageModeShared;
+    d.usage = MTLTextureUsageShaderRead | MTLTextureUsagePixelFormatView;
+    if (!chroma_pairs) d.usage |= MTLTextureUsageRenderTarget;
+    id<MTLTexture> storage = [metal_device() newTextureWithDescriptor:d iosurface:s plane:plane];
+    if (!storage) return IOSURFACE_BAD_VALUE;
+
+    CFRetain(s);
+    if (t->iosurface) CFRelease(t->iosurface);
+    t->iosurface = (void *)s;
+    glm_texture_free_pending(t);
+    for (int face = 0; face < 6; ++face)
+        for (int level = 0; level < GLM_MAX_LEVELS; ++level) t->levels[face][level] = (struct glm_texture_level){0};
+    t->levels[0][0] = (struct glm_texture_level){width, height, 1, iosurface_formats[entry].reported, true};
+    glm_backend_release(t->view);
+    t->view = NULL;
+    glm_backend_release(t->cube_array_view);
+    t->cube_array_view = t->cube_array_source = NULL;
+    glm_backend_release(t->backend);
+    t->backend = (__bridge_retained void *)storage;
+    t->metal_format = (uint32_t)pixel_format;
+    t->storage_dirty = false;
+    t->storage_validation_valid = t->sampling_validation_valid = false;
+    ++t->storage_generation;
+    ++t->definition_generation;
+    glm_framebuffer_resource_changed(ctx->share);
+    glm_sampling_resource_changed(ctx->share);
+    glm_backend_framebuffer_changed(ctx);
+    return 0;
 }
 
 /* Blits already converted texel data into a level region. */
@@ -1183,6 +1342,11 @@ void glm_backend_generate_mipmaps(struct glm_context *ctx, struct glm_texture *t
 static bool define_level(struct glm_context *ctx, struct glm_texture *t, GLenum target, GLint level, GLenum internal,
                          GLsizei w, GLsizei h, GLsizei d)
 {
+    /* Apple's: an IOSurface's image stays until another surface replaces it. */
+    if (t->iosurface) {
+        glm_error(ctx, GL_INVALID_OPERATION);
+        return false;
+    }
     if (level < 0 || level >= GLM_MAX_LEVELS || w < 0 || h < 0 || d < 0) {
         glm_error(ctx, GL_INVALID_VALUE);
         return false;
@@ -1233,7 +1397,7 @@ static void upload(struct glm_context *ctx, struct glm_texture *t, GLenum target
     if (!source || !w || !h) return;
     struct glm_texture_level *l = &t->levels[face_index(target)][level];
     struct glm_format_info info;
-    if (!glm_format_lookup(l->internal_format, &info)) return;
+    if (!glm_texture_storage_format(t, l->internal_format, &info)) return;
     size_t row_bytes, image_bytes;
     void *converted = glm_convert_upload(ctx, &info, w, h, d, format, type, source, &row_bytes, &image_bytes);
     if (!converted) {

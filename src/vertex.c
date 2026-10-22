@@ -8,6 +8,7 @@
 #include "glm_internal.h"
 #include "arb_program.h"
 #include "programs.h"
+#include "thread.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -2088,13 +2089,43 @@ static const GLuint *indirect_command(struct glm_context *ctx, const void *offse
     return contents ? (const GLuint *)(contents + (uintptr_t)offset) : NULL;
 }
 
+/* A command's last word, reserved in GL 4.1, is its base instance in Apple's
+   indirect draws (GL 4.2's meaning): instanced arrays start that many
+   elements in, while gl_InstanceID still counts from 0. The arrays are
+   moved for the one draw. */
+static bool shift_instanced_arrays(struct glm_context *ctx, GLuint base, const void *saved[GLM_MAX_ATTRIBS])
+{
+    bool shifted = false;
+    for (int slot = 0; slot < GLM_MAX_ATTRIBS && base; ++slot) {
+        struct glm_array *a = &ctx->vao->arrays[slot];
+        saved[slot] = a->pointer;
+        if (!a->enabled || !a->divisor) continue;
+        size_t element = type_size(a->type) * (size_t)(a->size == GL_BGRA ? 4 : a->size);
+        a->pointer = (const uint8_t *)a->pointer + (size_t)base * (a->stride ? (size_t)a->stride : element);
+        shifted = true;
+    }
+    if (shifted) glm_vao_changed(ctx->vao);
+    return shifted;
+}
+
+static void restore_instanced_arrays(struct glm_context *ctx, const void *saved[GLM_MAX_ATTRIBS])
+{
+    for (int slot = 0; slot < GLM_MAX_ATTRIBS; ++slot) ctx->vao->arrays[slot].pointer = saved[slot];
+    glm_vao_changed(ctx->vao);
+}
+
 GLM_EXPORT void glDrawArraysIndirect(GLenum mode, const GLvoid *indirect)
 {
     GLM_CONTEXT(ctx);
-    /* count, instances, first, base instance (must be 0 in GL 4.1) */
+    /* count, instances, first, base instance */
     const GLuint *c = indirect_command(ctx, indirect, 4 * sizeof(GLuint));
     if (!c || !c[1]) return;
-    glm_draw_arrays_internal(ctx, mode, (GLint)c[2], (GLsizei)c[0], (GLsizei)c[1]);
+    GLuint command[4];
+    memcpy(command, c, sizeof command);
+    const void *saved[GLM_MAX_ATTRIBS];
+    bool shifted = shift_instanced_arrays(ctx, command[3], saved);
+    glm_draw_arrays_internal(ctx, mode, (GLint)command[2], (GLsizei)command[0], (GLsizei)command[1]);
+    if (shifted) restore_instanced_arrays(ctx, saved);
 }
 
 GLM_EXPORT void glDrawElementsIndirect(GLenum mode, GLenum type, const GLvoid *indirect)
@@ -2103,10 +2134,35 @@ GLM_EXPORT void glDrawElementsIndirect(GLenum mode, GLenum type, const GLvoid *i
     /* count, instances, first index, base vertex, base instance */
     const GLuint *c = indirect_command(ctx, indirect, 5 * sizeof(GLuint));
     if (!c || !c[1]) return;
+    GLuint command[5];
+    memcpy(command, c, sizeof command);
     size_t index_size = type == GL_UNSIGNED_BYTE ? 1 : type == GL_UNSIGNED_SHORT ? 2 : 4;
-    glm_draw_elements_internal(ctx, mode, (GLsizei)c[0], type, (const void *)(uintptr_t)(c[2] * index_size), (GLsizei)c[1],
-                               (GLint)c[3]);
+    const void *saved[GLM_MAX_ATTRIBS];
+    bool shifted = shift_instanced_arrays(ctx, command[4], saved);
+    glm_draw_elements_internal(ctx, mode, (GLsizei)command[0], type, (const void *)(uintptr_t)(command[2] * index_size),
+                               (GLsizei)command[1], (GLint)command[3]);
+    if (shifted) restore_instanced_arrays(ctx, saved);
 }
+
+/* Apple's multi-draw forms of glDrawElementsIndirect (not in the SDK
+   headers; GL 4.3's glMultiDrawElementsIndirect arguments). The commands are
+   `stride` bytes apart, 0 for packed; both take the base instance. The
+   marshal layer has no prototype for them: they drain the command stream
+   and draw on the calling thread. */
+static void multi_draw_elements_indirect(GLenum mode, GLenum type, const void *indirect, GLsizei draws, GLsizei stride)
+{
+    GLM_CONTEXT(ctx);
+    if (ctx->thread) glm_thread_sync_named(ctx, "glMultiDrawElementsIndirectAPPLE");
+    if (draws < 0 || stride < 0 || stride % 4) return glm_error(ctx, GL_INVALID_VALUE);
+    if (!indirect_command(ctx, indirect, 0)) return;
+    size_t step = stride ? (size_t)stride : 5 * sizeof(GLuint);
+    for (GLsizei i = 0; i < draws; ++i) glDrawElementsIndirect(mode, type, (const uint8_t *)indirect + (size_t)i * step);
+}
+GLM_EXPORT void glMultiDrawElementsIndirectAPPLE(GLenum mode, GLenum type, const void *indirect, GLsizei draws, GLsizei stride)
+{ multi_draw_elements_indirect(mode, type, indirect, draws, stride); }
+GLM_EXPORT void glMultiDrawElementsIndirectBaseInstanceAPPLE(GLenum mode, GLenum type, const void *indirect, GLsizei draws,
+                                                             GLsizei stride)
+{ multi_draw_elements_indirect(mode, type, indirect, draws, stride); }
 
 GLM_EXPORT void glArrayElement(GLint i)
 {
