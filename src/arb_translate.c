@@ -110,6 +110,16 @@ struct parser {
     char error_hint[64];     /* the token Apple's messages quote */
     struct token previous;   /* the token before the current one */
     bool failed;
+    /* NV_fragment_program2 / NV_vertex_program3 (OPTION NV_*): precision
+       and condition-code opcode suffixes, |abs| operands, conditional
+       writes and branches, more opcodes, vertex texture fetch. */
+    bool nv;
+    bool cc_used;
+    int loop_depth;
+    /* result.clip[n] written as DP4 of one vector with state.clip[n].plane
+       (Direct3D clip planes): the vector becomes gl_ClipVertex. */
+    uint8_t clips_written;
+    bool clip_vertex_ok;
 };
 
 /* Adds `key` (outer parentheses ignored) to a counted set. */
@@ -667,12 +677,15 @@ static void attribute_binding(struct parser *p, char *out)
         p->fogcoord_read = true;
         snprintf(out, 160, "vec4(gl_FogFragCoord, 0.0, 0.0, 1.0)");
     } else if (!strcmp(what, "position")) snprintf(out, 160, "gl_FragCoord");
+    /* NV_fragment_program2: +1 for front-facing primitives, -1 for back. */
+    else if (!strcmp(what, "facing") && p->nv) snprintf(out, 160, "vec4(gl_FrontFacing ? 1.0 : -1.0, 0.0, 0.0, 1.0)");
     else fail(p, "unknown fragment attribute '%s'", what);
 }
 
 enum result_slot {
     RESULT_POSITION, RESULT_COLOR0, RESULT_COLOR1, RESULT_BACK0, RESULT_BACK1, RESULT_FOG, RESULT_POINT, RESULT_DEPTH,
-    RESULT_TEX0, /* 8 */ RESULT_DRAW0 = RESULT_TEX0 + 8, /* 8 draw buffers */ RESULT_COUNT = RESULT_DRAW0 + 8,
+    RESULT_TEX0, /* 8 */ RESULT_DRAW0 = RESULT_TEX0 + 8, /* 8 draw buffers */ RESULT_CLIP0 = RESULT_DRAW0 + 8,
+    RESULT_COUNT = RESULT_CLIP0 + 8,
 };
 
 static const char *result_variable(int slot)
@@ -697,6 +710,10 @@ static int result_binding(struct parser *p)
         else if (!strcmp(what, "fogcoord")) slot = RESULT_FOG;
         else if (!strcmp(what, "pointsize")) slot = RESULT_POINT;
         else if (!strcmp(what, "texcoord")) slot = RESULT_TEX0 + optional_index(p, 0);
+        else if (!strcmp(what, "clip") && p->nv) {
+            int n = optional_index(p, 0);
+            slot = n >= 0 && n < 8 ? RESULT_CLIP0 + n : -1;
+        }
         else if (!strcmp(what, "color")) {
             bool back = false, secondary = false;
             /* .primary .secondary .front[.primary|.secondary] .back[...] */
@@ -773,6 +790,8 @@ static void source_operand(struct parser *p, char *out, size_t size)
     bool negate = false;
     if (accept(p, "-")) negate = true;
     else accept(p, "+");
+    /* NV: |operand| takes the absolute value, before negation. */
+    bool absolute = p->nv && accept(p, "|");
     char base[200] = {0};
     if (p->token.kind == TOK_NUMBER || is(p, "{")) {
         char c[160], key[160];
@@ -858,7 +877,38 @@ static void source_operand(struct parser *p, char *out, size_t size)
 swizzle:;
     char swz[8];
     source_swizzle(p, swz);
+    if (absolute) {
+        expect(p, "|");
+        snprintf(out, size, "%sabs(%s%s)", negate ? "-" : "", base, swz);
+        return;
+    }
     snprintf(out, size, "%s(%s%s)", negate ? "-" : "", base, swz);
+}
+
+/* NV condition-code test: EQ NE LT LE GT GE TR FL, an optional register
+   digit, and a swizzle. Returns a bvec4 expression over glm_cc0. */
+static bool condition_test(struct parser *p, char *out, size_t size)
+{
+    static const char *const tests[] = {"EQ", "NE", "LT", "LE", "GT", "GE", "TR", "FL"};
+    static const char *const functions[] = {"equal", "notEqual", "lessThan", "lessThanEqual", "greaterThan", "greaterThanEqual"};
+    if (p->token.kind != TOK_IDENT) return false;
+    char word[16];
+    snprintf(word, sizeof word, "%s", p->token.text);
+    size_t n = strlen(word);
+    if (n == 3 && (word[2] == '0' || word[2] == '1')) word[--n] = 0;
+    int which = -1;
+    for (int i = 0; i < 8; ++i)
+        if (!strcmp(word, tests[i])) which = i;
+    if (which < 0) return false;
+    next(p);
+    p->cc_used = true;
+    char swz[8];
+    source_swizzle(p, swz);
+    if (!swz[0]) snprintf(swz, sizeof swz, ".xyzw");
+    if (which == 6) snprintf(out, size, "bvec4(true)");
+    else if (which == 7) snprintf(out, size, "bvec4(false)");
+    else snprintf(out, size, "%s(glm_cc0%s, vec4(0.0))", functions[which], swz);
+    return true;
 }
 
 /* Destination: variable and write mask ("xyzw" subset). */
@@ -996,18 +1046,51 @@ static const struct opcode opcodes[] = {
     {"SUB", 2, 1, 1}, {"SWZ", 1, 1, 1}, {"TEX", 1, 0, 1}, {"TXB", 1, 0, 1}, {"TXP", 1, 0, 1}, {"XPD", 2, 1, 1},
 };
 
-static const struct opcode *find_opcode(const char *word, bool *saturate)
+/* NV_fragment_program2 / NV_vertex_program3 additions. */
+static const struct opcode nv_opcodes[] = {
+    {"SEQ", 2, 1, 1}, {"SNE", 2, 1, 1}, {"SGT", 2, 1, 1}, {"SLE", 2, 1, 1}, {"SFL", 2, 1, 1}, {"STR", 2, 1, 1},
+    {"SSG", 1, 1, 1}, {"DIV", 2, 1, 1}, {"NRM", 1, 1, 1}, {"DDX", 1, 0, 1}, {"DDY", 1, 0, 1}, {"TXL", 1, 1, 1},
+    {"RFL", 2, 1, 1}, {"DP2", 2, 1, 1}, {"DP2A", 3, 1, 1},
+};
+
+static const struct opcode *lookup_opcode(const char *base, bool nv)
+{
+    for (size_t i = 0; i < sizeof opcodes / sizeof *opcodes; ++i)
+        if (!strcmp(opcodes[i].name, base)) return &opcodes[i];
+    if (nv)
+        for (size_t i = 0; i < sizeof nv_opcodes / sizeof *nv_opcodes; ++i)
+            if (!strcmp(nv_opcodes[i].name, base)) return &nv_opcodes[i];
+    return NULL;
+}
+
+/* saturate: 0 none, 1 [0, 1] (_SAT), 2 [-1, 1] (NV _SSAT). NV names are
+   OP[R|H|X][C][_SAT]: the precision is ignored, C updates the condition
+   code. */
+static const struct opcode *find_opcode(const char *word, bool nv, int *saturate, bool *update_cc)
 {
     char base[16];
     snprintf(base, sizeof base, "%s", word);
-    *saturate = false;
+    *saturate = 0;
+    *update_cc = false;
     size_t n = strlen(base);
     if (n > 4 && !strcmp(base + n - 4, "_SAT")) {
-        base[n - 4] = 0;
-        *saturate = true;
+        base[n -= 4] = 0;
+        *saturate = 1;
+    } else if (nv && n > 5 && !strcmp(base + n - 5, "_SSAT")) {
+        base[n -= 5] = 0;
+        *saturate = 2;
     }
-    for (size_t i = 0; i < sizeof opcodes / sizeof *opcodes; ++i)
-        if (!strcmp(opcodes[i].name, base)) return &opcodes[i];
+    const struct opcode *op = lookup_opcode(base, nv);
+    if (op || !nv) return op;
+    if (n > 3 && base[n - 1] == 'C') {
+        base[--n] = 0;
+        *update_cc = true;
+        if ((op = lookup_opcode(base, nv))) return op;
+    }
+    if (n > 3 && (base[n - 1] == 'R' || base[n - 1] == 'H' || base[n - 1] == 'X')) {
+        base[--n] = 0;
+        if ((op = lookup_opcode(base, nv))) return op;
+    }
     return NULL;
 }
 
@@ -1034,20 +1117,32 @@ static void extended_swizzle(struct parser *p, const char *source, char *out, si
     snprintf(out, size, "vec4(%s, %s, %s, %s)", comps[0], comps[1], comps[2], comps[3]);
 }
 
-static void instruction(struct parser *p, const struct opcode *op, bool saturate)
+static void instruction(struct parser *p, const struct opcode *op, int saturate, bool update_cc)
 {
     char variable[64], mask[8];
     int slot;
     char s[3][400];
     ++p->instructions;
-    if (!strcmp(op->name, "TEX") || !strcmp(op->name, "TXP") || !strcmp(op->name, "TXB")) ++p->tex_instructions;
+    if (!strcmp(op->name, "TEX") || !strcmp(op->name, "TXP") || !strcmp(op->name, "TXB") || !strcmp(op->name, "TXL"))
+        ++p->tex_instructions;
     else ++p->alu_instructions;
     if (!strcmp(op->name, "KIL")) {
+        char test[160];
+        if (p->nv && condition_test(p, test, sizeof test)) {
+            emit(&p->body, "  if (any(%s)) discard;\n", test);
+            return;
+        }
         source_operand(p, s[0], sizeof s[0]);
         emit(&p->body, "  if (any(lessThan(%s, vec4(0.0)))) discard;\n", s[0]);
         return;
     }
     destination(p, variable, sizeof variable, mask, &slot);
+    /* NV conditional write: "dst (GT.x), ..." writes components passing. */
+    char write_test[160] = "";
+    if (p->nv && accept(p, "(")) {
+        if (!condition_test(p, write_test, sizeof write_test)) fail(p, "expected a condition");
+        expect(p, ")");
+    }
     for (int i = 0; i < op->sources; ++i) {
         expect(p, ",");
         source_operand(p, s[i], sizeof s[i]);
@@ -1063,13 +1158,29 @@ static void instruction(struct parser *p, const struct opcode *op, bool saturate
         /* The source was parsed without a swizzle; the rest is the mask. */
         expect(p, ",");
         extended_swizzle(p, s[0], value, sizeof value);
-    } else if (!strcmp(n, "TEX") || !strcmp(n, "TXP") || !strcmp(n, "TXB")) {
+    } else if (!strcmp(n, "TEX") || !strcmp(n, "TXP") || !strcmp(n, "TXB") || !strcmp(n, "TXL")) {
         int unit;
         char target[16];
         expect(p, ",");
         texture_operand(p, &unit, target, sizeof target);
         texture_sample(p, n, s[0], unit, target_code(p, target), value, sizeof value);
     } else if (!strcmp(n, "ABS")) snprintf(value, sizeof value, "abs(%s)", s[0]);
+    else if (!strcmp(n, "SEQ")) snprintf(value, sizeof value, "vec4(equal(%s, %s))", s[0], s[1]);
+    else if (!strcmp(n, "SNE")) snprintf(value, sizeof value, "vec4(notEqual(%s, %s))", s[0], s[1]);
+    else if (!strcmp(n, "SGT")) snprintf(value, sizeof value, "vec4(greaterThan(%s, %s))", s[0], s[1]);
+    else if (!strcmp(n, "SLE")) snprintf(value, sizeof value, "vec4(lessThanEqual(%s, %s))", s[0], s[1]);
+    else if (!strcmp(n, "SFL")) snprintf(value, sizeof value, "vec4(0.0)");
+    else if (!strcmp(n, "STR")) snprintf(value, sizeof value, "vec4(1.0)");
+    else if (!strcmp(n, "SSG")) snprintf(value, sizeof value, "sign(%s)", s[0]);
+    else if (!strcmp(n, "DIV")) snprintf(value, sizeof value, "(%s / %s.x)", s[0], s[1]);
+    else if (!strcmp(n, "NRM")) snprintf(value, sizeof value, "vec4(normalize(%s.xyz), %s.w)", s[0], s[0]);
+    else if (!strcmp(n, "DDX")) snprintf(value, sizeof value, "dFdx(%s)", s[0]);
+    else if (!strcmp(n, "DDY")) snprintf(value, sizeof value, "dFdy(%s)", s[0]);
+    else if (!strcmp(n, "RFL"))
+        snprintf(value, sizeof value, "vec4(2.0 * dot(%s.xyz, %s.xyz) / dot(%s.xyz, %s.xyz) * %s.xyz - %s.xyz, 0.0)",
+                 s[0], s[1], s[0], s[0], s[0], s[1]);
+    else if (!strcmp(n, "DP2")) snprintf(value, sizeof value, "vec4(dot(%s.xy, %s.xy))", s[0], s[1]);
+    else if (!strcmp(n, "DP2A")) snprintf(value, sizeof value, "vec4(dot(%s.xy, %s.xy) + %s.z)", s[0], s[1], s[2]);
     else if (!strcmp(n, "ADD")) snprintf(value, sizeof value, "(%s + %s)", s[0], s[1]);
     else if (!strcmp(n, "SUB")) snprintf(value, sizeof value, "(%s - %s)", s[0], s[1]);
     else if (!strcmp(n, "MUL")) snprintf(value, sizeof value, "(%s * %s)", s[0], s[1]);
@@ -1106,9 +1217,66 @@ static void instruction(struct parser *p, const struct opcode *op, bool saturate
     if (p->failed) return;
     /* Evaluate fully before writing: a source may alias the destination. */
     int id = p->temp_counter++;
-    emit(&p->body, "  vec4 glm_v%d = %s%s%s;\n", id, saturate ? "clamp(" : "", value, saturate ? ", 0.0, 1.0)" : "");
-    if (!strcmp(mask, "xyzw")) emit(&p->body, "  %s = glm_v%d;\n", variable, id);
-    else emit(&p->body, "  %s.%s = glm_v%d.%s;\n", variable, mask, id, mask);
+    emit(&p->body, "  vec4 glm_v%d = %s%s%s;\n", id, saturate ? "clamp(" : "", value,
+         saturate == 2 ? ", -1.0, 1.0)" : saturate ? ", 0.0, 1.0)" : "");
+    if (!strcmp(n, "ARL")) return;
+    if (write_test[0]) {
+        emit(&p->body, "  bvec4 glm_w%d = %s;\n", id, write_test);
+        for (const char *c = mask; *c; ++c) {
+            emit(&p->body, "  if (glm_w%d.%c) %s.%c = glm_v%d.%c;\n", id, *c, variable, *c, id, *c);
+            if (update_cc) emit(&p->body, "  if (glm_w%d.%c) glm_cc0.%c = glm_v%d.%c;\n", id, *c, *c, id, *c);
+        }
+    } else {
+        if (!strcmp(mask, "xyzw")) emit(&p->body, "  %s = glm_v%d;\n", variable, id);
+        else emit(&p->body, "  %s.%s = glm_v%d.%s;\n", variable, mask, id, mask);
+        if (update_cc) emit(&p->body, "  glm_cc0.%s = glm_v%d.%s;\n", mask, id, mask);
+    }
+    if (update_cc) p->cc_used = true;
+    /* DP4 result.clip[n].x, V, state.clip[n].plane: clip against the
+       enabled user planes with gl_ClipVertex = V, as fixed function does. */
+    if (slot >= RESULT_CLIP0 && slot < RESULT_CLIP0 + 8) {
+        char plane[40];
+        snprintf(plane, sizeof plane, "((gl_ClipPlane[%d]))", slot - RESULT_CLIP0);
+        bool matched = !strcmp(n, "DP4") && !strcmp(s[1], plane) && !write_test[0];
+        if (matched) emit(&p->body, "  glm_clip_vertex = %s;\n", s[0]);
+        if (!p->clips_written) p->clip_vertex_ok = true;
+        p->clip_vertex_ok &= matched;
+        p->clips_written |= (uint8_t)(1u << (slot - RESULT_CLIP0));
+    }
+}
+
+/* NV control flow: IF/ELSE/ENDIF on a condition code test, REP n/ENDREP
+   and BRK [test]. Returns false for other statements. */
+static bool control_statement(struct parser *p, const char *word)
+{
+    char test[160];
+    if (!strcmp(word, "IF")) {
+        if (!condition_test(p, test, sizeof test)) { fail(p, "expected a condition"); return true; }
+        emit(&p->body, "  if (any(%s)) {\n", test);
+    } else if (!strcmp(word, "ELSE")) {
+        emit(&p->body, "  } else {\n");
+    } else if (!strcmp(word, "ENDIF") || !strcmp(word, "ENDREP") || !strcmp(word, "ENDLOOP")) {
+        if (strcmp(word, "ENDIF")) --p->loop_depth;
+        emit(&p->body, "  }\n");
+    } else if (!strcmp(word, "REP") || !strcmp(word, "LOOP")) {
+        int id = p->temp_counter++;
+        if (is(p, ";")) {
+            emit(&p->body, "  for (int glm_rep%d = 0; glm_rep%d < 4096; ++glm_rep%d) {\n", id, id, id);
+        } else {
+            char count[400];
+            source_operand(p, count, sizeof count);
+            emit(&p->body, "  for (int glm_rep%d = 0; glm_rep%d < int(%s.x); ++glm_rep%d) {\n", id, id, count, id);
+        }
+        ++p->loop_depth;
+    } else if (!strcmp(word, "BRK")) {
+        if (is(p, ";")) emit(&p->body, "  break;\n");
+        else if (condition_test(p, test, sizeof test)) emit(&p->body, "  if (any(%s)) break;\n", test);
+        else fail(p, "expected a condition");
+    } else {
+        return false;
+    }
+    ++p->instructions;
+    return true;
 }
 
 static void declaration_list(struct parser *p, enum name_kind kind)
@@ -1203,6 +1371,7 @@ static void statement(struct parser *p)
     if (!strcmp(word, "OPTION")) {
         char option[64];
         expect_ident(p, option, sizeof option);
+        if (!strncmp(option, "NV_fragment_program", 19) || !strncmp(option, "NV_vertex_program", 17)) p->nv = true;
         if (!strcmp(option, "ARB_position_invariant") && p->vertex) p->position_invariant = true;
         else if (!strcmp(option, "ARB_fog_linear") && !p->vertex) p->fog_option = 1;
         else if (!strcmp(option, "ARB_fog_exp") && !p->vertex) p->fog_option = 2;
@@ -1251,15 +1420,22 @@ static void statement(struct parser *p)
         *n = copy; /* the same variable (glsl, slot), under another name */
         snprintf(n->ident, sizeof n->ident, "%s", ident);
         n->alias = true;
+    } else if (p->nv && control_statement(p, word)) {
     } else {
-        bool saturate;
-        const struct opcode *op = find_opcode(word, &saturate);
-        if (!op || (p->vertex ? !op->vertex : !op->fragment) || (saturate && p->vertex)) {
+        int saturate;
+        bool update_cc;
+        const struct opcode *op = find_opcode(word, p->nv, &saturate, &update_cc);
+        /* NV_vertex_program3 adds saturation, texture fetches and the
+           fragment arithmetic ops to vertex programs. */
+        bool allowed = op && (p->vertex ? op->vertex || (p->nv && strcmp(op->name, "KIL") && strcmp(op->name, "DDX") &&
+                                                         strcmp(op->name, "DDY"))
+                                        : op->fragment);
+        if (!allowed || (saturate && p->vertex && !p->nv)) {
             fail(p, "unrecognised statement");
             snprintf(p->error_hint, sizeof p->error_hint, "%s", word);
             return;
         }
-        instruction(p, op, saturate);
+        instruction(p, op, saturate, update_cc);
     }
     if (!p->failed) expect(p, ";");
 }
@@ -1428,7 +1604,9 @@ bool glm_arb_translate(const char *source, size_t length, bool vertex, struct gl
         bool written = (p->results_written & (1u << slot)) != 0;
         if (written) emit(&t, "vec4 %s = vec4(0.0, 0.0, 0.0, 1.0);\n", result_variable(slot));
     }
+    if (p->clips_written) emit(&t, "vec4 glm_clip_vertex = vec4(0.0);\n");
     emit(&t, "void main() {\n");
+    if (p->cc_used) emit(&t, "  vec4 glm_cc0 = vec4(0.0);\n");
     if (p->prologue.data) emit(&t, "%s", p->prologue.data);
     if (p->body.data) emit(&t, "%s", p->body.data);
     uint32_t w = p->results_written;
@@ -1444,6 +1622,7 @@ bool glm_arb_translate(const char *source, size_t length, bool vertex, struct gl
         if (w & (1u << RESULT_BACK1)) emit(&t, "  gl_BackSecondaryColor = %s;\n", result_variable(RESULT_BACK1));
         if (w & (1u << RESULT_FOG)) emit(&t, "  gl_FogFragCoord = %s.x;\n", result_variable(RESULT_FOG));
         if (w & (1u << RESULT_POINT)) emit(&t, "  gl_PointSize = %s.x;\n", result_variable(RESULT_POINT));
+        if (p->clips_written && p->clip_vertex_ok) emit(&t, "  gl_ClipVertex = glm_clip_vertex;\n");
         for (int u = 0; u < 8; ++u)
             if (p->texcoords_written & (1 << u)) emit(&t, "  gl_TexCoord[%d] = %s;\n", u, result_variable(RESULT_TEX0 + u));
     } else {

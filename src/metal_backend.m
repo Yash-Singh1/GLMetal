@@ -229,6 +229,8 @@ struct glm_backend_context {
     struct glm_context *ctx;
     id<MTLCommandQueue> queue;
     id<MTLCommandBuffer> commands;
+    /* Draws encoded into `commands`; see ensure_encoder's early commit. */
+    uint32_t draws_since_commit;
     dispatch_group_t completions; /* callbacks must finish before this context is freed */
     id<MTLRenderCommandEncoder> encoder;
     bool framebuffer_dirty;
@@ -739,6 +741,7 @@ void glm_backend_flush(struct glm_context *ctx, bool wait)
 {
     struct glm_backend_context *b = ctx->backend;
     end_encoder(b);
+    b->draws_since_commit = 0;
     id<MTLCommandBuffer> commands = b->commands;
     if (commands) {
         NSArray *held = [b->transients copy];
@@ -1043,6 +1046,19 @@ static bool ensure_encoder(struct glm_context *ctx)
     if (ctx->draw_framebuffer && b->framebuffer_resource_generation != resources) b->framebuffer_dirty = true;
     if (b->encoder && !b->framebuffer_dirty && b->pass_srgb == ctx->state.framebuffer_srgb) return true;
     end_encoder(b);
+    /* At a render pass boundary, commit once enough draws are queued, so the
+       GPU starts on the frame while the application is still recording it.
+       Games that wait on last frame's queries early in the next frame
+       (Unreal Engine 3's occlusion results) otherwise wait for the whole
+       frame's GPU time, which a single commit at present only starts.
+       GLMETAL_COMMIT_DRAWS=<n> sets the threshold (0 disables). */
+    static int commit_draws = -1;
+    if (commit_draws < 0) {
+        const char *text = getenv("GLMETAL_COMMIT_DRAWS");
+        commit_draws = text ? atoi(text) : 128;
+    }
+    if (commit_draws > 0 && b->commands && b->draws_since_commit >= (uint32_t)commit_draws)
+        glm_backend_flush(ctx, false);
     b->framebuffer_dirty = false;
     b->pass_srgb = ctx->state.framebuffer_srgb;
     struct glm_framebuffer *fb = glm_framebuffer_get(ctx, ctx->draw_framebuffer);
@@ -4691,6 +4707,7 @@ bool glm_backend_draw_gpu(struct glm_context *ctx, GLenum mode, GLint first, GLs
     if (disabled) return gpu_fallback("disabled");
     struct glm_backend_context *b = ctx->backend;
     const struct glm_state *s = &ctx->state;
+    ++b->draws_since_commit;
     /* A bound program pipeline copies its stage programs' uniforms now. */
     if (!ctx->current_program && ctx->bound_pipeline) glm_pipeline_program(ctx);
     struct draw_stages st;

@@ -5,6 +5,7 @@
  *
  * Compiled without glm_impl_rename.h: the gl* names here are the exported
  * entry points, glm_impl_* the implementation. */
+#include <stdio.h>
 #include "../glm_internal.h"
 #define GLM_APPLE_TYPES_ONLY
 #include "glm_apple_gets.h"
@@ -249,7 +250,9 @@ static void shadow_set_draw_buffer(struct glm_shadow *s, GLuint framebuffer, GLe
 
 static const GLenum shadow_caps[] = {GL_DEPTH_TEST, GL_STENCIL_TEST, GL_BLEND, GL_CULL_FACE, GL_SCISSOR_TEST,
                                      GL_FRAMEBUFFER_SRGB, GL_POLYGON_OFFSET_FILL, GL_SAMPLE_ALPHA_TO_COVERAGE,
-                                     GL_RASTERIZER_DISCARD, GL_DITHER, GL_ALPHA_TEST, GL_DEPTH_CLAMP};
+                                     GL_RASTERIZER_DISCARD, GL_DITHER, GL_ALPHA_TEST, GL_DEPTH_CLAMP,
+                                     /* ARB program state, queried per draw by translation layers (IndirectX). */
+                                     GL_FRAGMENT_PROGRAM_ARB, GL_VERTEX_PROGRAM_ARB};
 enum { SHADOW_CAPS = sizeof shadow_caps / sizeof shadow_caps[0] };
 
 static int shadow_cap_slot(GLenum cap)
@@ -263,7 +266,8 @@ static int shadow_cap_slot(GLenum cap)
    lacks (the implementation raises the error). */
 static int shadow_query_slot(const struct glm_context *ctx, GLenum cap)
 {
-    if (cap == GL_ALPHA_TEST && ctx->profile == GLM_PROFILE_CORE) return -1;
+    if ((cap == GL_ALPHA_TEST || cap == GL_FRAGMENT_PROGRAM_ARB || cap == GL_VERTEX_PROGRAM_ARB) &&
+        ctx->profile == GLM_PROFILE_CORE) return -1;
     return shadow_cap_slot(cap);
 }
 
@@ -802,6 +806,21 @@ static bool draw_elements_list(struct glm_context *ctx, GLenum mode, GLsizei cou
     return !glm_list_executes(ctx);
 }
 
+/* GLMETAL_TRACE_DRAW_SYNC=1: why draws drain the stream (first 32). */
+static void trace_draw_sync(struct glm_context *ctx, const char *name, bool indexed)
+{
+    static int trace = -1, printed[2];
+    if (trace < 0) trace = getenv("GLMETAL_TRACE_DRAW_SYNC") != NULL;
+    if (!trace || printed[indexed] >= 16) return;
+    ++printed[indexed];
+    struct shadow_vao *v = shadow(ctx)->vao;
+    uint32_t client = 0;
+    for (uint32_t bits = v->enabled; bits; bits &= bits - 1)
+        if (!v->buffer[__builtin_ctz(bits)]) client |= 1u << __builtin_ctz(bits);
+    fprintf(stderr, "glmetal: %s drains the stream: vao=%u indexed=%d element_buffer=%u enabled=%#x client=%#x legacy=%#x\n",
+            name, v->name, indexed, v->element_buffer, v->enabled, client, v->legacy_enabled);
+}
+
 #define RECORD(name, ...)                                                                                  \
     struct glm_context *ctx = glm_current();                                                               \
     if (ctx && ctx->listing && name##_list(ctx, __VA_ARGS__)) return;                                      \
@@ -812,6 +831,7 @@ static bool draw_elements_list(struct glm_context *ctx, GLenum mode, GLsizei cou
             return;                                                                                        \
         }                                                                                                  \
         if (!legacy_client_arrays(shadow(ctx)) && name##_record_client(ctx, __VA_ARGS__)) return;       \
+        trace_draw_sync(ctx, #name, INDEXED);                                                              \
         glm_thread_sync_named(ctx, #name);                                                                 \
     }
 
@@ -823,9 +843,22 @@ static void draw_arrays_exec(const void *p)
     if (c->instances == 1) glm_impl_glDrawArrays(c->mode, c->first, c->count);
     else glm_impl_glDrawArraysInstanced(c->mode, c->first, c->count, c->instances);
 }
+static bool record_client_vertices(struct glm_context *ctx, GLenum mode, GLsizei count, GLenum type,
+                                   const void *indices, GLsizei instances, GLint base, size_t width);
+/* Client-memory vertex arrays (Direct3D DrawPrimitiveUP through IndirectX):
+   snapshot the vertices as an indexed draw over first..first+count-1, so
+   the call does not drain the stream. */
 static bool draw_arrays_record_client(struct glm_context *ctx, GLenum mode, GLint first, GLsizei count, GLsizei instances)
 {
-    return false;
+    if (count <= 0 || count > 65536 || first < 0 || instances != 1 || mode > GL_TRIANGLE_FAN) return false;
+    if (shadow(ctx)->immediate || shadow(ctx)->vao->element_buffer) return false;
+    uint32_t stack_indices[1024];
+    uint32_t *indices = count <= 1024 ? stack_indices : malloc((size_t)count * sizeof *indices);
+    if (!indices) return false;
+    for (GLsizei i = 0; i < count; ++i) indices[i] = (uint32_t)first + (uint32_t)i;
+    bool recorded = record_client_vertices(ctx, mode, count, GL_UNSIGNED_INT, indices, 1, 0, 4);
+    if (indices != stack_indices) free(indices);
+    return recorded;
 }
 GLM_EXPORT void glDrawArrays(GLenum mode, GLint first, GLsizei count)
 {
@@ -884,7 +917,12 @@ static uint32_t snapshot_index(const unsigned char *indices, size_t width, GLsiz
 }
 static size_t snapshot_element(const struct glm_array *a)
 {
-    if (a->size < 1 || a->size > 4 || a->stride < 0) return 0;
+    if (a->stride < 0) return 0;
+    /* Packed formats, and GL_BGRA-sized arrays (Direct3D's D3DCOLOR):
+       four components in four bytes. */
+    if (a->type == GL_INT_2_10_10_10_REV || a->type == GL_UNSIGNED_INT_2_10_10_10_REV) return 4;
+    if (a->size == GL_BGRA) return a->type == GL_UNSIGNED_BYTE ? 4 : 0;
+    if (a->size < 1 || a->size > 4) return 0;
     size_t width;
     switch (a->type) {
     case GL_BYTE: case GL_UNSIGNED_BYTE: width = 1; break;
