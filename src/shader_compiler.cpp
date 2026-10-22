@@ -342,6 +342,9 @@ std::string assign_locations(const std::string &text, const char *storage, const
     size_t i = 0;
     int depth = 0, parentheses = 0;
     bool line_start = true;
+    // A name declared again comes from another preprocessor branch
+    // ("#if CUBE varying vec3 c; #else varying vec2 c; #endif"): one slot.
+    std::map<std::string, int> declared;
     auto next_free = [&](int size) {
         for (int base = 0;; ++base) {
             bool ok = true;
@@ -426,6 +429,10 @@ std::string assign_locations(const std::string &text, const char *storage, const
             size_t t = w + 1;
             std::string after;
             while (t < words.size() && qualifiers.count(words[t])) after += words[t++] + " ";
+            // Macros standing for qualifiers ("#define MAXP mediump" in Fast
+            // Five) are not expanded yet: the type is the word before the name.
+            auto identifier = [&](size_t n) { return n < words.size() && ident_start(words[n][0]); };
+            while (identifier(t) && identifier(t + 1) && identifier(t + 2)) after += words[t++] + " ";
             if (candidate && t + 1 <= words.size() && t < words.size()) {
                 std::string type = words[t];
                 std::string rewritten;
@@ -447,7 +454,13 @@ std::string assign_locations(const std::string &text, const char *storage, const
                     }
                     if (name.rfind("glm_", 0) == 0) { ok = false; break; }
                     auto found = bound.find(name);
-                    int location = found != bound.end() ? found->second : next_free(location_size(type, array));
+                    auto again = declared.find(name);
+                    int size = location_size(type, array);
+                    int location = found != bound.end() ? found->second
+                                 : again != declared.end() ? again->second : next_free(size);
+                    for (int s = 0; again != declared.end() && found == bound.end() && s < size; ++s)
+                        reserved.insert((location & 0xffff) + s);
+                    declared[name] = location;
                     if (assigned) (*assigned)[name] = location;
                     std::string index = location & GLM_OUTPUT_INDEX1 ? ", index=1" : "";
                     location &= 0xffff;
@@ -856,7 +869,9 @@ Prepared prepare_stage(const char *source, glm_stage stage, Bindings *bindings);
 // Words glslang reserves for Vulkan GLSL (separate textures and samplers,
 // subpass inputs) that are ordinary identifiers in OpenGL's GLSL: renamed
 // glm_kw_<word> unless called (texture1D() is a legacy built-in), and the
-// prefix dropped again from every name the program reports.
+// prefix dropped again from every name the program reports. Shaders before
+// GLSL 1.30 are compiled as a newer version, so built-in functions added
+// since (Fast Five's `uniform sampler2D texture;`) are renamed there too.
 const char *const kw_prefix = "glm_kw_";
 /* EXT_bindable_uniform: `bindable uniform` declarations as plain uniforms
    (bindable.c feeds them from buffer objects) and the extension's
@@ -891,7 +906,7 @@ static std::string without_bindable(const std::string &text)
     return out;
 }
 
-std::string rename_vulkan_keywords(const std::string &text)
+std::string rename_vulkan_keywords(const std::string &text, bool before_130)
 {
     static const std::set<std::string> words = [] {
         std::set<std::string> w = {"sampler", "samplerShadow"};
@@ -904,7 +919,20 @@ std::string rename_vulkan_keywords(const std::string &text)
         }
         return w;
     }();
-    if (text.find("sampler") == std::string::npos && text.find("texture") == std::string::npos &&
+    static const std::set<std::string> newer_builtins = {
+        "texture", "textureProj", "textureLod", "textureOffset", "textureProjOffset", "textureLodOffset",
+        "textureProjLod", "textureProjLodOffset", "textureGrad", "textureGradOffset", "textureProjGrad",
+        "textureProjGradOffset", "texelFetch", "texelFetchOffset", "textureSize", "textureQueryLod",
+        "textureGather", "textureGatherOffset", "textureGatherOffsets", "round", "roundEven", "trunc", "sinh",
+        "cosh", "tanh", "asinh", "acosh", "atanh", "isnan", "isinf", "modf", "floatBitsToInt", "floatBitsToUint",
+        "intBitsToFloat", "uintBitsToFloat", "fma", "frexp", "ldexp", "packUnorm2x16", "packSnorm2x16",
+        "packUnorm4x8", "packSnorm4x8", "unpackUnorm2x16", "unpackSnorm2x16", "unpackUnorm4x8",
+        "unpackSnorm4x8", "packDouble2x32", "unpackDouble2x32", "packHalf2x16", "unpackHalf2x16",
+        "determinant", "inverse", "uaddCarry", "usubBorrow", "umulExtended", "imulExtended", "bitfieldExtract",
+        "bitfieldInsert", "bitfieldReverse", "bitCount", "findLSB", "findMSB", "interpolateAtCentroid",
+        "interpolateAtSample", "interpolateAtOffset", "EmitStreamVertex", "EndStreamPrimitive", "EmitVertex",
+        "EndPrimitive", "barrier"};
+    if (!before_130 && text.find("sampler") == std::string::npos && text.find("texture") == std::string::npos &&
         text.find("subpassInput") == std::string::npos)
         return text;
     std::string out;
@@ -918,7 +946,8 @@ std::string rename_vulkan_keywords(const std::string &text)
             bool call = next != std::string::npos && text[next] == '(';
             size_t prev = out.find_last_not_of(" \t\n");
             bool member = prev != std::string::npos && out[prev] == '.';
-            out += words.count(word) && !call && !member ? kw_prefix + word : word;
+            bool reserved = words.count(word) || (before_130 && newer_builtins.count(word));
+            out += reserved && !call && !member ? kw_prefix + word : word;
             continue;
         }
         out += text[i++];
@@ -974,7 +1003,9 @@ Prepared prepare_stage(const char *source, glm_stage stage, Bindings *bindings)
         p.text = lower_subroutines(text, p);
         return p;
     }
-    std::string text = rename_vulkan_keywords(without_bindable(normalize_newlines(source ? source : "")));
+    std::string text = without_bindable(normalize_newlines(source ? source : ""));
+    std::string version_probe = text;
+    text = rename_vulkan_keywords(text, take_version(version_probe, nullptr) < 130);
     if (!bindings || !bindings->fp64) text = without_doubles(text);
     text = lower_subroutines(text, p);
     std::string profile;
@@ -3179,12 +3210,21 @@ static void compile_program(const glm_compile_request *req, glm_compile_result *
         if (!present[s]) continue;
         spirv_cross::Compiler reflect(spirv[s]);
         auto resources = reflect.get_shader_resources();
+        // Every sampler keeps a slot; only those a stage samples are active.
+        const auto sampled = reflect.get_active_interface_variables();
         for (auto &image : resources.sampled_images) {
             std::string name = reflect.get_name(image.id);
             if (name.rfind("glm_bw_", 0) == 0 || name.rfind("glm_bb_", 0) == 0) continue; // after the program's own samplers, below
             if (!sampler_slots.count(name)) {
                 int slot = static_cast<int>(sampler_slots.size());
                 sampler_slots[name] = slot;
+                // Array samplers take consecutive slots.
+                const auto &type = reflect.get_type(image.type_id);
+                for (int k = 1; k < (type.array.empty() ? 1 : static_cast<int>(type.array[0])); ++k)
+                    sampler_slots[name + "#" + std::to_string(k)] = slot + k;
+            }
+            if (!uniforms.count(name) && (sampled.count(image.id) || name.rfind("glm_", 0) == 0)) {
+                int slot = sampler_slots[name];
                 glm_uniform_info info = {};
                 info.name = nullptr;
                 const auto &type = reflect.get_type(image.type_id);
@@ -3195,8 +3235,6 @@ static void compile_program(const glm_compile_request *req, glm_compile_result *
                 info.sampler_slot = slot;
                 info.legacy = -1;
                 uniforms[name] = info;
-                // Array samplers take consecutive slots.
-                for (int k = 1; k < info.array_size; ++k) sampler_slots[name + "#" + std::to_string(k)] = slot + k;
             }
         }
         for (auto &block : resources.uniform_buffers) {
@@ -3224,14 +3262,22 @@ static void compile_program(const glm_compile_request *req, glm_compile_result *
             std::string prefix = reflect.get_name(block.id).empty() ? "" : name + ".";
             reflect_members(reflect, type, prefix, 0, first, block_members);
         }
-        // Loose uniforms: members of GLMGlobals.
+        // Loose uniforms: members of GLMGlobals. Like Apple's, only those a
+        // stage reads or initializes are active (Fast Five's engine builds
+        // its parameter table from them); internal glm_* members stay for
+        // lookups by name.
         for (auto &block : resources.uniform_buffers) {
             if (reflect.get_name(block.base_type_id) != "GLMGlobals") continue;
             const auto &type = reflect.get_type(block.base_type_id);
             result->global_size = std::max(result->global_size, static_cast<int>(reflect.get_declared_struct_size(type)));
+            std::set<uint32_t> read;
+            for (const auto &range : reflect.get_active_buffer_ranges(block.id)) read.insert(range.index);
+            std::set<std::string> initialized;
+            for (const auto &init : prepared[s].uniform_inits) initialized.insert(init.name);
             for (uint32_t m = 0; m < type.member_types.size(); ++m) {
                 std::string name = reflect.get_member_name(block.base_type_id, m);
                 if (uniforms.count(name)) continue;
+                if (!read.count(m) && !initialized.count(name) && name.rfind("glm_", 0) != 0) continue;
                 const auto &member = reflect.get_type(type.member_types[m]);
                 glm_uniform_info info = {};
                 info.offset = static_cast<int>(reflect.type_struct_member_offset(type, m));

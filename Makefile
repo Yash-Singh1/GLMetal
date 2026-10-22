@@ -336,6 +336,17 @@ test-element-array: lib $(OUT)/element_array
 		GLMETAL_THREAD_ALL=1 $(OUT)/element_array $(OUT)/libGLMetal.dylib 2>/dev/null | diff $(OUT)/element-array-apple.txt - && \
 		echo "element arrays: direct/threaded match Apple ($$(wc -l < $(OUT)/element-array-apple.txt) lines)"
 
+# Legacy GLSL linking and active uniform reflection against Apple's answers.
+$(OUT)/legacy_reflection: tests/probes/legacy_reflection.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -o $@
+.PHONY: test-legacy-reflection
+test-legacy-reflection: lib $(OUT)/legacy_reflection
+	@$(OUT)/legacy_reflection > $(OUT)/legacy-reflection-apple.txt
+	@GLMETAL_NO_SHADER_CACHE=1 $(OUT)/legacy_reflection $(OUT)/libGLMetal.dylib 2>/dev/null | diff $(OUT)/legacy-reflection-apple.txt - && \
+		GLMETAL_NO_SHADER_CACHE=1 GLMETAL_THREAD_ALL=1 $(OUT)/legacy_reflection $(OUT)/libGLMetal.dylib 2>/dev/null | diff $(OUT)/legacy-reflection-apple.txt - && \
+		echo "legacy reflection: direct/threaded match Apple ($$(wc -l < $(OUT)/legacy-reflection-apple.txt) lines)"
+
 # Evaluators against Apple's answers.
 $(OUT)/evaluators: tests/probes/evaluators.c
 	@mkdir -p $(OUT)
