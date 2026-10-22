@@ -292,6 +292,7 @@ struct glm_texenv {
     GLenum source_rgb[3], source_alpha[3], operand_rgb[3], operand_alpha[3];
     float rgb_scale, alpha_scale;
     float lod_bias;
+    bool coord_replace; /* GL_POINT_SPRITE GL_COORD_REPLACE */
 };
 
 struct glm_texgen {
@@ -417,6 +418,7 @@ struct glm_state {
     struct glm_material material[2];
     float light_model_ambient[4];
     bool light_model_local_viewer, light_model_two_side, light_model_separate_specular;
+    bool light_model_specular_vector; /* APPLE_specular_vector */
     GLenum color_material_face, color_material_mode;
 
     /* fog */
@@ -518,6 +520,11 @@ struct glm_context {
     bool conditional_render_active, conditional_discard; /* glBeginConditionalRender: skip draws and clears */
     GLuint conditional_render_query; /* its query, which glBeginQuery may not reuse meanwhile */
     GLenum clamp_read_color;
+    GLenum clamp_vertex_color, clamp_fragment_color;
+    GLenum point_sprite_r_mode; /* NV_point_sprite */
+    bool vertex_array_range; /* GL_VERTEX_ARRAY_RANGE_APPLE client state */
+    bool ff_drawing_points, ff_clamp_vertex, ff_clamp_fragment; /* the draw whose fixed-function key is being built rasterizes points */
+    const void *vertex_array_range_pointer; /* ARB_color_buffer_float, legacy profile */
     float point_size_min, point_size_max, point_fade_threshold, point_distance[3];
     GLenum point_sprite_origin;
     struct glm_object_table pipelines;
@@ -563,6 +570,9 @@ struct glm_context {
     const uint8_t *stipple_resets; /* vertex.c: per line, whether the stipple counter restarts (outlines) */
     bool user_clip_preprocessed; /* linear FF user planes were already clipped on the CPU */
     bool wide_line_expansion; /* vertex.c: fog.yz carry a fixed-function clip-space offset */
+    /* ARB program matrices (GL_MATRIX0_ARB .. GL_MATRIX7_ARB, one deep as
+       GL_MAX_PROGRAM_MATRIX_STACK_DEPTH_ARB says), state.matrix.program[n]. */
+    struct glm_matrix_stack program_matrices[8];
     struct glm_matrix_stack invalid_stack; /* texture matrix ops on units past GL_MAX_TEXTURE_COORDS land here */          /* has had a window surface (cgl.m) */
     /* Default framebuffer depth/stencil bits of the pixel format (cgl.m). */
     uint8_t default_depth_bits, default_stencil_bits;

@@ -1,0 +1,1512 @@
+# tools/apple_enum_sweep.c on Apple's OpenGL (M5 Pro, macOS 26): the enums each setter, getter and command
+# accepts, per profile. make check-enums diffs GLMetal against it.
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_BORDER_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_MAG_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_MIN_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR GL_NEAREST_MIPMAP_NEAREST GL_LINEAR_MIPMAP_NEAREST GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR | rejected enum 1841 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_WRAP_S: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_WRAP_T: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_PRIORITY: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_RESIDENT: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_WRAP_R: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_COMPARE_FAIL_VALUE_ARB: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_MIN_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_MAX_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_BASE_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_MAX_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_GENERATE_MIPMAP: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_MAX_ANISOTROPY_EXT: get 0 set 0 values: 1846 enums | rejected enum 0 value 1 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_MINIMIZE_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_RANGE_LENGTH_APPLE: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_STORAGE_HINT_APPLE: get 0 set 0 values: GL_STORAGE_PRIVATE_APPLE GL_STORAGE_CACHED_APPLE GL_STORAGE_SHARED_APPLE | rejected enum 1844 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_DEPTH_TEXTURE_MODE: get 0 set 0 values: GL_RED GL_ALPHA GL_LUMINANCE GL_INTENSITY | rejected enum 1843 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_COMPARE_MODE: get 0 set 0 values: GL_POINTS GL_COMPARE_R_TO_TEXTURE | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_COMPARE_FUNC: get 0 set 0 values: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_SRGB_DECODE_EXT: get 0 set 0 values: GL_DECODE_EXT GL_SKIP_DECODE_EXT | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_IMMUTABLE_FORMAT: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_BORDER_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_MAG_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_MIN_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR GL_NEAREST_MIPMAP_NEAREST GL_LINEAR_MIPMAP_NEAREST GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR | rejected enum 1841 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_WRAP_S: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_WRAP_T: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_PRIORITY: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_RESIDENT: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_WRAP_R: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_COMPARE_FAIL_VALUE_ARB: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_MIN_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_MAX_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_BASE_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_MAX_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_GENERATE_MIPMAP: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_MAX_ANISOTROPY_EXT: get 0 set 0 values: 1846 enums | rejected enum 0 value 1 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_MINIMIZE_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_RANGE_LENGTH_APPLE: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_STORAGE_HINT_APPLE: get 0 set 0 values: GL_STORAGE_PRIVATE_APPLE GL_STORAGE_CACHED_APPLE GL_STORAGE_SHARED_APPLE | rejected enum 1844 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_DEPTH_TEXTURE_MODE: get 0 set 0 values: GL_RED GL_ALPHA GL_LUMINANCE GL_INTENSITY | rejected enum 1843 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_COMPARE_MODE: get 0 set 0 values: GL_POINTS GL_COMPARE_R_TO_TEXTURE | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_COMPARE_FUNC: get 0 set 0 values: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_SRGB_DECODE_EXT: get 0 set 0 values: GL_DECODE_EXT GL_SKIP_DECODE_EXT | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_IMMUTABLE_FORMAT: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_BORDER_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_MAG_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_MIN_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR GL_NEAREST_MIPMAP_NEAREST GL_LINEAR_MIPMAP_NEAREST GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR | rejected enum 1841 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_WRAP_S: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_WRAP_T: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_PRIORITY: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_RESIDENT: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_WRAP_R: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_COMPARE_FAIL_VALUE_ARB: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_MIN_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_MAX_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_BASE_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_MAX_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_GENERATE_MIPMAP: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_MAX_ANISOTROPY_EXT: get 0 set 0 values: 1846 enums | rejected enum 0 value 1 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_MINIMIZE_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_RANGE_LENGTH_APPLE: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_STORAGE_HINT_APPLE: get 0 set 0 values: GL_STORAGE_PRIVATE_APPLE GL_STORAGE_CACHED_APPLE GL_STORAGE_SHARED_APPLE | rejected enum 1844 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_DEPTH_TEXTURE_MODE: get 0 set 0 values: GL_RED GL_ALPHA GL_LUMINANCE GL_INTENSITY | rejected enum 1843 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_COMPARE_MODE: get 0 set 0 values: GL_POINTS GL_COMPARE_R_TO_TEXTURE | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_COMPARE_FUNC: get 0 set 0 values: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_SRGB_DECODE_EXT: get 0 set 0 values: GL_DECODE_EXT GL_SKIP_DECODE_EXT | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_IMMUTABLE_FORMAT: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_BORDER_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_MAG_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_MIN_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR GL_NEAREST_MIPMAP_NEAREST GL_LINEAR_MIPMAP_NEAREST GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR | rejected enum 1841 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_WRAP_S: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_WRAP_T: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_PRIORITY: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_RESIDENT: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_WRAP_R: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_COMPARE_FAIL_VALUE_ARB: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_MIN_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_MAX_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_BASE_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_MAX_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_GENERATE_MIPMAP: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_MAX_ANISOTROPY_EXT: get 0 set 0 values: 1846 enums | rejected enum 0 value 1 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_MINIMIZE_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_RANGE_LENGTH_APPLE: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_STORAGE_HINT_APPLE: get 0 set 0 values: GL_STORAGE_PRIVATE_APPLE GL_STORAGE_CACHED_APPLE GL_STORAGE_SHARED_APPLE | rejected enum 1844 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_DEPTH_TEXTURE_MODE: get 0 set 0 values: GL_RED GL_ALPHA GL_LUMINANCE GL_INTENSITY | rejected enum 1843 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_COMPARE_MODE: get 0 set 0 values: GL_POINTS GL_COMPARE_R_TO_TEXTURE | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_COMPARE_FUNC: get 0 set 0 values: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_SRGB_DECODE_EXT: get 0 set 0 values: GL_DECODE_EXT GL_SKIP_DECODE_EXT | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_IMMUTABLE_FORMAT: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_BORDER_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_MAG_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_MIN_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_WRAP_S: get 0 set 0 values: GL_CLAMP GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE | rejected enum 1844 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_WRAP_T: get 0 set 0 values: GL_CLAMP GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE | rejected enum 1844 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_PRIORITY: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_RESIDENT: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_WRAP_R: get 0 set 0 values: GL_CLAMP GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE | rejected enum 1844 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_COMPARE_FAIL_VALUE_ARB: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_MIN_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_MAX_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_BASE_LEVEL: get 0 set 0 values: GL_POINTS | rejected enum 0 value 1846 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_MAX_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_GENERATE_MIPMAP: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_MAX_ANISOTROPY_EXT: get 0 set 0 values: 1846 enums | rejected enum 0 value 1 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_MINIMIZE_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_RANGE_LENGTH_APPLE: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_STORAGE_HINT_APPLE: get 0 set 0 values: GL_STORAGE_PRIVATE_APPLE GL_STORAGE_CACHED_APPLE GL_STORAGE_SHARED_APPLE | rejected enum 1844 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_DEPTH_TEXTURE_MODE: get 0 set 0 values: GL_RED GL_ALPHA GL_LUMINANCE GL_INTENSITY | rejected enum 1843 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_COMPARE_MODE: get 0 set 0 values: GL_POINTS GL_COMPARE_R_TO_TEXTURE | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_COMPARE_FUNC: get 0 set 0 values: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_SRGB_DECODE_EXT: get 0 set 0 values: GL_DECODE_EXT GL_SKIP_DECODE_EXT | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_IMMUTABLE_FORMAT: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_BORDER_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_MAG_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_MIN_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR GL_NEAREST_MIPMAP_NEAREST GL_LINEAR_MIPMAP_NEAREST GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR | rejected enum 1841 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_WRAP_S: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_WRAP_T: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_PRIORITY: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_RESIDENT: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_WRAP_R: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_COMPARE_FAIL_VALUE_ARB: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_MIN_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_MAX_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_BASE_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_MAX_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_GENERATE_MIPMAP: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_MAX_ANISOTROPY_EXT: get 0 set 0 values: 1846 enums | rejected enum 0 value 1 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_MINIMIZE_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_RANGE_LENGTH_APPLE: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_STORAGE_HINT_APPLE: get 0 set 0 values: GL_STORAGE_PRIVATE_APPLE GL_STORAGE_CACHED_APPLE GL_STORAGE_SHARED_APPLE | rejected enum 1844 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_DEPTH_TEXTURE_MODE: get 0 set 0 values: GL_RED GL_ALPHA GL_LUMINANCE GL_INTENSITY | rejected enum 1843 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_COMPARE_MODE: get 0 set 0 values: GL_POINTS GL_COMPARE_R_TO_TEXTURE | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_COMPARE_FUNC: get 0 set 0 values: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_SRGB_DECODE_EXT: get 0 set 0 values: GL_DECODE_EXT GL_SKIP_DECODE_EXT | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_1D_ARRAY_EXT) GL_TEXTURE_IMMUTABLE_FORMAT: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_BORDER_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_MAG_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_MIN_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR GL_NEAREST_MIPMAP_NEAREST GL_LINEAR_MIPMAP_NEAREST GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR | rejected enum 1841 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_WRAP_S: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_WRAP_T: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_PRIORITY: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_RESIDENT: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_WRAP_R: get 0 set 0 values: GL_CLAMP GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_COMPARE_FAIL_VALUE_ARB: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_MIN_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_MAX_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_BASE_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_MAX_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_GENERATE_MIPMAP: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_MAX_ANISOTROPY_EXT: get 0 set 0 values: 1846 enums | rejected enum 0 value 1 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_MINIMIZE_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_RANGE_LENGTH_APPLE: get 0 set 0x500
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_STORAGE_HINT_APPLE: get 0 set 0 values: GL_STORAGE_PRIVATE_APPLE GL_STORAGE_CACHED_APPLE GL_STORAGE_SHARED_APPLE | rejected enum 1844 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_DEPTH_TEXTURE_MODE: get 0 set 0 values: GL_RED GL_ALPHA GL_LUMINANCE GL_INTENSITY | rejected enum 1843 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_COMPARE_MODE: get 0 set 0 values: GL_POINTS GL_COMPARE_R_TO_TEXTURE | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_COMPARE_FUNC: get 0 set 0 values: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS | rejected enum 1839 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_SRGB_DECODE_EXT: get 0 set 0 values: GL_DECODE_EXT GL_SKIP_DECODE_EXT | rejected enum 1845 value 0 operation 0
+legacy glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_IMMUTABLE_FORMAT: get 0 set 0x500
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_ALPHA_SCALE: get 0 set 0 values: GL_GLEXT_FUNCTION_POINTERS GL_LINE_LOOP GL_TRIANGLES | rejected enum 0 value 1844 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_TEXTURE_ENV_MODE: get 0 set 0 values: GL_ADD GL_BLEND GL_REPLACE GL_MODULATE GL_DECAL GL_COMBINE | rejected enum 1841 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_TEXTURE_ENV_COLOR: get 0 set 0x500
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_COMBINE_RGB: get 0 set 0 values: GL_ADD GL_REPLACE GL_MODULATE GL_SUBTRACT GL_ADD_SIGNED GL_INTERPOLATE GL_DOT3_RGB GL_DOT3_RGBA GL_MODULATE_ADD_ATI GL_MODULATE_SIGNED_ADD_ATI GL_MODULATE_SUBTRACT_ATI | rejected enum 1836 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_COMBINE_ALPHA: get 0 set 0 values: GL_ADD GL_REPLACE GL_MODULATE GL_SUBTRACT GL_ADD_SIGNED GL_INTERPOLATE GL_MODULATE_ADD_ATI GL_MODULATE_SIGNED_ADD_ATI GL_MODULATE_SUBTRACT_ATI | rejected enum 1838 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_RGB_SCALE: get 0 set 0 values: GL_GLEXT_FUNCTION_POINTERS GL_LINE_LOOP GL_TRIANGLES | rejected enum 0 value 1844 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_SRC0_RGB: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_TEXTURE GL_TEXTURE0 GL_TEXTURE1 GL_TEXTURE2 GL_TEXTURE3 GL_TEXTURE4 GL_TEXTURE5 GL_TEXTURE6 GL_TEXTURE7 GL_CONSTANT GL_PRIMARY_COLOR GL_PREVIOUS | rejected enum 1833 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_SRC1_RGB: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_TEXTURE GL_TEXTURE0 GL_TEXTURE1 GL_TEXTURE2 GL_TEXTURE3 GL_TEXTURE4 GL_TEXTURE5 GL_TEXTURE6 GL_TEXTURE7 GL_CONSTANT GL_PRIMARY_COLOR GL_PREVIOUS | rejected enum 1833 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_SRC2_RGB: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_TEXTURE GL_TEXTURE0 GL_TEXTURE1 GL_TEXTURE2 GL_TEXTURE3 GL_TEXTURE4 GL_TEXTURE5 GL_TEXTURE6 GL_TEXTURE7 GL_CONSTANT GL_PRIMARY_COLOR GL_PREVIOUS | rejected enum 1833 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_SRC0_ALPHA: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_TEXTURE GL_TEXTURE0 GL_TEXTURE1 GL_TEXTURE2 GL_TEXTURE3 GL_TEXTURE4 GL_TEXTURE5 GL_TEXTURE6 GL_TEXTURE7 GL_CONSTANT GL_PRIMARY_COLOR GL_PREVIOUS | rejected enum 1833 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_SRC1_ALPHA: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_TEXTURE GL_TEXTURE0 GL_TEXTURE1 GL_TEXTURE2 GL_TEXTURE3 GL_TEXTURE4 GL_TEXTURE5 GL_TEXTURE6 GL_TEXTURE7 GL_CONSTANT GL_PRIMARY_COLOR GL_PREVIOUS | rejected enum 1833 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_SRC2_ALPHA: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_TEXTURE GL_TEXTURE0 GL_TEXTURE1 GL_TEXTURE2 GL_TEXTURE3 GL_TEXTURE4 GL_TEXTURE5 GL_TEXTURE6 GL_TEXTURE7 GL_CONSTANT GL_PRIMARY_COLOR GL_PREVIOUS | rejected enum 1833 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_OPERAND0_RGB: get 0 set 0 values: GL_SRC_COLOR GL_ONE_MINUS_SRC_COLOR GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA | rejected enum 1843 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_OPERAND1_RGB: get 0 set 0 values: GL_SRC_COLOR GL_ONE_MINUS_SRC_COLOR GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA | rejected enum 1843 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_OPERAND2_RGB: get 0 set 0 values: GL_SRC_COLOR GL_ONE_MINUS_SRC_COLOR GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA | rejected enum 1843 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_OPERAND0_ALPHA: get 0 set 0 values: GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA | rejected enum 1845 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_OPERAND1_ALPHA: get 0 set 0 values: GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA | rejected enum 1845 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_ENV) GL_OPERAND2_ALPHA: get 0 set 0 values: GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA | rejected enum 1845 value 0 operation 0
+legacy glTexEnvi(GL_TEXTURE_FILTER_CONTROL) GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexEnvi(GL_POINT_SPRITE) GL_COORD_REPLACE: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS | rejected enum 1845 value 0 operation 0
+legacy glTexGeni(GL_S) GL_TEXTURE_GEN_MODE: get 0 set 0 values: GL_EYE_LINEAR GL_OBJECT_LINEAR GL_SPHERE_MAP GL_NORMAL_MAP GL_REFLECTION_MAP | rejected enum 1842 value 0 operation 0
+legacy glTexGeni(GL_S) GL_OBJECT_PLANE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexGeni(GL_S) GL_EYE_PLANE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexGeni(GL_T) GL_TEXTURE_GEN_MODE: get 0 set 0 values: GL_EYE_LINEAR GL_OBJECT_LINEAR GL_SPHERE_MAP GL_NORMAL_MAP GL_REFLECTION_MAP | rejected enum 1842 value 0 operation 0
+legacy glTexGeni(GL_T) GL_OBJECT_PLANE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexGeni(GL_T) GL_EYE_PLANE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexGeni(GL_R) GL_TEXTURE_GEN_MODE: get 0 set 0 values: GL_EYE_LINEAR GL_OBJECT_LINEAR GL_NORMAL_MAP GL_REFLECTION_MAP | rejected enum 1843 value 0 operation 0
+legacy glTexGeni(GL_R) GL_OBJECT_PLANE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexGeni(GL_R) GL_EYE_PLANE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexGeni(GL_Q) GL_TEXTURE_GEN_MODE: get 0 set 0 values: GL_EYE_LINEAR GL_OBJECT_LINEAR | rejected enum 1845 value 0 operation 0
+legacy glTexGeni(GL_Q) GL_OBJECT_PLANE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glTexGeni(GL_Q) GL_EYE_PLANE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glFogi GL_FOG_INDEX: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glFogi GL_FOG_DENSITY: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glFogi GL_FOG_START: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glFogi GL_FOG_END: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glFogi GL_FOG_MODE: get 0 set 0 values: GL_EXP GL_EXP2 GL_LINEAR | rejected enum 1844 value 0 operation 0
+legacy glFogi GL_FOG_COORD_SRC: get 0 set 0 values: GL_FOG_COORD GL_FRAGMENT_DEPTH | rejected enum 1845 value 0 operation 0
+legacy glFogi GL_FOG_DISTANCE_MODE_NV: get 0 set 0 values: GL_EYE_PLANE GL_EYE_RADIAL_NV GL_EYE_PLANE_ABSOLUTE_NV | rejected enum 1844 value 0 operation 0
+legacy glLightModeli GL_LIGHT_MODEL_LOCAL_VIEWER: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glLightModeli GL_LIGHT_MODEL_TWO_SIDE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glLightModeli GL_LIGHT_MODEL_COLOR_CONTROL: get 0 set 0 values: GL_SINGLE_COLOR GL_SEPARATE_SPECULAR_COLOR | rejected enum 1845 value 0 operation 0
+legacy glLightModeli GL_LIGHT_MODEL_SPECULAR_VECTOR_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glLighti GL_AMBIENT: get 0 set 0x500
+legacy glLighti GL_DIFFUSE: get 0 set 0x500
+legacy glLighti GL_SPECULAR: get 0 set 0x500
+legacy glLighti GL_POSITION: get 0 set 0x500
+legacy glLighti GL_SPOT_DIRECTION: get 0 set 0x500
+legacy glLighti GL_SPOT_EXPONENT: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_LINE_LOOP GL_LINE_STRIP GL_TRIANGLES GL_TRIANGLE_STRIP GL_TRIANGLE_FAN GL_QUADS GL_QUAD_STRIP GL_POLYGON GL_LINES_ADJACENCY_EXT GL_LINE_STRIP_ADJACENCY_EXT GL_TRIANGLES_ADJACENCY_EXT GL_TRIANGLE_STRIP_ADJACENCY_EXT GL_PATCHES | rejected enum 0 value 1832 operation 0
+legacy glLighti GL_SPOT_CUTOFF: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_LINE_LOOP GL_LINE_STRIP GL_TRIANGLES GL_TRIANGLE_STRIP GL_TRIANGLE_FAN GL_QUADS GL_QUAD_STRIP GL_POLYGON GL_LINES_ADJACENCY_EXT GL_LINE_STRIP_ADJACENCY_EXT GL_TRIANGLES_ADJACENCY_EXT GL_TRIANGLE_STRIP_ADJACENCY_EXT GL_PATCHES | rejected enum 0 value 1832 operation 0
+legacy glLighti GL_CONSTANT_ATTENUATION: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glLighti GL_LINEAR_ATTENUATION: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glLighti GL_QUADRATIC_ATTENUATION: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glMateriali GL_AMBIENT: get 0 set 0x500
+legacy glMateriali GL_DIFFUSE: get 0 set 0x500
+legacy glMateriali GL_SPECULAR: get 0 set 0x500
+legacy glMateriali GL_EMISSION: get 0 set 0x500
+legacy glMateriali GL_SHININESS: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_LINE_LOOP GL_LINE_STRIP GL_TRIANGLES GL_TRIANGLE_STRIP GL_TRIANGLE_FAN GL_QUADS GL_QUAD_STRIP GL_POLYGON GL_LINES_ADJACENCY_EXT GL_LINE_STRIP_ADJACENCY_EXT GL_TRIANGLES_ADJACENCY_EXT GL_TRIANGLE_STRIP_ADJACENCY_EXT GL_PATCHES | rejected enum 0 value 1832 operation 0
+legacy glMateriali GL_COLOR_INDEXES: get 0 set 0x500
+legacy glPixelTransferi GL_MAP_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_MAP_STENCIL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_INDEX_SHIFT: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_INDEX_OFFSET: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_RED_SCALE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_RED_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_GREEN_SCALE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_GREEN_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_BLUE_SCALE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_BLUE_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_ALPHA_SCALE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_ALPHA_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_DEPTH_SCALE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_DEPTH_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_CONVOLUTION_RED_SCALE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_CONVOLUTION_GREEN_SCALE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_CONVOLUTION_BLUE_SCALE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_CONVOLUTION_ALPHA_SCALE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_CONVOLUTION_RED_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_CONVOLUTION_GREEN_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_CONVOLUTION_BLUE_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_CONVOLUTION_ALPHA_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_COLOR_MATRIX_RED_SCALE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_COLOR_MATRIX_GREEN_SCALE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_COLOR_MATRIX_BLUE_SCALE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_COLOR_MATRIX_ALPHA_SCALE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_COLOR_MATRIX_RED_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_COLOR_MATRIX_GREEN_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_COLOR_MATRIX_BLUE_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelTransferi GL_POST_COLOR_MATRIX_ALPHA_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_UNPACK_SWAP_BYTES: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_UNPACK_LSB_FIRST: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_UNPACK_ROW_LENGTH: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_UNPACK_SKIP_ROWS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_UNPACK_SKIP_PIXELS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_UNPACK_ALIGNMENT: get 0 set 0 values: GL_GLEXT_FUNCTION_POINTERS GL_LINE_LOOP GL_TRIANGLES GL_QUAD_STRIP | rejected enum 0 value 1843 operation 0
+legacy glPixelStorei GL_PACK_SWAP_BYTES: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_PACK_LSB_FIRST: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_PACK_ROW_LENGTH: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_PACK_SKIP_ROWS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_PACK_SKIP_PIXELS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_PACK_ALIGNMENT: get 0 set 0 values: GL_GLEXT_FUNCTION_POINTERS GL_LINE_LOOP GL_TRIANGLES GL_QUAD_STRIP | rejected enum 0 value 1843 operation 0
+legacy glPixelStorei GL_PACK_SKIP_IMAGES: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_PACK_IMAGE_HEIGHT: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_UNPACK_SKIP_IMAGES: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_UNPACK_IMAGE_HEIGHT: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_UNPACK_CLIENT_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_PACK_ROW_BYTES_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_UNPACK_ROW_BYTES_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_PACK_IMAGE_BYTES_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPixelStorei GL_UNPACK_IMAGE_BYTES_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glHint GL_PERSPECTIVE_CORRECTION_HINT: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+legacy glHint GL_POINT_SMOOTH_HINT: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+legacy glHint GL_LINE_SMOOTH_HINT: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+legacy glHint GL_POLYGON_SMOOTH_HINT: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+legacy glHint GL_FOG_HINT: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+legacy glHint GL_CLIP_VOLUME_CLIPPING_HINT_EXT: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+legacy glHint GL_GENERATE_MIPMAP_HINT: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+legacy glHint GL_TEXTURE_COMPRESSION_HINT: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+legacy glHint GL_MULTISAMPLE_FILTER_HINT_NV: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+legacy glHint GL_TRANSFORM_HINT_APPLE: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+legacy glHint GL_FRAGMENT_SHADER_DERIVATIVE_HINT: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+legacy glPointParameteri GL_POINT_SIZE_MIN: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPointParameteri GL_POINT_SIZE_MAX: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPointParameteri GL_POINT_FADE_THRESHOLD_SIZE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+legacy glPointParameteri GL_POINT_SPRITE_R_MODE_NV: get 0 set 0 values: GL_POINTS GL_S GL_R | rejected enum 1844 value 0 operation 0
+legacy glPointParameteri GL_POINT_SPRITE_COORD_ORIGIN: get 0 set 0 values: GL_LOWER_LEFT GL_UPPER_LEFT | rejected enum 1845 value 0 operation 0
+legacy glGetTexLevelParameteriv GL_TEXTURE_WIDTH: 4
+legacy glGetTexLevelParameteriv GL_TEXTURE_HEIGHT: 4
+legacy glGetTexLevelParameteriv GL_TEXTURE_INTERNAL_FORMAT: 32856
+legacy glGetTexLevelParameteriv GL_TEXTURE_BORDER: 0
+legacy glGetTexLevelParameteriv GL_TEXTURE_RED_SIZE: 8
+legacy glGetTexLevelParameteriv GL_TEXTURE_GREEN_SIZE: 8
+legacy glGetTexLevelParameteriv GL_TEXTURE_BLUE_SIZE: 8
+legacy glGetTexLevelParameteriv GL_TEXTURE_ALPHA_SIZE: 8
+legacy glGetTexLevelParameteriv GL_TEXTURE_LUMINANCE_SIZE: 0
+legacy glGetTexLevelParameteriv GL_TEXTURE_INTENSITY_SIZE: 0
+legacy glGetTexLevelParameteriv GL_TEXTURE_DEPTH: 1
+legacy glGetTexLevelParameteriv GL_TEXTURE_COMPRESSED_IMAGE_SIZE: error 0x502
+legacy glGetTexLevelParameteriv GL_TEXTURE_COMPRESSED: 0
+legacy glGetTexLevelParameteriv GL_TEXTURE_DEPTH_SIZE: 0
+legacy glGetTexLevelParameteriv GL_TEXTURE_STENCIL_SIZE: 0
+legacy glGetTexLevelParameteriv GL_TEXTURE_RED_TYPE: 35863
+legacy glGetTexLevelParameteriv GL_TEXTURE_GREEN_TYPE: 35863
+legacy glGetTexLevelParameteriv GL_TEXTURE_BLUE_TYPE: 35863
+legacy glGetTexLevelParameteriv GL_TEXTURE_ALPHA_TYPE: 35863
+legacy glGetTexLevelParameteriv GL_TEXTURE_LUMINANCE_TYPE_ARB: 0
+legacy glGetTexLevelParameteriv GL_TEXTURE_INTENSITY_TYPE_ARB: 0
+legacy glGetTexLevelParameteriv GL_TEXTURE_DEPTH_TYPE: 0
+legacy glGetTexLevelParameteriv GL_TEXTURE_SHARED_SIZE_EXT: 0
+legacy glGetBufferParameteriv GL_BUFFER_SIZE: 64
+legacy glGetBufferParameteriv GL_BUFFER_USAGE: 35044
+legacy glGetBufferParameteriv GL_BUFFER_ACCESS: 35002
+legacy glGetBufferParameteriv GL_BUFFER_MAPPED: 0
+legacy glGetBufferParameteriv GL_BUFFER_SERIALIZED_MODIFY_APPLE: 1
+legacy glGetBufferParameteriv GL_BUFFER_FLUSHING_UNMAP_APPLE: 1
+legacy glGetBufferParameteriv GL_BUFFER_ACCESS_FLAGS: 0
+legacy glGetBufferParameteriv GL_BUFFER_MAP_LENGTH: 0
+legacy glGetBufferParameteriv GL_BUFFER_MAP_OFFSET: 0
+legacy glGetRenderbufferParameteriv GL_RENDERBUFFER_SAMPLES: 0
+legacy glGetRenderbufferParameteriv GL_RENDERBUFFER_WIDTH: 4
+legacy glGetRenderbufferParameteriv GL_RENDERBUFFER_HEIGHT: 4
+legacy glGetRenderbufferParameteriv GL_RENDERBUFFER_INTERNAL_FORMAT: 32856
+legacy glGetRenderbufferParameteriv GL_RENDERBUFFER_RED_SIZE: 8
+legacy glGetRenderbufferParameteriv GL_RENDERBUFFER_GREEN_SIZE: 8
+legacy glGetRenderbufferParameteriv GL_RENDERBUFFER_BLUE_SIZE: 8
+legacy glGetRenderbufferParameteriv GL_RENDERBUFFER_ALPHA_SIZE: 8
+legacy glGetRenderbufferParameteriv GL_RENDERBUFFER_DEPTH_SIZE: 0
+legacy glGetRenderbufferParameteriv GL_RENDERBUFFER_STENCIL_SIZE: 0
+legacy glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING: 9729
+legacy glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE: 35863
+legacy glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE: 8
+legacy glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE: 8
+legacy glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE: 8
+legacy glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE: 8
+legacy glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE: 0
+legacy glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE: 0
+legacy glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE: 36161
+legacy glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME: 1
+legacy glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_LAYERED_EXT: 0
+legacy glGetQueryiv GL_QUERY_COUNTER_BITS_ARB: 32
+legacy glGetQueryiv GL_CURRENT_QUERY: 0
+legacy glGetShaderiv GL_PROGRAM_BINARY_RETRIEVABLE_HINT: error 0x502
+legacy glGetShaderiv GL_PROGRAM_SEPARABLE: error 0x502
+legacy glGetShaderiv GL_PROGRAM_BINARY_LENGTH: error 0x502
+legacy glGetShaderiv GL_ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH: error 0x502
+legacy glGetShaderiv GL_ACTIVE_UNIFORM_BLOCKS: error 0x502
+legacy glGetShaderiv GL_OBJECT_TYPE_ARB: 35633
+legacy glGetShaderiv GL_SHADER_TYPE: 35633
+legacy glGetShaderiv GL_DELETE_STATUS: 0
+legacy glGetShaderiv GL_COMPILE_STATUS: 0
+legacy glGetShaderiv GL_LINK_STATUS: error 0x502
+legacy glGetShaderiv GL_VALIDATE_STATUS: error 0x502
+legacy glGetShaderiv GL_INFO_LOG_LENGTH: 0
+legacy glGetShaderiv GL_ATTACHED_SHADERS: error 0x502
+legacy glGetShaderiv GL_ACTIVE_UNIFORMS: error 0x502
+legacy glGetShaderiv GL_ACTIVE_UNIFORM_MAX_LENGTH: error 0x502
+legacy glGetShaderiv GL_SHADER_SOURCE_LENGTH: 0
+legacy glGetShaderiv GL_ACTIVE_ATTRIBUTES: error 0x502
+legacy glGetShaderiv GL_ACTIVE_ATTRIBUTE_MAX_LENGTH: error 0x502
+legacy glGetShaderiv GL_TRANSFORM_FEEDBACK_VARYING_MAX_LENGTH_EXT: error 0x502
+legacy glGetShaderiv GL_TRANSFORM_FEEDBACK_BUFFER_MODE_EXT: error 0x502
+legacy glGetShaderiv GL_TRANSFORM_FEEDBACK_VARYINGS_EXT: error 0x502
+legacy glGetShaderiv GL_GEOMETRY_VERTICES_OUT_EXT: error 0x502
+legacy glGetShaderiv GL_GEOMETRY_INPUT_TYPE_EXT: error 0x502
+legacy glGetShaderiv GL_GEOMETRY_OUTPUT_TYPE_EXT: error 0x502
+legacy glGetProgramiv GL_PROGRAM_BINARY_RETRIEVABLE_HINT: 0
+legacy glGetProgramiv GL_PROGRAM_SEPARABLE: 0
+legacy glGetProgramiv GL_PROGRAM_BINARY_LENGTH: 0
+legacy glGetProgramiv GL_ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH: 0
+legacy glGetProgramiv GL_ACTIVE_UNIFORM_BLOCKS: 0
+legacy glGetProgramiv GL_OBJECT_TYPE_ARB: 35648
+legacy glGetProgramiv GL_SHADER_TYPE: error 0x502
+legacy glGetProgramiv GL_DELETE_STATUS: 0
+legacy glGetProgramiv GL_LINK_STATUS: 0
+legacy glGetProgramiv GL_VALIDATE_STATUS: 0
+legacy glGetProgramiv GL_INFO_LOG_LENGTH: 0
+legacy glGetProgramiv GL_ATTACHED_SHADERS: 0
+legacy glGetProgramiv GL_ACTIVE_UNIFORMS: 0
+legacy glGetProgramiv GL_ACTIVE_UNIFORM_MAX_LENGTH: 0
+legacy glGetProgramiv GL_ACTIVE_ATTRIBUTES: 0
+legacy glGetProgramiv GL_ACTIVE_ATTRIBUTE_MAX_LENGTH: 0
+legacy glGetProgramiv GL_TRANSFORM_FEEDBACK_VARYING_MAX_LENGTH_EXT: 0
+legacy glGetProgramiv GL_TRANSFORM_FEEDBACK_BUFFER_MODE_EXT: 35980
+legacy glGetProgramiv GL_TRANSFORM_FEEDBACK_VARYINGS_EXT: 0
+legacy glGetProgramiv GL_GEOMETRY_VERTICES_OUT_EXT: 0
+legacy glGetProgramiv GL_GEOMETRY_INPUT_TYPE_EXT: 4
+legacy glGetProgramiv GL_GEOMETRY_OUTPUT_TYPE_EXT: 5
+legacy glGetQueryObjectiv GL_QUERY_RESULT: 0
+legacy glGetQueryObjectiv GL_QUERY_RESULT_AVAILABLE: 1
+legacy glGetPointerv GL_FEEDBACK_BUFFER_POINTER: 1
+legacy glGetPointerv GL_SELECTION_BUFFER_POINTER: 1
+legacy glGetPointerv GL_VERTEX_ARRAY_POINTER: 1
+legacy glGetPointerv GL_NORMAL_ARRAY_POINTER: 1
+legacy glGetPointerv GL_COLOR_ARRAY_POINTER: 1
+legacy glGetPointerv GL_INDEX_ARRAY_POINTER: 1
+legacy glGetPointerv GL_TEXTURE_COORD_ARRAY_POINTER: 1
+legacy glGetPointerv GL_EDGE_FLAG_ARRAY_POINTER: 1
+legacy glGetPointerv GL_FOG_COORD_ARRAY_POINTER: 1
+legacy glGetPointerv GL_SECONDARY_COLOR_ARRAY_POINTER: 1
+legacy glGetPointerv GL_VERTEX_ARRAY_RANGE_POINTER_APPLE: 1
+legacy glGetPointerv GL_WEIGHT_ARRAY_POINTER_ARB: 1
+legacy glGetPointerv GL_POINT_SIZE_ARRAY_POINTER_APPLE: 1
+legacy glGetPointerv GL_ELEMENT_ARRAY_POINTER_APPLE: 1
+legacy GL_CURRENT_COLOR: float 1 double 1 boolean 1
+legacy GL_CURRENT_INDEX: float 1 double 1 boolean 1
+legacy GL_CURRENT_NORMAL: float 0 double 0 boolean 0
+legacy GL_CURRENT_TEXTURE_COORDS: float 0 double 0 boolean 0
+legacy GL_CURRENT_RASTER_COLOR: float 1 double 1 boolean 1
+legacy GL_CURRENT_RASTER_INDEX: float 1 double 1 boolean 1
+legacy GL_CURRENT_RASTER_TEXTURE_COORDS: float 0 double 0 boolean 0
+legacy GL_CURRENT_RASTER_POSITION: float 0 double 0 boolean 0
+legacy GL_CURRENT_RASTER_POSITION_VALID: float 1 double 1 boolean 1
+legacy GL_CURRENT_RASTER_DISTANCE: float 0 double 0 boolean 0
+legacy GL_POINT_SMOOTH: float 0 double 0 boolean 0
+legacy GL_POINT_SIZE: float 1 double 1 boolean 1
+legacy GL_POINT_SIZE_RANGE: float 1 double 1 boolean 1
+legacy GL_POINT_SIZE_GRANULARITY: float 0.0001 double 0.0001 boolean 1
+legacy GL_LINE_SMOOTH: float 0 double 0 boolean 0
+legacy GL_LINE_WIDTH: float 1 double 1 boolean 1
+legacy GL_LINE_WIDTH_RANGE: float 1 double 1 boolean 1
+legacy GL_LINE_WIDTH_GRANULARITY: float 0.0001 double 0.0001 boolean 1
+legacy GL_LINE_STIPPLE: float 0 double 0 boolean 0
+legacy GL_LINE_STIPPLE_PATTERN: float 65535 double 65535 boolean 1
+legacy GL_LINE_STIPPLE_REPEAT: float 1 double 1 boolean 1
+legacy GL_LIST_MODE: float 0 double 0 boolean 0
+legacy GL_MAX_LIST_NESTING: float 64 double 64 boolean 1
+legacy GL_LIST_BASE: float 0 double 0 boolean 0
+legacy GL_LIST_INDEX: float 0 double 0 boolean 0
+legacy GL_POLYGON_MODE: float 6914 double 6914 boolean 1
+legacy GL_POLYGON_SMOOTH: float 0 double 0 boolean 0
+legacy GL_POLYGON_STIPPLE: float 0 double 0 boolean 0
+legacy GL_EDGE_FLAG: float 1 double 1 boolean 1
+legacy GL_CULL_FACE: float 0 double 0 boolean 0
+legacy GL_CULL_FACE_MODE: float 1029 double 1029 boolean 1
+legacy GL_FRONT_FACE: float 2305 double 2305 boolean 1
+legacy GL_LIGHTING: float 0 double 0 boolean 0
+legacy GL_LIGHT_MODEL_LOCAL_VIEWER: float 0 double 0 boolean 0
+legacy GL_LIGHT_MODEL_TWO_SIDE: float 0 double 0 boolean 0
+legacy GL_LIGHT_MODEL_AMBIENT: float 0.2 double 0.2 boolean 1
+legacy GL_SHADE_MODEL: float 7425 double 7425 boolean 1
+legacy GL_COLOR_MATERIAL_FACE: float 1032 double 1032 boolean 1
+legacy GL_COLOR_MATERIAL_PARAMETER: float 5634 double 5634 boolean 1
+legacy GL_COLOR_MATERIAL: float 0 double 0 boolean 0
+legacy GL_FOG: float 0 double 0 boolean 0
+legacy GL_FOG_INDEX: float 0 double 0 boolean 0
+legacy GL_FOG_DENSITY: float 1 double 1 boolean 1
+legacy GL_FOG_START: float 0 double 0 boolean 0
+legacy GL_FOG_END: float 1 double 1 boolean 1
+legacy GL_FOG_MODE: float 2048 double 2048 boolean 1
+legacy GL_FOG_COLOR: float 0 double 0 boolean 0
+legacy GL_DEPTH_RANGE: float 0 double 0 boolean 0
+legacy GL_DEPTH_TEST: float 0 double 0 boolean 0
+legacy GL_DEPTH_WRITEMASK: float 1 double 1 boolean 1
+legacy GL_DEPTH_CLEAR_VALUE: float 1 double 1 boolean 1
+legacy GL_DEPTH_FUNC: float 513 double 513 boolean 1
+legacy GL_ACCUM_CLEAR_VALUE: float 0 double 0 boolean 0
+legacy GL_STENCIL_TEST: float 0 double 0 boolean 0
+legacy GL_STENCIL_CLEAR_VALUE: float 0 double 0 boolean 0
+legacy GL_STENCIL_FUNC: float 519 double 519 boolean 1
+legacy GL_STENCIL_VALUE_MASK: float 4.29497e+09 double 4.29497e+09 boolean 1
+legacy GL_STENCIL_FAIL: float 7680 double 7680 boolean 1
+legacy GL_STENCIL_PASS_DEPTH_FAIL: float 7680 double 7680 boolean 1
+legacy GL_STENCIL_PASS_DEPTH_PASS: float 7680 double 7680 boolean 1
+legacy GL_STENCIL_REF: float 0 double 0 boolean 0
+legacy GL_STENCIL_WRITEMASK: float 4.29497e+09 double 4.29497e+09 boolean 1
+legacy GL_MATRIX_MODE: float 5888 double 5888 boolean 1
+legacy GL_NORMALIZE: float 0 double 0 boolean 0
+legacy GL_VIEWPORT: float 0 double 0 boolean 0
+legacy GL_MODELVIEW_STACK_DEPTH: float 1 double 1 boolean 1
+legacy GL_PROJECTION_STACK_DEPTH: float 1 double 1 boolean 1
+legacy GL_TEXTURE_STACK_DEPTH: float 1 double 1 boolean 1
+legacy GL_MODELVIEW_MATRIX: float 1 double 1 boolean 1
+legacy GL_PROJECTION_MATRIX: float 1 double 1 boolean 1
+legacy GL_TEXTURE_MATRIX: float 1 double 1 boolean 1
+legacy GL_ATTRIB_STACK_DEPTH: float 0 double 0 boolean 0
+legacy GL_CLIENT_ATTRIB_STACK_DEPTH: float 0 double 0 boolean 0
+legacy GL_ALPHA_TEST: float 0 double 0 boolean 0
+legacy GL_ALPHA_TEST_FUNC: float 519 double 519 boolean 1
+legacy GL_ALPHA_TEST_REF: float 0 double 0 boolean 0
+legacy GL_DITHER: float 1 double 1 boolean 1
+legacy GL_BLEND_DST: float 0 double 0 boolean 0
+legacy GL_BLEND_SRC: float 1 double 1 boolean 1
+legacy GL_BLEND: float 0 double 0 boolean 0
+legacy GL_LOGIC_OP_MODE: float 5379 double 5379 boolean 1
+legacy GL_INDEX_LOGIC_OP: float 0 double 0 boolean 0
+legacy GL_COLOR_LOGIC_OP: float 0 double 0 boolean 0
+legacy GL_AUX_BUFFERS: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER: float 36064 double 36064 boolean 1
+legacy GL_READ_BUFFER: float 36064 double 36064 boolean 1
+legacy GL_SCISSOR_BOX: float 0 double 0 boolean 0
+legacy GL_SCISSOR_TEST: float 0 double 0 boolean 0
+legacy GL_INDEX_CLEAR_VALUE: float 0 double 0 boolean 0
+legacy GL_INDEX_WRITEMASK: float 4.29497e+09 double 4.29497e+09 boolean 1
+legacy GL_COLOR_CLEAR_VALUE: float 0 double 0 boolean 0
+legacy GL_COLOR_WRITEMASK: float 1 double 1 boolean 1
+legacy GL_INDEX_MODE: float 0 double 0 boolean 0
+legacy GL_RGBA_MODE: float 1 double 1 boolean 1
+legacy GL_DOUBLEBUFFER: float 0 double 0 boolean 0
+legacy GL_STEREO: float 0 double 0 boolean 0
+legacy GL_RENDER_MODE: float 7168 double 7168 boolean 1
+legacy GL_PERSPECTIVE_CORRECTION_HINT: float 4352 double 4352 boolean 1
+legacy GL_POINT_SMOOTH_HINT: float 4352 double 4352 boolean 1
+legacy GL_LINE_SMOOTH_HINT: float 4352 double 4352 boolean 1
+legacy GL_POLYGON_SMOOTH_HINT: float 4352 double 4352 boolean 1
+legacy GL_FOG_HINT: float 4352 double 4352 boolean 1
+legacy GL_TEXTURE_GEN_S: float 0 double 0 boolean 0
+legacy GL_TEXTURE_GEN_T: float 0 double 0 boolean 0
+legacy GL_TEXTURE_GEN_R: float 0 double 0 boolean 0
+legacy GL_TEXTURE_GEN_Q: float 0 double 0 boolean 0
+legacy GL_PIXEL_MAP_I_TO_I_SIZE: float 1 double 1 boolean 1
+legacy GL_PIXEL_MAP_S_TO_S_SIZE: float 1 double 1 boolean 1
+legacy GL_PIXEL_MAP_I_TO_R_SIZE: float 1 double 1 boolean 1
+legacy GL_PIXEL_MAP_I_TO_G_SIZE: float 1 double 1 boolean 1
+legacy GL_PIXEL_MAP_I_TO_B_SIZE: float 1 double 1 boolean 1
+legacy GL_PIXEL_MAP_I_TO_A_SIZE: float 1 double 1 boolean 1
+legacy GL_PIXEL_MAP_R_TO_R_SIZE: float 1 double 1 boolean 1
+legacy GL_PIXEL_MAP_G_TO_G_SIZE: float 1 double 1 boolean 1
+legacy GL_PIXEL_MAP_B_TO_B_SIZE: float 1 double 1 boolean 1
+legacy GL_PIXEL_MAP_A_TO_A_SIZE: float 1 double 1 boolean 1
+legacy GL_UNPACK_SWAP_BYTES: float 0 double 0 boolean 0
+legacy GL_UNPACK_LSB_FIRST: float 0 double 0 boolean 0
+legacy GL_UNPACK_ROW_LENGTH: float 0 double 0 boolean 0
+legacy GL_UNPACK_SKIP_ROWS: float 0 double 0 boolean 0
+legacy GL_UNPACK_SKIP_PIXELS: float 0 double 0 boolean 0
+legacy GL_UNPACK_ALIGNMENT: float 4 double 4 boolean 1
+legacy GL_PACK_SWAP_BYTES: float 0 double 0 boolean 0
+legacy GL_PACK_LSB_FIRST: float 0 double 0 boolean 0
+legacy GL_PACK_ROW_LENGTH: float 0 double 0 boolean 0
+legacy GL_PACK_SKIP_ROWS: float 0 double 0 boolean 0
+legacy GL_PACK_SKIP_PIXELS: float 0 double 0 boolean 0
+legacy GL_PACK_ALIGNMENT: float 4 double 4 boolean 1
+legacy GL_MAP_COLOR: float 0 double 0 boolean 0
+legacy GL_MAP_STENCIL: float 0 double 0 boolean 0
+legacy GL_INDEX_SHIFT: float 0 double 0 boolean 0
+legacy GL_INDEX_OFFSET: float 0 double 0 boolean 0
+legacy GL_RED_SCALE: float 1 double 1 boolean 1
+legacy GL_RED_BIAS: float 0 double 0 boolean 0
+legacy GL_ZOOM_X: float 1 double 1 boolean 1
+legacy GL_ZOOM_Y: float 1 double 1 boolean 1
+legacy GL_GREEN_SCALE: float 1 double 1 boolean 1
+legacy GL_GREEN_BIAS: float 0 double 0 boolean 0
+legacy GL_BLUE_SCALE: float 1 double 1 boolean 1
+legacy GL_BLUE_BIAS: float 0 double 0 boolean 0
+legacy GL_ALPHA_SCALE: float 1 double 1 boolean 1
+legacy GL_ALPHA_BIAS: float 0 double 0 boolean 0
+legacy GL_DEPTH_SCALE: float 1 double 1 boolean 1
+legacy GL_DEPTH_BIAS: float 0 double 0 boolean 0
+legacy GL_MAX_EVAL_ORDER: float 10 double 10 boolean 1
+legacy GL_MAX_LIGHTS: float 8 double 8 boolean 1
+legacy GL_MAX_CLIP_PLANES: float 6 double 6 boolean 1
+legacy GL_MAX_TEXTURE_SIZE: float 16384 double 16384 boolean 1
+legacy GL_MAX_PIXEL_MAP_TABLE: float 256 double 256 boolean 1
+legacy GL_MAX_ATTRIB_STACK_DEPTH: float 16 double 16 boolean 1
+legacy GL_MAX_MODELVIEW_STACK_DEPTH: float 32 double 32 boolean 1
+legacy GL_MAX_NAME_STACK_DEPTH: float 128 double 128 boolean 1
+legacy GL_MAX_PROJECTION_STACK_DEPTH: float 10 double 10 boolean 1
+legacy GL_MAX_TEXTURE_STACK_DEPTH: float 10 double 10 boolean 1
+legacy GL_MAX_VIEWPORT_DIMS: float 16384 double 16384 boolean 1
+legacy GL_MAX_CLIENT_ATTRIB_STACK_DEPTH: float 16 double 16 boolean 1
+legacy GL_NAME_STACK_DEPTH: float 0 double 0 boolean 0
+legacy GL_AUTO_NORMAL: float 0 double 0 boolean 0
+legacy GL_MAP1_COLOR_4: float 0 double 0 boolean 0
+legacy GL_MAP1_INDEX: float 0 double 0 boolean 0
+legacy GL_MAP1_NORMAL: float 0 double 0 boolean 0
+legacy GL_MAP1_TEXTURE_COORD_1: float 0 double 0 boolean 0
+legacy GL_MAP1_TEXTURE_COORD_2: float 0 double 0 boolean 0
+legacy GL_MAP1_TEXTURE_COORD_3: float 0 double 0 boolean 0
+legacy GL_MAP1_TEXTURE_COORD_4: float 0 double 0 boolean 0
+legacy GL_MAP1_VERTEX_3: float 0 double 0 boolean 0
+legacy GL_MAP1_VERTEX_4: float 0 double 0 boolean 0
+legacy GL_MAP2_COLOR_4: float 0 double 0 boolean 0
+legacy GL_MAP2_INDEX: float 0 double 0 boolean 0
+legacy GL_MAP2_NORMAL: float 0 double 0 boolean 0
+legacy GL_MAP2_TEXTURE_COORD_1: float 0 double 0 boolean 0
+legacy GL_MAP2_TEXTURE_COORD_2: float 0 double 0 boolean 0
+legacy GL_MAP2_TEXTURE_COORD_3: float 0 double 0 boolean 0
+legacy GL_MAP2_TEXTURE_COORD_4: float 0 double 0 boolean 0
+legacy GL_MAP2_VERTEX_3: float 0 double 0 boolean 0
+legacy GL_MAP2_VERTEX_4: float 0 double 0 boolean 0
+legacy GL_MAP1_GRID_DOMAIN: float 0 double 0 boolean 0
+legacy GL_MAP1_GRID_SEGMENTS: float 1 double 1 boolean 1
+legacy GL_MAP2_GRID_DOMAIN: float 0 double 0 boolean 0
+legacy GL_MAP2_GRID_SEGMENTS: float 1 double 1 boolean 1
+legacy GL_TEXTURE_1D: float 0 double 0 boolean 0
+legacy GL_TEXTURE_2D: float 0 double 0 boolean 0
+legacy GL_FEEDBACK_BUFFER_SIZE: float 0 double 0 boolean 0
+legacy GL_FEEDBACK_BUFFER_TYPE: float 1536 double 1536 boolean 1
+legacy GL_SELECTION_BUFFER_SIZE: float 0 double 0 boolean 0
+legacy GL_MODELVIEW: float 1 double 1 boolean 1
+legacy GL_POLYGON_OFFSET_UNITS: float 0 double 0 boolean 0
+legacy GL_POLYGON_OFFSET_POINT: float 0 double 0 boolean 0
+legacy GL_POLYGON_OFFSET_LINE: float 0 double 0 boolean 0
+legacy GL_CLIP_PLANE0: float 0 double 0 boolean 0
+legacy GL_CLIP_PLANE1: float 0 double 0 boolean 0
+legacy GL_CLIP_PLANE2: float 0 double 0 boolean 0
+legacy GL_CLIP_PLANE3: float 0 double 0 boolean 0
+legacy GL_CLIP_PLANE4: float 0 double 0 boolean 0
+legacy GL_CLIP_PLANE5: float 0 double 0 boolean 0
+legacy GL_LIGHT0: float 0 double 0 boolean 0
+legacy GL_LIGHT1: float 0 double 0 boolean 0
+legacy GL_LIGHT2: float 0 double 0 boolean 0
+legacy GL_LIGHT3: float 0 double 0 boolean 0
+legacy GL_LIGHT4: float 0 double 0 boolean 0
+legacy GL_LIGHT5: float 0 double 0 boolean 0
+legacy GL_LIGHT6: float 0 double 0 boolean 0
+legacy GL_LIGHT7: float 0 double 0 boolean 0
+legacy GL_BLEND_COLOR: float 0 double 0 boolean 0
+legacy GL_BLEND_EQUATION: float 32774 double 32774 boolean 1
+legacy GL_CONVOLUTION_1D: float 0 double 0 boolean 0
+legacy GL_CONVOLUTION_2D: float 0 double 0 boolean 0
+legacy GL_SEPARABLE_2D: float 0 double 0 boolean 0
+legacy GL_POST_CONVOLUTION_RED_SCALE: float 1 double 1 boolean 1
+legacy GL_POST_CONVOLUTION_GREEN_SCALE: float 1 double 1 boolean 1
+legacy GL_POST_CONVOLUTION_BLUE_SCALE: float 1 double 1 boolean 1
+legacy GL_POST_CONVOLUTION_ALPHA_SCALE: float 1 double 1 boolean 1
+legacy GL_POST_CONVOLUTION_RED_BIAS: float 0 double 0 boolean 0
+legacy GL_POST_CONVOLUTION_GREEN_BIAS: float 0 double 0 boolean 0
+legacy GL_POST_CONVOLUTION_BLUE_BIAS: float 0 double 0 boolean 0
+legacy GL_POST_CONVOLUTION_ALPHA_BIAS: float 0 double 0 boolean 0
+legacy GL_HISTOGRAM: float 0 double 0 boolean 0
+legacy GL_MINMAX: float 0 double 0 boolean 0
+legacy GL_POLYGON_OFFSET_FILL: float 0 double 0 boolean 0
+legacy GL_POLYGON_OFFSET_FACTOR: float 0 double 0 boolean 0
+legacy GL_RESCALE_NORMAL: float 0 double 0 boolean 0
+legacy GL_TEXTURE_BINDING_1D: float 0 double 0 boolean 0
+legacy GL_TEXTURE_BINDING_2D: float 1 double 1 boolean 1
+legacy GL_TEXTURE_BINDING_3D: float 0 double 0 boolean 0
+legacy GL_PACK_SKIP_IMAGES: float 0 double 0 boolean 0
+legacy GL_PACK_IMAGE_HEIGHT: float 0 double 0 boolean 0
+legacy GL_UNPACK_SKIP_IMAGES: float 0 double 0 boolean 0
+legacy GL_UNPACK_IMAGE_HEIGHT: float 0 double 0 boolean 0
+legacy GL_TEXTURE_3D: float 0 double 0 boolean 0
+legacy GL_MAX_3D_TEXTURE_SIZE: float 2048 double 2048 boolean 1
+legacy GL_VERTEX_ARRAY: float 0 double 0 boolean 0
+legacy GL_NORMAL_ARRAY: float 0 double 0 boolean 0
+legacy GL_COLOR_ARRAY: float 0 double 0 boolean 0
+legacy GL_INDEX_ARRAY: float 0 double 0 boolean 0
+legacy GL_TEXTURE_COORD_ARRAY: float 0 double 0 boolean 0
+legacy GL_EDGE_FLAG_ARRAY: float 0 double 0 boolean 0
+legacy GL_VERTEX_ARRAY_SIZE: float 4 double 4 boolean 1
+legacy GL_VERTEX_ARRAY_TYPE: float 5126 double 5126 boolean 1
+legacy GL_VERTEX_ARRAY_STRIDE: float 0 double 0 boolean 0
+legacy GL_NORMAL_ARRAY_TYPE: float 5126 double 5126 boolean 1
+legacy GL_NORMAL_ARRAY_STRIDE: float 0 double 0 boolean 0
+legacy GL_COLOR_ARRAY_SIZE: float 4 double 4 boolean 1
+legacy GL_COLOR_ARRAY_TYPE: float 5126 double 5126 boolean 1
+legacy GL_COLOR_ARRAY_STRIDE: float 0 double 0 boolean 0
+legacy GL_INDEX_ARRAY_TYPE: float 5126 double 5126 boolean 1
+legacy GL_INDEX_ARRAY_STRIDE: float 0 double 0 boolean 0
+legacy GL_TEXTURE_COORD_ARRAY_SIZE: float 4 double 4 boolean 1
+legacy GL_TEXTURE_COORD_ARRAY_TYPE: float 5126 double 5126 boolean 1
+legacy GL_TEXTURE_COORD_ARRAY_STRIDE: float 0 double 0 boolean 0
+legacy GL_EDGE_FLAG_ARRAY_STRIDE: float 0 double 0 boolean 0
+legacy GL_MULTISAMPLE: float 1 double 1 boolean 1
+legacy GL_SAMPLE_ALPHA_TO_COVERAGE: float 0 double 0 boolean 0
+legacy GL_SAMPLE_ALPHA_TO_ONE: float 0 double 0 boolean 0
+legacy GL_SAMPLE_COVERAGE: float 0 double 0 boolean 0
+legacy GL_SAMPLE_BUFFERS: float 0 double 0 boolean 0
+legacy GL_SAMPLES: float 0 double 0 boolean 0
+legacy GL_SAMPLE_COVERAGE_VALUE: float 1 double 1 boolean 1
+legacy GL_SAMPLE_COVERAGE_INVERT: float 0 double 0 boolean 0
+legacy GL_COLOR_MATRIX: float 1 double 1 boolean 1
+legacy GL_COLOR_MATRIX_STACK_DEPTH: float 1 double 1 boolean 1
+legacy GL_MAX_COLOR_MATRIX_STACK_DEPTH: float 10 double 10 boolean 1
+legacy GL_POST_COLOR_MATRIX_RED_SCALE: float 1 double 1 boolean 1
+legacy GL_POST_COLOR_MATRIX_GREEN_SCALE: float 1 double 1 boolean 1
+legacy GL_POST_COLOR_MATRIX_BLUE_SCALE: float 1 double 1 boolean 1
+legacy GL_POST_COLOR_MATRIX_ALPHA_SCALE: float 1 double 1 boolean 1
+legacy GL_POST_COLOR_MATRIX_RED_BIAS: float 0 double 0 boolean 0
+legacy GL_POST_COLOR_MATRIX_GREEN_BIAS: float 0 double 0 boolean 0
+legacy GL_POST_COLOR_MATRIX_BLUE_BIAS: float 0 double 0 boolean 0
+legacy GL_POST_COLOR_MATRIX_ALPHA_BIAS: float 0 double 0 boolean 0
+legacy GL_BLEND_DST_RGB: float 0 double 0 boolean 0
+legacy GL_BLEND_SRC_RGB: float 1 double 1 boolean 1
+legacy GL_BLEND_DST_ALPHA: float 0 double 0 boolean 0
+legacy GL_BLEND_SRC_ALPHA: float 1 double 1 boolean 1
+legacy GL_COLOR_TABLE: float 0 double 0 boolean 0
+legacy GL_POST_CONVOLUTION_COLOR_TABLE: float 0 double 0 boolean 0
+legacy GL_POST_COLOR_MATRIX_COLOR_TABLE: float 0 double 0 boolean 0
+legacy GL_MAX_ELEMENTS_VERTICES: float 1.04858e+06 double 1.04858e+06 boolean 1
+legacy GL_MAX_ELEMENTS_INDICES: float 150000 double 150000 boolean 1
+legacy GL_CLIP_VOLUME_CLIPPING_HINT_EXT: float 4352 double 4352 boolean 1
+legacy GL_POINT_SIZE_MIN: float 0 double 0 boolean 0
+legacy GL_POINT_SIZE_MAX: float 64 double 64 boolean 1
+legacy GL_POINT_FADE_THRESHOLD_SIZE: float 1 double 1 boolean 1
+legacy GL_POINT_DISTANCE_ATTENUATION: float 1 double 1 boolean 1
+legacy GL_GENERATE_MIPMAP_HINT: float 4352 double 4352 boolean 1
+legacy GL_ARRAY_ELEMENT_LOCK_FIRST_EXT: float 0 double 0 boolean 0
+legacy GL_ARRAY_ELEMENT_LOCK_COUNT_EXT: float 0 double 0 boolean 0
+legacy GL_LIGHT_MODEL_COLOR_CONTROL: float 33273 double 33273 boolean 1
+legacy GL_FOG_COORD_SRC: float 33874 double 33874 boolean 1
+legacy GL_CURRENT_FOG_COORD: float 0 double 0 boolean 0
+legacy GL_FOG_COORD_ARRAY_TYPE: float 5126 double 5126 boolean 1
+legacy GL_FOG_COORD_ARRAY_STRIDE: float 0 double 0 boolean 0
+legacy GL_FOG_COORD_ARRAY: float 0 double 0 boolean 0
+legacy GL_COLOR_SUM: float 0 double 0 boolean 0
+legacy GL_CURRENT_SECONDARY_COLOR: float 0 double 0 boolean 0
+legacy GL_SECONDARY_COLOR_ARRAY_SIZE: float 3 double 3 boolean 1
+legacy GL_SECONDARY_COLOR_ARRAY_TYPE: float 5126 double 5126 boolean 1
+legacy GL_SECONDARY_COLOR_ARRAY_STRIDE: float 0 double 0 boolean 0
+legacy GL_SECONDARY_COLOR_ARRAY: float 0 double 0 boolean 0
+legacy GL_CURRENT_RASTER_SECONDARY_COLOR: float 0 double 0 boolean 0
+legacy GL_ALIASED_POINT_SIZE_RANGE: float 1 double 1 boolean 1
+legacy GL_ALIASED_LINE_WIDTH_RANGE: float 1 double 1 boolean 1
+legacy GL_ACTIVE_TEXTURE: float 33984 double 33984 boolean 1
+legacy GL_CLIENT_ACTIVE_TEXTURE: float 33984 double 33984 boolean 1
+legacy GL_MAX_TEXTURE_UNITS: float 8 double 8 boolean 1
+legacy GL_TRANSPOSE_MODELVIEW_MATRIX: float 1 double 1 boolean 1
+legacy GL_TRANSPOSE_PROJECTION_MATRIX: float 1 double 1 boolean 1
+legacy GL_TRANSPOSE_TEXTURE_MATRIX: float 1 double 1 boolean 1
+legacy GL_TRANSPOSE_COLOR_MATRIX: float 1 double 1 boolean 1
+legacy GL_MAX_RENDERBUFFER_SIZE: float 16384 double 16384 boolean 1
+legacy GL_TEXTURE_COMPRESSION_HINT: float 4352 double 4352 boolean 1
+legacy GL_TEXTURE_RECTANGLE_ARB: float 0 double 0 boolean 0
+legacy GL_TEXTURE_BINDING_RECTANGLE_ARB: float 0 double 0 boolean 0
+legacy GL_MAX_RECTANGLE_TEXTURE_SIZE_ARB: float 16384 double 16384 boolean 1
+legacy GL_MAX_TEXTURE_LOD_BIAS: float 16 double 16 boolean 1
+legacy GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT: float 16 double 16 boolean 1
+legacy GL_MAX_SHININESS_NV: float 128 double 128 boolean 1
+legacy GL_MAX_SPOT_EXPONENT_NV: float 128 double 128 boolean 1
+legacy GL_MODELVIEW1_ARB: float 1 double 1 boolean 1
+legacy GL_TEXTURE_CUBE_MAP: float 0 double 0 boolean 0
+legacy GL_TEXTURE_BINDING_CUBE_MAP: float 0 double 0 boolean 0
+legacy GL_MAX_CUBE_MAP_TEXTURE_SIZE: float 16384 double 16384 boolean 1
+legacy GL_VERTEX_ARRAY_RANGE_APPLE: float 0 double 0 boolean 0
+legacy GL_VERTEX_ARRAY_RANGE_LENGTH_APPLE: float 0 double 0 boolean 0
+legacy GL_VERTEX_ARRAY_STORAGE_HINT_APPLE: float 34228 double 34228 boolean 1
+legacy GL_MAX_VERTEX_ARRAY_RANGE_ELEMENT_APPLE: float 0 double 0 boolean 0
+legacy GL_MULTISAMPLE_FILTER_HINT_NV: float 4352 double 4352 boolean 1
+legacy GL_FOG_DISTANCE_MODE_NV: float 34140 double 34140 boolean 1
+legacy GL_LIGHT_MODEL_SPECULAR_VECTOR_APPLE: float 0 double 0 boolean 0
+legacy GL_TRANSFORM_HINT_APPLE: float 4352 double 4352 boolean 1
+legacy GL_UNPACK_CLIENT_STORAGE_APPLE: float 0 double 0 boolean 0
+legacy GL_VERTEX_ARRAY_BINDING_APPLE: float 0 double 0 boolean 0
+legacy GL_VERTEX_PROGRAM_ARB: float 0 double 0 boolean 0
+legacy GL_MAX_PROGRAM_MATRIX_STACK_DEPTH_ARB: float 2 double 2 boolean 1
+legacy GL_MAX_PROGRAM_MATRICES_ARB: float 8 double 8 boolean 1
+legacy GL_CURRENT_MATRIX_STACK_DEPTH_ARB: float 1 double 1 boolean 1
+legacy GL_CURRENT_MATRIX_ARB: float 1 double 1 boolean 1
+legacy GL_VERTEX_PROGRAM_POINT_SIZE: float 0 double 0 boolean 0
+legacy GL_VERTEX_PROGRAM_TWO_SIDE: float 0 double 0 boolean 0
+legacy GL_PROGRAM_ERROR_POSITION_ARB: float -1 double -1 boolean 1
+legacy GL_DEPTH_CLAMP: float 0 double 0 boolean 0
+legacy GL_NUM_COMPRESSED_TEXTURE_FORMATS: float 3 double 3 boolean 1
+legacy GL_COMPRESSED_TEXTURE_FORMATS: float 33776 double 33776 boolean 1
+legacy GL_MAX_VERTEX_UNITS_ARB: float 4 double 4 boolean 1
+legacy GL_ACTIVE_VERTEX_UNITS_ARB: float 1 double 1 boolean 1
+legacy GL_WEIGHT_SUM_UNITY_ARB: float 0 double 0 boolean 0
+legacy GL_VERTEX_BLEND_ARB: float 0 double 0 boolean 0
+legacy GL_CURRENT_WEIGHT_ARB: float 1 double 1 boolean 1
+legacy GL_WEIGHT_ARRAY_TYPE_ARB: float 5126 double 5126 boolean 1
+legacy GL_WEIGHT_ARRAY_STRIDE_ARB: float 0 double 0 boolean 0
+legacy GL_WEIGHT_ARRAY_SIZE_ARB: float 1 double 1 boolean 1
+legacy GL_WEIGHT_ARRAY_ARB: float 0 double 0 boolean 0
+legacy GL_MODELVIEW2_ARB: float 1 double 1 boolean 1
+legacy GL_MODELVIEW3_ARB: float 1 double 1 boolean 1
+legacy GL_STENCIL_BACK_FUNC: float 519 double 519 boolean 1
+legacy GL_STENCIL_BACK_FAIL: float 7680 double 7680 boolean 1
+legacy GL_STENCIL_BACK_PASS_DEPTH_FAIL: float 7680 double 7680 boolean 1
+legacy GL_STENCIL_BACK_PASS_DEPTH_PASS: float 7680 double 7680 boolean 1
+legacy GL_FRAGMENT_PROGRAM_ARB: float 0 double 0 boolean 0
+legacy GL_RGBA_FLOAT_MODE_ARB: float 0 double 0 boolean 0
+legacy GL_MAX_DRAW_BUFFERS: float 8 double 8 boolean 1
+legacy GL_DRAW_BUFFER0: float 36064 double 36064 boolean 1
+legacy GL_DRAW_BUFFER1: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER2: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER3: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER4: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER5: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER6: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER7: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER8: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER9: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER10: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER11: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER12: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER13: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER14: float 0 double 0 boolean 0
+legacy GL_DRAW_BUFFER15: float 0 double 0 boolean 0
+legacy GL_BLEND_EQUATION_ALPHA: float 32774 double 32774 boolean 1
+legacy GL_TEXTURE_CUBE_MAP_SEAMLESS: float 0 double 0 boolean 0
+legacy GL_POINT_SPRITE: float 0 double 0 boolean 0
+legacy GL_POINT_SPRITE_R_MODE_NV: float 0 double 0 boolean 0
+legacy GL_MAX_VERTEX_ATTRIBS: float 16 double 16 boolean 1
+legacy GL_MAX_TEXTURE_COORDS: float 8 double 8 boolean 1
+legacy GL_MAX_TEXTURE_IMAGE_UNITS: float 16 double 16 boolean 1
+legacy GL_DEPTH_BOUNDS_TEST_EXT: float 0 double 0 boolean 0
+legacy GL_DEPTH_BOUNDS_EXT: float 0 double 0 boolean 0
+legacy GL_ARRAY_BUFFER_BINDING: float 1 double 1 boolean 1
+legacy GL_ELEMENT_ARRAY_BUFFER_BINDING: float 0 double 0 boolean 0
+legacy GL_VERTEX_ARRAY_BUFFER_BINDING: float 0 double 0 boolean 0
+legacy GL_NORMAL_ARRAY_BUFFER_BINDING: float 0 double 0 boolean 0
+legacy GL_COLOR_ARRAY_BUFFER_BINDING: float 0 double 0 boolean 0
+legacy GL_INDEX_ARRAY_BUFFER_BINDING: float 0 double 0 boolean 0
+legacy GL_TEXTURE_COORD_ARRAY_BUFFER_BINDING: float 0 double 0 boolean 0
+legacy GL_EDGE_FLAG_ARRAY_BUFFER_BINDING: float 0 double 0 boolean 0
+legacy GL_SECONDARY_COLOR_ARRAY_BUFFER_BINDING: float 0 double 0 boolean 0
+legacy GL_FOG_COORD_ARRAY_BUFFER_BINDING: float 0 double 0 boolean 0
+legacy GL_WEIGHT_ARRAY_BUFFER_BINDING: float 0 double 0 boolean 0
+legacy GL_TRANSPOSE_CURRENT_MATRIX_ARB: float 1 double 1 boolean 1
+legacy GL_PIXEL_PACK_BUFFER_BINDING: float 0 double 0 boolean 0
+legacy GL_PIXEL_UNPACK_BUFFER_BINDING: float 0 double 0 boolean 0
+legacy GL_MAX_ARRAY_TEXTURE_LAYERS_EXT: float 2048 double 2048 boolean 1
+legacy GL_MIN_PROGRAM_TEXEL_OFFSET_EXT: float -8 double -8 boolean 1
+legacy GL_MAX_PROGRAM_TEXEL_OFFSET_EXT: float 7 double 7 boolean 1
+legacy GL_STENCIL_TEST_TWO_SIDE_EXT: float 0 double 0 boolean 0
+legacy GL_ACTIVE_STENCIL_FACE_EXT: float 1028 double 1028 boolean 1
+legacy GL_CLAMP_VERTEX_COLOR_ARB: float 1 double 1 boolean 1
+legacy GL_CLAMP_FRAGMENT_COLOR_ARB: float 35101 double 35101 boolean 1
+legacy GL_CLAMP_READ_COLOR_ARB: float 35101 double 35101 boolean 1
+legacy GL_POINT_SIZE_ARRAY_TYPE_APPLE: float 5126 double 5126 boolean 1
+legacy GL_POINT_SIZE_ARRAY_STRIDE_APPLE: float 0 double 0 boolean 0
+legacy GL_ELEMENT_ARRAY_APPLE: float 0 double 0 boolean 0
+legacy GL_ELEMENT_ARRAY_TYPE_APPLE: float 5125 double 5125 boolean 1
+legacy GL_COLOR_FLOAT_APPLE: float 0 double 0 boolean 0
+legacy GL_MIN_PBUFFER_VIEWPORT_DIMS_APPLE: float 1 double 1 boolean 1
+legacy GL_AUX_DEPTH_STENCIL_APPLE: float 0 double 0 boolean 0
+legacy GL_PACK_ROW_BYTES_APPLE: float 0 double 0 boolean 0
+legacy GL_UNPACK_ROW_BYTES_APPLE: float 0 double 0 boolean 0
+legacy GL_PACK_IMAGE_BYTES_APPLE: float 0 double 0 boolean 0
+legacy GL_UNPACK_IMAGE_BYTES_APPLE: float 0 double 0 boolean 0
+legacy GL_VERTEX_POINT_SIZE_APPLE: float 0 double 0 boolean 0
+legacy GL_CURRENT_POINT_SIZE_APPLE: float 1 double 1 boolean 1
+legacy GL_MAX_FRAGMENT_UNIFORM_COMPONENTS: float 4096 double 4096 boolean 1
+legacy GL_MAX_VERTEX_UNIFORM_COMPONENTS: float 4096 double 4096 boolean 1
+legacy GL_MAX_VARYING_FLOATS: float 124 double 124 boolean 1
+legacy GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS: float 16 double 16 boolean 1
+legacy GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS: float 16 double 16 boolean 1
+legacy GL_FRAGMENT_SHADER_DERIVATIVE_HINT: float 4352 double 4352 boolean 1
+legacy GL_CURRENT_PROGRAM: float 0 double 0 boolean 0
+legacy GL_POINT_SIZE_ARRAY_APPLE: float 0 double 0 boolean 0
+legacy GL_POINT_SIZE_ARRAY_BUFFER_BINDING_APPLE: float 0 double 0 boolean 0
+legacy GL_TEXTURE_BINDING_1D_ARRAY_EXT: float 0 double 0 boolean 0
+legacy GL_TEXTURE_BINDING_2D_ARRAY_EXT: float 0 double 0 boolean 0
+legacy GL_MAX_GEOMETRY_TEXTURE_IMAGE_UNITS_EXT: float 16 double 16 boolean 1
+legacy GL_RGBA_SIGNED_COMPONENTS_EXT: float 0 double 0 boolean 0
+legacy GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS_EXT: float 4 double 4 boolean 1
+legacy GL_RASTERIZER_DISCARD_EXT: float 0 double 0 boolean 0
+legacy GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS_EXT: float 64 double 64 boolean 1
+legacy GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS_EXT: float 4 double 4 boolean 1
+legacy GL_TRANSFORM_FEEDBACK_BUFFER_BINDING_EXT: float 0 double 0 boolean 0
+legacy GL_POINT_SPRITE_COORD_ORIGIN: float 36002 double 36002 boolean 1
+legacy GL_STENCIL_BACK_REF: float 0 double 0 boolean 0
+legacy GL_STENCIL_BACK_VALUE_MASK: float 4.29497e+09 double 4.29497e+09 boolean 1
+legacy GL_STENCIL_BACK_WRITEMASK: float 4.29497e+09 double 4.29497e+09 boolean 1
+legacy GL_FRAMEBUFFER_BINDING: float 1 double 1 boolean 1
+legacy GL_RENDERBUFFER_BINDING: float 1 double 1 boolean 1
+legacy GL_READ_FRAMEBUFFER_BINDING: float 1 double 1 boolean 1
+legacy GL_MAX_COLOR_ATTACHMENTS: float 8 double 8 boolean 1
+legacy GL_MAX_SAMPLES: float 8 double 8 boolean 1
+legacy GL_RGBA_INTEGER_MODE_EXT: float 0 double 0 boolean 0
+legacy GL_FRAMEBUFFER_SRGB: float 0 double 0 boolean 0
+legacy GL_FRAMEBUFFER_SRGB_CAPABLE_EXT: float 0 double 0 boolean 0
+legacy GL_MAX_GEOMETRY_VARYING_COMPONENTS_EXT: float 128 double 128 boolean 1
+legacy GL_MAX_VERTEX_VARYING_COMPONENTS_EXT: float 64 double 64 boolean 1
+legacy GL_MAX_GEOMETRY_UNIFORM_COMPONENTS_EXT: float 4096 double 4096 boolean 1
+legacy GL_MAX_GEOMETRY_OUTPUT_VERTICES_EXT: float 1024 double 1024 boolean 1
+legacy GL_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS_EXT: float 1024 double 1024 boolean 1
+legacy GL_MAX_VERTEX_BINDABLE_UNIFORMS_EXT: float 16 double 16 boolean 1
+legacy GL_MAX_FRAGMENT_BINDABLE_UNIFORMS_EXT: float 16 double 16 boolean 1
+legacy GL_MAX_GEOMETRY_BINDABLE_UNIFORMS_EXT: float 16 double 16 boolean 1
+legacy GL_MAX_BINDABLE_UNIFORM_SIZE_EXT: float 65536 double 65536 boolean 1
+legacy GL_UNIFORM_BUFFER_BINDING_EXT: float 0 double 0 boolean 0
+legacy GL_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION: float 0 double 0 boolean 0
+legacy GL_PROVOKING_VERTEX: float 36430 double 36430 boolean 1
+legacy GL_MAX_SERVER_WAIT_TIMEOUT: float -1 double -1 boolean 1
+legacy glGetString GL_VENDOR: string 0
+legacy glGetString GL_RENDERER: string 0
+legacy glGetString GL_VERSION: string 0
+legacy glGetString GL_EXTENSIONS: string 0
+legacy glGetString GL_PROGRAM_ERROR_STRING_ARB: string 0
+legacy glGetString GL_SHADING_LANGUAGE_VERSION: string 0
+legacy glShadeModel: GL_FLAT GL_SMOOTH
+legacy glDepthFunc: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS
+legacy glAlphaFunc: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS
+legacy glBlendFunc src: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_SRC_COLOR GL_ONE_MINUS_SRC_COLOR GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA GL_DST_ALPHA GL_ONE_MINUS_DST_ALPHA GL_DST_COLOR GL_ONE_MINUS_DST_COLOR GL_SRC_ALPHA_SATURATE GL_CONSTANT_COLOR GL_ONE_MINUS_CONSTANT_COLOR GL_CONSTANT_ALPHA GL_ONE_MINUS_CONSTANT_ALPHA GL_SRC1_ALPHA GL_SRC1_COLOR GL_ONE_MINUS_SRC1_COLOR GL_ONE_MINUS_SRC1_ALPHA
+legacy glBlendFunc dst: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_SRC_COLOR GL_ONE_MINUS_SRC_COLOR GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA GL_DST_ALPHA GL_ONE_MINUS_DST_ALPHA GL_DST_COLOR GL_ONE_MINUS_DST_COLOR GL_SRC_ALPHA_SATURATE GL_CONSTANT_COLOR GL_ONE_MINUS_CONSTANT_COLOR GL_CONSTANT_ALPHA GL_ONE_MINUS_CONSTANT_ALPHA GL_SRC1_ALPHA GL_SRC1_COLOR GL_ONE_MINUS_SRC1_COLOR GL_ONE_MINUS_SRC1_ALPHA
+legacy glBlendFuncSeparate alpha src: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_SRC_COLOR GL_ONE_MINUS_SRC_COLOR GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA GL_DST_ALPHA GL_ONE_MINUS_DST_ALPHA GL_DST_COLOR GL_ONE_MINUS_DST_COLOR GL_SRC_ALPHA_SATURATE GL_CONSTANT_COLOR GL_ONE_MINUS_CONSTANT_COLOR GL_CONSTANT_ALPHA GL_ONE_MINUS_CONSTANT_ALPHA GL_SRC1_ALPHA GL_SRC1_COLOR GL_ONE_MINUS_SRC1_COLOR GL_ONE_MINUS_SRC1_ALPHA
+legacy glBlendEquation: GL_FUNC_ADD GL_MIN GL_MAX GL_FUNC_SUBTRACT GL_FUNC_REVERSE_SUBTRACT GL_MIN_WEIGHTED_ATI GL_MAX_WEIGHTED_ATI
+legacy glBlendEquationSeparate alpha: GL_FUNC_ADD GL_MIN GL_MAX GL_FUNC_SUBTRACT GL_FUNC_REVERSE_SUBTRACT GL_MIN_WEIGHTED_ATI GL_MAX_WEIGHTED_ATI
+legacy glLogicOp: GL_CLEAR GL_AND GL_AND_REVERSE GL_COPY GL_AND_INVERTED GL_NOOP GL_XOR GL_OR GL_NOR GL_EQUIV GL_INVERT GL_OR_REVERSE GL_COPY_INVERTED GL_OR_INVERTED GL_NAND GL_SET
+legacy glCullFace: GL_FRONT GL_BACK GL_FRONT_AND_BACK
+legacy glFrontFace: GL_CW GL_CCW
+legacy glPolygonMode face: GL_FRONT GL_BACK GL_FRONT_AND_BACK
+legacy glPolygonMode mode: GL_POINT GL_LINE GL_FILL
+legacy glStencilFunc: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS
+legacy glStencilOp: GL_POINTS GL_INVERT GL_KEEP GL_REPLACE GL_INCR GL_DECR GL_INCR_WRAP GL_DECR_WRAP
+legacy glStencilOpSeparate face: GL_FRONT GL_BACK GL_FRONT_AND_BACK
+legacy glStencilFuncSeparate face: GL_FRONT GL_BACK GL_FRONT_AND_BACK
+legacy glColorMaterial face: GL_FRONT GL_BACK GL_FRONT_AND_BACK
+legacy glColorMaterial mode: GL_AMBIENT GL_DIFFUSE GL_SPECULAR GL_EMISSION GL_AMBIENT_AND_DIFFUSE
+legacy glMatrixMode: GL_MODELVIEW GL_PROJECTION GL_TEXTURE GL_COLOR GL_MODELVIEW1_ARB GL_MODELVIEW2_ARB GL_MODELVIEW3_ARB GL_MATRIX0_ARB GL_MATRIX1_ARB GL_MATRIX2_ARB GL_MATRIX3_ARB GL_MATRIX4_ARB GL_MATRIX5_ARB GL_MATRIX6_ARB GL_MATRIX7_ARB
+legacy glDrawBuffer: GL_POINTS GL_FRONT_LEFT(0x502) GL_FRONT_RIGHT(0x502) GL_BACK_LEFT(0x502) GL_BACK_RIGHT(0x502) GL_FRONT(0x502) GL_BACK(0x502) GL_LEFT(0x502) GL_RIGHT(0x502) GL_FRONT_AND_BACK(0x502) GL_AUX0(0x502) GL_AUX1(0x502) GL_AUX2(0x502) GL_AUX3(0x502) GL_COLOR_ATTACHMENT0 GL_COLOR_ATTACHMENT1 GL_COLOR_ATTACHMENT2 GL_COLOR_ATTACHMENT3 GL_COLOR_ATTACHMENT4 GL_COLOR_ATTACHMENT5 GL_COLOR_ATTACHMENT6 GL_COLOR_ATTACHMENT7
+legacy glReadBuffer: GL_POINTS GL_FRONT_LEFT(0x502) GL_FRONT_RIGHT(0x502) GL_BACK_LEFT(0x502) GL_BACK_RIGHT(0x502) GL_FRONT(0x502) GL_BACK(0x502) GL_LEFT(0x502) GL_RIGHT(0x502) GL_AUX0(0x502) GL_AUX1(0x502) GL_AUX2(0x502) GL_AUX3(0x502) GL_COLOR_ATTACHMENT0 GL_COLOR_ATTACHMENT1 GL_COLOR_ATTACHMENT2 GL_COLOR_ATTACHMENT3 GL_COLOR_ATTACHMENT4 GL_COLOR_ATTACHMENT5 GL_COLOR_ATTACHMENT6 GL_COLOR_ATTACHMENT7
+legacy glBindTexture: GL_TEXTURE_1D GL_TEXTURE_2D GL_TEXTURE_3D GL_TEXTURE_RECTANGLE_ARB GL_TEXTURE_CUBE_MAP GL_TEXTURE_1D_ARRAY_EXT GL_TEXTURE_2D_ARRAY_EXT GL_TEXTURE_2D_MULTISAMPLE GL_TEXTURE_2D_MULTISAMPLE_ARRAY
+legacy glBindBuffer: GL_ARRAY_BUFFER GL_ELEMENT_ARRAY_BUFFER GL_PIXEL_PACK_BUFFER GL_PIXEL_UNPACK_BUFFER GL_UNIFORM_BUFFER GL_TRANSFORM_FEEDBACK_BUFFER_EXT GL_UNIFORM_BUFFER_EXT
+legacy glEnableClientState: GL_VERTEX_ARRAY GL_NORMAL_ARRAY GL_COLOR_ARRAY GL_INDEX_ARRAY GL_TEXTURE_COORD_ARRAY GL_EDGE_FLAG_ARRAY GL_FOG_COORD_ARRAY GL_SECONDARY_COLOR_ARRAY GL_VERTEX_ARRAY_RANGE_APPLE GL_WEIGHT_ARRAY_ARB GL_ELEMENT_ARRAY_APPLE GL_POINT_SIZE_ARRAY_APPLE
+legacy glIsEnabled: GL_POINT_SMOOTH GL_LINE_SMOOTH GL_LINE_STIPPLE GL_POLYGON_SMOOTH GL_POLYGON_STIPPLE GL_CULL_FACE GL_LIGHTING GL_COLOR_MATERIAL GL_FOG GL_DEPTH_TEST GL_STENCIL_TEST GL_NORMALIZE GL_ALPHA_TEST GL_DITHER GL_BLEND GL_INDEX_LOGIC_OP GL_COLOR_LOGIC_OP GL_SCISSOR_TEST GL_TEXTURE_GEN_S GL_TEXTURE_GEN_T GL_TEXTURE_GEN_R GL_TEXTURE_GEN_Q GL_AUTO_NORMAL GL_MAP1_COLOR_4 GL_MAP1_INDEX GL_MAP1_NORMAL GL_MAP1_TEXTURE_COORD_1 GL_MAP1_TEXTURE_COORD_2 GL_MAP1_TEXTURE_COORD_3 GL_MAP1_TEXTURE_COORD_4 GL_MAP1_VERTEX_3 GL_MAP1_VERTEX_4 GL_MAP2_COLOR_4 GL_MAP2_INDEX GL_MAP2_NORMAL GL_MAP2_TEXTURE_COORD_1 GL_MAP2_TEXTURE_COORD_2 GL_MAP2_TEXTURE_COORD_3 GL_MAP2_TEXTURE_COORD_4 GL_MAP2_VERTEX_3 GL_MAP2_VERTEX_4 GL_TEXTURE_1D GL_TEXTURE_2D GL_POLYGON_OFFSET_POINT GL_POLYGON_OFFSET_LINE GL_CLIP_PLANE0 GL_CLIP_PLANE1 GL_CLIP_PLANE2 GL_CLIP_PLANE3 GL_CLIP_PLANE4 GL_CLIP_PLANE5 GL_LIGHT0 GL_LIGHT1 GL_LIGHT2 GL_LIGHT3 GL_LIGHT4 GL_LIGHT5 GL_LIGHT6 GL_LIGHT7 GL_CONVOLUTION_1D GL_CONVOLUTION_2D GL_SEPARABLE_2D GL_HISTOGRAM GL_MINMAX GL_POLYGON_OFFSET_FILL GL_RESCALE_NORMAL GL_TEXTURE_3D GL_VERTEX_ARRAY GL_NORMAL_ARRAY GL_COLOR_ARRAY GL_INDEX_ARRAY GL_TEXTURE_COORD_ARRAY GL_EDGE_FLAG_ARRAY GL_MULTISAMPLE GL_SAMPLE_ALPHA_TO_COVERAGE GL_SAMPLE_ALPHA_TO_ONE GL_SAMPLE_COVERAGE GL_COLOR_TABLE GL_POST_CONVOLUTION_COLOR_TABLE GL_POST_COLOR_MATRIX_COLOR_TABLE GL_FOG_COORD_ARRAY GL_COLOR_SUM GL_SECONDARY_COLOR_ARRAY GL_TEXTURE_RECTANGLE_ARB GL_TEXTURE_CUBE_MAP GL_VERTEX_ARRAY_RANGE_APPLE GL_VERTEX_PROGRAM_ARB GL_VERTEX_PROGRAM_POINT_SIZE GL_VERTEX_PROGRAM_TWO_SIDE GL_DEPTH_CLAMP GL_WEIGHT_SUM_UNITY_ARB GL_VERTEX_BLEND_ARB GL_WEIGHT_ARRAY_ARB GL_FRAGMENT_PROGRAM_ARB GL_TEXTURE_CUBE_MAP_SEAMLESS GL_POINT_SPRITE GL_DEPTH_BOUNDS_TEST_EXT GL_STENCIL_TEST_TWO_SIDE_EXT GL_ELEMENT_ARRAY_APPLE GL_VERTEX_POINT_SIZE_APPLE GL_POINT_SIZE_ARRAY_APPLE GL_RASTERIZER_DISCARD_EXT GL_FRAMEBUFFER_SRGB
+legacy glClampColorARB target: GL_CLAMP_VERTEX_COLOR_ARB GL_CLAMP_FRAGMENT_COLOR_ARB GL_CLAMP_READ_COLOR_ARB
+legacy glClampColorARB value: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_FIXED_ONLY_ARB
+legacy glProvokingVertexEXT: GL_FIRST_VERTEX_CONVENTION GL_LAST_VERTEX_CONVENTION
+legacy glActiveTexture: GL_TEXTURE0 GL_TEXTURE1 GL_TEXTURE2 GL_TEXTURE3 GL_TEXTURE4 GL_TEXTURE5 GL_TEXTURE6 GL_TEXTURE7 GL_TEXTURE8 GL_TEXTURE9 GL_TEXTURE10 GL_TEXTURE11 GL_TEXTURE12 GL_TEXTURE13 GL_TEXTURE14 GL_TEXTURE15
+legacy glClientActiveTexture: GL_TEXTURE0 GL_TEXTURE1 GL_TEXTURE2 GL_TEXTURE3 GL_TEXTURE4 GL_TEXTURE5 GL_TEXTURE6 GL_TEXTURE7
+legacy glCreateShader: GL_FRAGMENT_SHADER GL_VERTEX_SHADER GL_GEOMETRY_SHADER_EXT GL_TESS_EVALUATION_SHADER GL_TESS_CONTROL_SHADER
+legacy glBeginQuery: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_LINE_LOOP GL_LINE_STRIP GL_TRIANGLES GL_TRIANGLE_STRIP GL_TRIANGLE_FAN GL_QUADS GL_QUAD_STRIP GL_POLYGON GL_LINES_ADJACENCY_EXT GL_LINE_STRIP_ADJACENCY_EXT GL_TRIANGLES_ADJACENCY_EXT GL_TRIANGLE_STRIP_ADJACENCY_EXT GL_PATCHES GL_ACCUM GL_LOAD GL_RETURN GL_MULT GL_ADD GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS GL_SRC_COLOR GL_ONE_MINUS_SRC_COLOR GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA GL_DST_ALPHA GL_ONE_MINUS_DST_ALPHA GL_DST_COLOR GL_ONE_MINUS_DST_COLOR GL_SRC_ALPHA_SATURATE GL_FRONT_LEFT GL_FRONT_RIGHT GL_BACK_LEFT GL_BACK_RIGHT GL_FRONT GL_BACK GL_LEFT GL_RIGHT GL_FRONT_AND_BACK GL_AUX0 GL_AUX1 GL_AUX2 GL_AUX3 GL_INVALID_ENUM GL_INVALID_VALUE GL_INVALID_OPERATION GL_STACK_OVERFLOW GL_STACK_UNDERFLOW GL_OUT_OF_MEMORY GL_INVALID_FRAMEBUFFER_OPERATION GL_2D GL_3D GL_3D_COLOR GL_3D_COLOR_TEXTURE GL_4D_COLOR_TEXTURE GL_PASS_THROUGH_TOKEN GL_POINT_TOKEN GL_LINE_TOKEN GL_POLYGON_TOKEN GL_BITMAP_TOKEN GL_DRAW_PIXEL_TOKEN GL_COPY_PIXEL_TOKEN GL_LINE_RESET_TOKEN GL_EXP GL_EXP2 GL_CW GL_CCW GL_COEFF GL_ORDER GL_DOMAIN GL_CURRENT_COLOR GL_CURRENT_INDEX GL_CURRENT_NORMAL GL_CURRENT_TEXTURE_COORDS GL_CURRENT_RASTER_COLOR GL_CURRENT_RASTER_INDEX GL_CURRENT_RASTER_TEXTURE_COORDS GL_CURRENT_RASTER_POSITION GL_CURRENT_RASTER_POSITION_VALID GL_CURRENT_RASTER_DISTANCE GL_POINT_SMOOTH GL_POINT_SIZE GL_POINT_SIZE_RANGE GL_POINT_SIZE_GRANULARITY GL_LINE_SMOOTH GL_LINE_WIDTH GL_LINE_WIDTH_RANGE GL_LINE_WIDTH_GRANULARITY GL_LINE_STIPPLE GL_LINE_STIPPLE_PATTERN GL_LINE_STIPPLE_REPEAT GL_LIST_MODE GL_MAX_LIST_NESTING GL_LIST_BASE GL_LIST_INDEX GL_POLYGON_MODE GL_POLYGON_SMOOTH GL_POLYGON_STIPPLE GL_EDGE_FLAG GL_CULL_FACE GL_CULL_FACE_MODE GL_FRONT_FACE GL_LIGHTING GL_LIGHT_MODEL_LOCAL_VIEWER GL_LIGHT_MODEL_TWO_SIDE GL_LIGHT_MODEL_AMBIENT GL_SHADE_MODEL GL_COLOR_MATERIAL_FACE GL_COLOR_MATERIAL_PARAMETER GL_COLOR_MATERIAL GL_FOG GL_FOG_INDEX GL_FOG_DENSITY GL_FOG_START GL_FOG_END GL_FOG_MODE GL_FOG_COLOR GL_DEPTH_RANGE GL_DEPTH_TEST GL_DEPTH_WRITEMASK GL_DEPTH_CLEAR_VALUE GL_DEPTH_FUNC GL_ACCUM_CLEAR_VALUE GL_STENCIL_TEST GL_STENCIL_CLEAR_VALUE GL_STENCIL_FUNC GL_STENCIL_VALUE_MASK GL_STENCIL_FAIL GL_STENCIL_PASS_DEPTH_FAIL GL_STENCIL_PASS_DEPTH_PASS GL_STENCIL_REF GL_STENCIL_WRITEMASK GL_MATRIX_MODE GL_NORMALIZE GL_VIEWPORT GL_MODELVIEW_STACK_DEPTH GL_PROJECTION_STACK_DEPTH GL_TEXTURE_STACK_DEPTH GL_MODELVIEW_MATRIX GL_PROJECTION_MATRIX GL_TEXTURE_MATRIX GL_ATTRIB_STACK_DEPTH GL_CLIENT_ATTRIB_STACK_DEPTH GL_ALPHA_TEST GL_ALPHA_TEST_FUNC GL_ALPHA_TEST_REF GL_DITHER GL_BLEND_DST GL_BLEND_SRC GL_BLEND GL_LOGIC_OP_MODE GL_INDEX_LOGIC_OP GL_COLOR_LOGIC_OP GL_AUX_BUFFERS GL_DRAW_BUFFER GL_READ_BUFFER GL_SCISSOR_BOX GL_SCISSOR_TEST GL_INDEX_CLEAR_VALUE GL_INDEX_WRITEMASK GL_COLOR_CLEAR_VALUE GL_COLOR_WRITEMASK GL_INDEX_MODE GL_RGBA_MODE GL_DOUBLEBUFFER GL_STEREO GL_RENDER_MODE GL_PERSPECTIVE_CORRECTION_HINT GL_POINT_SMOOTH_HINT GL_LINE_SMOOTH_HINT GL_POLYGON_SMOOTH_HINT GL_FOG_HINT GL_TEXTURE_GEN_S GL_TEXTURE_GEN_T GL_TEXTURE_GEN_R GL_TEXTURE_GEN_Q GL_PIXEL_MAP_I_TO_I GL_PIXEL_MAP_S_TO_S GL_PIXEL_MAP_I_TO_R GL_PIXEL_MAP_I_TO_G GL_PIXEL_MAP_I_TO_B GL_PIXEL_MAP_I_TO_A GL_PIXEL_MAP_R_TO_R GL_PIXEL_MAP_G_TO_G GL_PIXEL_MAP_B_TO_B GL_PIXEL_MAP_A_TO_A GL_PIXEL_MAP_I_TO_I_SIZE GL_PIXEL_MAP_S_TO_S_SIZE GL_PIXEL_MAP_I_TO_R_SIZE GL_PIXEL_MAP_I_TO_G_SIZE GL_PIXEL_MAP_I_TO_B_SIZE GL_PIXEL_MAP_I_TO_A_SIZE GL_PIXEL_MAP_R_TO_R_SIZE GL_PIXEL_MAP_G_TO_G_SIZE GL_PIXEL_MAP_B_TO_B_SIZE GL_PIXEL_MAP_A_TO_A_SIZE GL_UNPACK_SWAP_BYTES GL_UNPACK_LSB_FIRST GL_UNPACK_ROW_LENGTH GL_UNPACK_SKIP_ROWS GL_UNPACK_SKIP_PIXELS GL_UNPACK_ALIGNMENT GL_PACK_SWAP_BYTES GL_PACK_LSB_FIRST GL_PACK_ROW_LENGTH GL_PACK_SKIP_ROWS GL_PACK_SKIP_PIXELS GL_PACK_ALIGNMENT GL_MAP_COLOR GL_MAP_STENCIL GL_INDEX_SHIFT GL_INDEX_OFFSET GL_RED_SCALE GL_RED_BIAS GL_ZOOM_X GL_ZOOM_Y GL_GREEN_SCALE GL_GREEN_BIAS GL_BLUE_SCALE GL_BLUE_BIAS GL_ALPHA_SCALE GL_ALPHA_BIAS GL_DEPTH_SCALE GL_DEPTH_BIAS GL_MAX_EVAL_ORDER GL_MAX_LIGHTS GL_MAX_CLIP_PLANES GL_MAX_TEXTURE_SIZE GL_MAX_PIXEL_MAP_TABLE GL_MAX_ATTRIB_STACK_DEPTH GL_MAX_MODELVIEW_STACK_DEPTH GL_MAX_NAME_STACK_DEPTH GL_MAX_PROJECTION_STACK_DEPTH GL_MAX_TEXTURE_STACK_DEPTH GL_MAX_VIEWPORT_DIMS GL_MAX_CLIENT_ATTRIB_STACK_DEPTH GL_NAME_STACK_DEPTH GL_AUTO_NORMAL GL_MAP1_COLOR_4 GL_MAP1_INDEX GL_MAP1_NORMAL GL_MAP1_TEXTURE_COORD_1 GL_MAP1_TEXTURE_COORD_2 GL_MAP1_TEXTURE_COORD_3 GL_MAP1_TEXTURE_COORD_4 GL_MAP1_VERTEX_3 GL_MAP1_VERTEX_4 GL_MAP2_COLOR_4 GL_MAP2_INDEX GL_MAP2_NORMAL GL_MAP2_TEXTURE_COORD_1 GL_MAP2_TEXTURE_COORD_2 GL_MAP2_TEXTURE_COORD_3 GL_MAP2_TEXTURE_COORD_4 GL_MAP2_VERTEX_3 GL_MAP2_VERTEX_4 GL_MAP1_GRID_DOMAIN GL_MAP1_GRID_SEGMENTS GL_MAP2_GRID_DOMAIN GL_MAP2_GRID_SEGMENTS GL_TEXTURE_1D GL_TEXTURE_2D GL_FEEDBACK_BUFFER_POINTER GL_FEEDBACK_BUFFER_SIZE GL_FEEDBACK_BUFFER_TYPE GL_SELECTION_BUFFER_POINTER GL_SELECTION_BUFFER_SIZE GL_TEXTURE_WIDTH GL_TEXTURE_HEIGHT GL_TEXTURE_INTERNAL_FORMAT GL_TEXTURE_BORDER_COLOR GL_TEXTURE_BORDER GL_DONT_CARE GL_FASTEST GL_NICEST GL_AMBIENT GL_DIFFUSE GL_SPECULAR GL_POSITION GL_SPOT_DIRECTION GL_SPOT_EXPONENT GL_SPOT_CUTOFF GL_CONSTANT_ATTENUATION GL_LINEAR_ATTENUATION GL_QUADRATIC_ATTENUATION GL_COMPILE GL_COMPILE_AND_EXECUTE GL_BYTE GL_UNSIGNED_BYTE GL_SHORT GL_UNSIGNED_SHORT GL_INT GL_UNSIGNED_INT GL_FLOAT GL_2_BYTES GL_3_BYTES GL_4_BYTES GL_DOUBLE GL_HALF_FLOAT_ARB GL_FIXED GL_CLEAR GL_AND GL_AND_REVERSE GL_COPY GL_AND_INVERTED GL_NOOP GL_XOR GL_OR GL_NOR GL_EQUIV GL_INVERT GL_OR_REVERSE GL_COPY_INVERTED GL_OR_INVERTED GL_NAND GL_SET GL_EMISSION GL_SHININESS GL_AMBIENT_AND_DIFFUSE GL_COLOR_INDEXES GL_MODELVIEW GL_PROJECTION GL_TEXTURE GL_COLOR GL_DEPTH GL_STENCIL GL_COLOR_INDEX GL_STENCIL_INDEX GL_DEPTH_COMPONENT GL_RED GL_GREEN GL_BLUE GL_ALPHA GL_RGB GL_RGBA GL_LUMINANCE GL_LUMINANCE_ALPHA GL_BITMAP GL_POINT GL_LINE GL_FILL GL_RENDER GL_FEEDBACK GL_SELECT GL_FLAT GL_SMOOTH GL_KEEP GL_REPLACE GL_INCR GL_DECR GL_VENDOR GL_RENDERER GL_VERSION GL_EXTENSIONS GL_S GL_T GL_R GL_Q GL_MODULATE GL_DECAL GL_TEXTURE_ENV_MODE GL_TEXTURE_ENV_COLOR GL_TEXTURE_ENV GL_EYE_LINEAR GL_OBJECT_LINEAR GL_SPHERE_MAP GL_TEXTURE_GEN_MODE GL_OBJECT_PLANE GL_EYE_PLANE GL_NEAREST GL_LINEAR GL_NEAREST_MIPMAP_NEAREST GL_LINEAR_MIPMAP_NEAREST GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR GL_TEXTURE_MAG_FILTER GL_TEXTURE_MIN_FILTER GL_TEXTURE_WRAP_S GL_TEXTURE_WRAP_T GL_CLAMP GL_REPEAT GL_POLYGON_OFFSET_UNITS GL_POLYGON_OFFSET_POINT GL_POLYGON_OFFSET_LINE GL_R3_G3_B2 GL_V2F GL_V3F GL_C4UB_V2F GL_C4UB_V3F GL_C3F_V3F GL_N3F_V3F GL_C4F_N3F_V3F GL_T2F_V3F GL_T4F_V4F GL_T2F_C4UB_V3F GL_T2F_C3F_V3F GL_T2F_N3F_V3F GL_T2F_C4F_N3F_V3F GL_T4F_C4F_N3F_V4F GL_CLIP_PLANE0 GL_CLIP_PLANE1 GL_CLIP_PLANE2 GL_CLIP_PLANE3 GL_CLIP_PLANE4 GL_CLIP_PLANE5 GL_CLIP_DISTANCE6 GL_CLIP_DISTANCE7 GL_LIGHT0 GL_LIGHT1 GL_LIGHT2 GL_LIGHT3 GL_LIGHT4 GL_LIGHT5 GL_LIGHT6 GL_LIGHT7 GL_PN_TRIANGLES_ATI GL_MAX_PN_TRIANGLES_TESSELATION_LEVEL_ATI GL_PN_TRIANGLES_POINT_MODE_ATI GL_PN_TRIANGLES_NORMAL_MODE_ATI GL_PN_TRIANGLES_TESSELATION_LEVEL_ATI GL_PN_TRIANGLES_POINT_MODE_LINEAR_ATI GL_PN_TRIANGLES_POINT_MODE_CUBIC_ATI GL_PN_TRIANGLES_NORMAL_MODE_LINEAR_ATI GL_PN_TRIANGLES_NORMAL_MODE_QUADRATIC_ATI GL_POINT_CULL_MODE_ATI GL_POINT_CULL_CENTER_ATI GL_POINT_CULL_CLIP_ATI GL_ABGR_EXT GL_CONSTANT_COLOR GL_ONE_MINUS_CONSTANT_COLOR GL_CONSTANT_ALPHA GL_ONE_MINUS_CONSTANT_ALPHA GL_BLEND_COLOR GL_FUNC_ADD GL_MIN GL_MAX GL_BLEND_EQUATION GL_FUNC_SUBTRACT GL_FUNC_REVERSE_SUBTRACT GL_CONVOLUTION_1D GL_CONVOLUTION_2D GL_SEPARABLE_2D GL_CONVOLUTION_BORDER_MODE GL_CONVOLUTION_FILTER_SCALE GL_CONVOLUTION_FILTER_BIAS GL_REDUCE GL_CONVOLUTION_FORMAT GL_CONVOLUTION_WIDTH GL_CONVOLUTION_HEIGHT GL_MAX_CONVOLUTION_WIDTH GL_MAX_CONVOLUTION_HEIGHT GL_POST_CONVOLUTION_RED_SCALE GL_POST_CONVOLUTION_GREEN_SCALE GL_POST_CONVOLUTION_BLUE_SCALE GL_POST_CONVOLUTION_ALPHA_SCALE GL_POST_CONVOLUTION_RED_BIAS GL_POST_CONVOLUTION_GREEN_BIAS GL_POST_CONVOLUTION_BLUE_BIAS GL_POST_CONVOLUTION_ALPHA_BIAS GL_HISTOGRAM GL_PROXY_HISTOGRAM GL_HISTOGRAM_WIDTH GL_HISTOGRAM_FORMAT GL_HISTOGRAM_RED_SIZE GL_HISTOGRAM_GREEN_SIZE GL_HISTOGRAM_BLUE_SIZE GL_HISTOGRAM_ALPHA_SIZE GL_HISTOGRAM_LUMINANCE_SIZE GL_HISTOGRAM_SINK GL_MINMAX GL_MINMAX_FORMAT GL_MINMAX_SINK GL_TABLE_TOO_LARGE GL_UNSIGNED_BYTE_3_3_2 GL_UNSIGNED_SHORT_4_4_4_4 GL_UNSIGNED_SHORT_5_5_5_1 GL_UNSIGNED_INT_8_8_8_8 GL_UNSIGNED_INT_10_10_10_2 GL_POLYGON_OFFSET_FILL GL_POLYGON_OFFSET_FACTOR GL_POLYGON_OFFSET_BIAS_EXT GL_RESCALE_NORMAL GL_ALPHA4 GL_ALPHA8 GL_ALPHA12 GL_ALPHA16 GL_LUMINANCE4 GL_LUMINANCE8 GL_LUMINANCE12 GL_LUMINANCE16 GL_LUMINANCE4_ALPHA4 GL_LUMINANCE6_ALPHA2 GL_LUMINANCE8_ALPHA8 GL_LUMINANCE12_ALPHA4 GL_LUMINANCE12_ALPHA12 GL_LUMINANCE16_ALPHA16 GL_INTENSITY GL_INTENSITY4 GL_INTENSITY8 GL_INTENSITY12 GL_INTENSITY16 GL_RGB2_EXT GL_RGB4 GL_RGB5 GL_RGB8 GL_RGB10 GL_RGB12 GL_RGB16 GL_RGBA2 GL_RGBA4 GL_RGB5_A1 GL_RGBA8 GL_RGB10_A2 GL_RGBA12 GL_RGBA16 GL_TEXTURE_RED_SIZE GL_TEXTURE_GREEN_SIZE GL_TEXTURE_BLUE_SIZE GL_TEXTURE_ALPHA_SIZE GL_TEXTURE_LUMINANCE_SIZE GL_TEXTURE_INTENSITY_SIZE GL_REPLACE_EXT GL_PROXY_TEXTURE_1D GL_PROXY_TEXTURE_2D GL_TEXTURE_TOO_LARGE_EXT GL_TEXTURE_PRIORITY GL_TEXTURE_RESIDENT GL_TEXTURE_BINDING_1D GL_TEXTURE_BINDING_2D GL_TEXTURE_BINDING_3D GL_PACK_SKIP_IMAGES GL_PACK_IMAGE_HEIGHT GL_UNPACK_SKIP_IMAGES GL_UNPACK_IMAGE_HEIGHT GL_TEXTURE_3D GL_PROXY_TEXTURE_3D GL_TEXTURE_DEPTH GL_TEXTURE_WRAP_R GL_MAX_3D_TEXTURE_SIZE GL_VERTEX_ARRAY GL_NORMAL_ARRAY GL_COLOR_ARRAY GL_INDEX_ARRAY GL_TEXTURE_COORD_ARRAY GL_EDGE_FLAG_ARRAY GL_VERTEX_ARRAY_SIZE GL_VERTEX_ARRAY_TYPE GL_VERTEX_ARRAY_STRIDE GL_VERTEX_ARRAY_COUNT_EXT GL_NORMAL_ARRAY_TYPE GL_NORMAL_ARRAY_STRIDE GL_NORMAL_ARRAY_COUNT_EXT GL_COLOR_ARRAY_SIZE GL_COLOR_ARRAY_TYPE GL_COLOR_ARRAY_STRIDE GL_COLOR_ARRAY_COUNT_EXT GL_INDEX_ARRAY_TYPE GL_INDEX_ARRAY_STRIDE GL_INDEX_ARRAY_COUNT_EXT GL_TEXTURE_COORD_ARRAY_SIZE GL_TEXTURE_COORD_ARRAY_TYPE GL_TEXTURE_COORD_ARRAY_STRIDE GL_TEXTURE_COORD_ARRAY_COUNT_EXT GL_EDGE_FLAG_ARRAY_STRIDE GL_EDGE_FLAG_ARRAY_COUNT_EXT GL_VERTEX_ARRAY_POINTER GL_NORMAL_ARRAY_POINTER GL_COLOR_ARRAY_POINTER GL_INDEX_ARRAY_POINTER GL_TEXTURE_COORD_ARRAY_POINTER GL_EDGE_FLAG_ARRAY_POINTER GL_MULTISAMPLE GL_SAMPLE_ALPHA_TO_COVERAGE GL_SAMPLE_ALPHA_TO_ONE GL_SAMPLE_COVERAGE GL_SAMPLE_BUFFERS GL_SAMPLES GL_SAMPLE_COVERAGE_VALUE GL_SAMPLE_COVERAGE_INVERT GL_COLOR_MATRIX GL_COLOR_MATRIX_STACK_DEPTH GL_MAX_COLOR_MATRIX_STACK_DEPTH GL_POST_COLOR_MATRIX_RED_SCALE GL_POST_COLOR_MATRIX_GREEN_SCALE GL_POST_COLOR_MATRIX_BLUE_SCALE GL_POST_COLOR_MATRIX_ALPHA_SCALE GL_POST_COLOR_MATRIX_RED_BIAS GL_POST_COLOR_MATRIX_GREEN_BIAS GL_POST_COLOR_MATRIX_BLUE_BIAS GL_POST_COLOR_MATRIX_ALPHA_BIAS GL_TEXTURE_COMPARE_FAIL_VALUE_ARB GL_BLEND_DST_RGB GL_BLEND_SRC_RGB GL_BLEND_DST_ALPHA GL_BLEND_SRC_ALPHA GL_COLOR_TABLE GL_POST_CONVOLUTION_COLOR_TABLE GL_POST_COLOR_MATRIX_COLOR_TABLE GL_PROXY_COLOR_TABLE GL_PROXY_POST_CONVOLUTION_COLOR_TABLE GL_PROXY_POST_COLOR_MATRIX_COLOR_TABLE GL_COLOR_TABLE_SCALE GL_COLOR_TABLE_BIAS GL_COLOR_TABLE_FORMAT GL_COLOR_TABLE_WIDTH GL_COLOR_TABLE_RED_SIZE GL_COLOR_TABLE_GREEN_SIZE GL_COLOR_TABLE_BLUE_SIZE GL_COLOR_TABLE_ALPHA_SIZE GL_COLOR_TABLE_LUMINANCE_SIZE GL_COLOR_TABLE_INTENSITY_SIZE GL_BGR GL_BGRA GL_COLOR_INDEX1_EXT GL_COLOR_INDEX2_EXT GL_COLOR_INDEX4_EXT GL_COLOR_INDEX8_EXT GL_COLOR_INDEX12_EXT GL_COLOR_INDEX16_EXT GL_MAX_ELEMENTS_VERTICES GL_MAX_ELEMENTS_INDICES GL_TEXTURE_INDEX_SIZE_EXT GL_CLIP_VOLUME_CLIPPING_HINT_EXT GL_POINT_SIZE_MIN GL_POINT_SIZE_MAX GL_POINT_FADE_THRESHOLD_SIZE GL_POINT_DISTANCE_ATTENUATION GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_TEXTURE_MIN_LOD GL_TEXTURE_MAX_LOD GL_TEXTURE_BASE_LEVEL GL_TEXTURE_MAX_LEVEL GL_IGNORE_BORDER_HP GL_CONSTANT_BORDER GL_REPLICATE_BORDER GL_CONVOLUTION_BORDER_COLOR GL_GENERATE_MIPMAP GL_GENERATE_MIPMAP_HINT GL_DEPTH_COMPONENT16 GL_DEPTH_COMPONENT24 GL_DEPTH_COMPONENT32 GL_ARRAY_ELEMENT_LOCK_FIRST_EXT GL_ARRAY_ELEMENT_LOCK_COUNT_EXT GL_LIGHT_MODEL_COLOR_CONTROL GL_SINGLE_COLOR GL_SEPARATE_SPECULAR_COLOR GL_SHARED_TEXTURE_PALETTE_EXT GL_TEXT_FRAGMENT_SHADER_ATI GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE GL_FRAMEBUFFER_DEFAULT GL_FRAMEBUFFER_UNDEFINED GL_DEPTH_STENCIL_ATTACHMENT GL_MAJOR_VERSION GL_MINOR_VERSION GL_NUM_EXTENSIONS GL_CONTEXT_FLAGS GL_COMPRESSED_RED GL_COMPRESSED_RG GL_RG GL_RG_INTEGER GL_R8 GL_R16 GL_RG8 GL_RG16 GL_R16F GL_R32F GL_RG16F GL_RG32F GL_R8I GL_R8UI GL_R16I GL_R16UI GL_R32I GL_R32UI GL_RG8I GL_RG8UI GL_RG16I GL_RG16UI GL_RG32I GL_RG32UI GL_PROGRAM_BINARY_RETRIEVABLE_HINT GL_PROGRAM_SEPARABLE GL_ACTIVE_PROGRAM GL_PROGRAM_PIPELINE_BINDING GL_MAX_VIEWPORTS GL_VIEWPORT_BOUNDS_RANGE GL_LAYER_PROVOKING_VERTEX GL_VIEWPORT_INDEX_PROVOKING_VERTEX GL_UNDEFINED_VERTEX GL_SAMPLER GL_UNSIGNED_BYTE_2_3_3_REV GL_UNSIGNED_SHORT_5_6_5 GL_UNSIGNED_SHORT_5_6_5_REV GL_UNSIGNED_SHORT_4_4_4_4_REV GL_UNSIGNED_SHORT_1_5_5_5_REV GL_UNSIGNED_INT_8_8_8_8_REV GL_UNSIGNED_INT_2_10_10_10_REV GL_MIRRORED_REPEAT GL_COMPRESSED_RGB_S3TC_DXT1_EXT GL_COMPRESSED_RGBA_S3TC_DXT1_EXT GL_COMPRESSED_RGBA_S3TC_DXT3_EXT GL_COMPRESSED_RGBA_S3TC_DXT5_EXT GL_FOG_COORD_SRC GL_FOG_COORD GL_FRAGMENT_DEPTH GL_CURRENT_FOG_COORD GL_FOG_COORD_ARRAY_TYPE GL_FOG_COORD_ARRAY_STRIDE GL_FOG_COORD_ARRAY_POINTER GL_FOG_COORD_ARRAY GL_COLOR_SUM GL_CURRENT_SECONDARY_COLOR GL_SECONDARY_COLOR_ARRAY_SIZE GL_SECONDARY_COLOR_ARRAY_TYPE GL_SECONDARY_COLOR_ARRAY_STRIDE GL_SECONDARY_COLOR_ARRAY_POINTER GL_SECONDARY_COLOR_ARRAY GL_CURRENT_RASTER_SECONDARY_COLOR GL_ALIASED_POINT_SIZE_RANGE GL_ALIASED_LINE_WIDTH_RANGE GL_TEXTURE0 GL_TEXTURE1 GL_TEXTURE2 GL_TEXTURE3 GL_TEXTURE4 GL_TEXTURE5 GL_TEXTURE6 GL_TEXTURE7 GL_TEXTURE8 GL_TEXTURE9 GL_TEXTURE10 GL_TEXTURE11 GL_TEXTURE12 GL_TEXTURE13 GL_TEXTURE14 GL_TEXTURE15 GL_TEXTURE16 GL_TEXTURE17 GL_TEXTURE18 GL_TEXTURE19 GL_TEXTURE20 GL_TEXTURE21 GL_TEXTURE22 GL_TEXTURE23 GL_TEXTURE24 GL_TEXTURE25 GL_TEXTURE26 GL_TEXTURE27 GL_TEXTURE28 GL_TEXTURE29 GL_TEXTURE30 GL_TEXTURE31 GL_ACTIVE_TEXTURE GL_CLIENT_ACTIVE_TEXTURE GL_MAX_TEXTURE_UNITS GL_TRANSPOSE_MODELVIEW_MATRIX GL_TRANSPOSE_PROJECTION_MATRIX GL_TRANSPOSE_TEXTURE_MATRIX GL_TRANSPOSE_COLOR_MATRIX GL_SUBTRACT GL_MAX_RENDERBUFFER_SIZE GL_COMPRESSED_ALPHA GL_COMPRESSED_LUMINANCE GL_COMPRESSED_LUMINANCE_ALPHA GL_COMPRESSED_INTENSITY GL_COMPRESSED_RGB GL_COMPRESSED_RGBA GL_TEXTURE_COMPRESSION_HINT GL_UNIFORM_BLOCK_REFERENCED_BY_TESS_CONTROL_SHADER GL_UNIFORM_BLOCK_REFERENCED_BY_TESS_EVALUATION_SHADER GL_TEXTURE_RECTANGLE_ARB GL_TEXTURE_BINDING_RECTANGLE_ARB GL_PROXY_TEXTURE_RECTANGLE_ARB GL_MAX_RECTANGLE_TEXTURE_SIZE_ARB GL_DEPTH_STENCIL GL_UNSIGNED_INT_24_8 GL_MAX_TEXTURE_LOD_BIAS GL_TEXTURE_MAX_ANISOTROPY_EXT GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT GL_TEXTURE_FILTER_CONTROL GL_TEXTURE_LOD_BIAS GL_MAX_SHININESS_NV GL_MAX_SPOT_EXPONENT_NV GL_INCR_WRAP GL_DECR_WRAP GL_MODELVIEW1_ARB GL_NORMAL_MAP GL_REFLECTION_MAP GL_TEXTURE_CUBE_MAP GL_TEXTURE_BINDING_CUBE_MAP GL_TEXTURE_CUBE_MAP_POSITIVE_X GL_TEXTURE_CUBE_MAP_NEGATIVE_X GL_TEXTURE_CUBE_MAP_POSITIVE_Y GL_TEXTURE_CUBE_MAP_NEGATIVE_Y GL_TEXTURE_CUBE_MAP_POSITIVE_Z GL_TEXTURE_CUBE_MAP_NEGATIVE_Z GL_PROXY_TEXTURE_CUBE_MAP GL_MAX_CUBE_MAP_TEXTURE_SIZE GL_VERTEX_ARRAY_RANGE_APPLE GL_VERTEX_ARRAY_RANGE_LENGTH_APPLE GL_VERTEX_ARRAY_STORAGE_HINT_APPLE GL_MAX_VERTEX_ARRAY_RANGE_ELEMENT_APPLE GL_VERTEX_ARRAY_RANGE_POINTER_APPLE GL_REGISTER_COMBINERS_NV GL_VARIABLE_A_NV GL_VARIABLE_B_NV GL_VARIABLE_C_NV GL_VARIABLE_D_NV GL_VARIABLE_E_NV GL_VARIABLE_F_NV GL_VARIABLE_G_NV GL_CONSTANT_COLOR0_NV GL_CONSTANT_COLOR1_NV GL_PRIMARY_COLOR_NV GL_SECONDARY_COLOR_NV GL_SPARE0_NV GL_SPARE1_NV GL_DISCARD_NV GL_E_TIMES_F_NV GL_SPARE0_PLUS_SECONDARY_COLOR_NV GL_VERTEX_ARRAY_RANGE_WITHOUT_FLUSH_NV GL_MULTISAMPLE_FILTER_HINT_NV GL_PER_STAGE_CONSTANTS_NV GL_UNSIGNED_IDENTITY_NV GL_UNSIGNED_INVERT_NV GL_EXPAND_NORMAL_NV GL_EXPAND_NEGATE_NV GL_HALF_BIAS_NORMAL_NV GL_HALF_BIAS_NEGATE_NV GL_SIGNED_IDENTITY_NV GL_SIGNED_NEGATE_NV GL_SCALE_BY_TWO_NV GL_SCALE_BY_FOUR_NV GL_SCALE_BY_ONE_HALF_NV GL_BIAS_BY_NEGATIVE_ONE_HALF_NV GL_COMBINER_INPUT_NV GL_COMBINER_MAPPING_NV GL_COMBINER_COMPONENT_USAGE_NV GL_COMBINER_AB_DOT_PRODUCT_NV GL_COMBINER_CD_DOT_PRODUCT_NV GL_COMBINER_MUX_SUM_NV GL_COMBINER_SCALE_NV GL_COMBINER_BIAS_NV GL_COMBINER_AB_OUTPUT_NV GL_COMBINER_CD_OUTPUT_NV GL_COMBINER0_NV
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_BORDER_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_MAG_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_MIN_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR GL_NEAREST_MIPMAP_NEAREST GL_LINEAR_MIPMAP_NEAREST GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR | rejected enum 1841 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_WRAP_S: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_WRAP_T: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_WRAP_R: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_MIN_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_MAX_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_BASE_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_MAX_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_MAX_ANISOTROPY_EXT: get 0 set 0 values: 1846 enums | rejected enum 0 value 1 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_MINIMIZE_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_RANGE_LENGTH_APPLE: get 0 set 0x500
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_STORAGE_HINT_APPLE: get 0 set 0 values: GL_STORAGE_PRIVATE_APPLE GL_STORAGE_CACHED_APPLE GL_STORAGE_SHARED_APPLE | rejected enum 1844 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_COMPARE_MODE: get 0 set 0 values: GL_POINTS GL_COMPARE_R_TO_TEXTURE | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_COMPARE_FUNC: get 0 set 0 values: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS | rejected enum 1839 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_SRGB_DECODE_EXT: get 0 set 0 values: GL_DECODE_EXT GL_SKIP_DECODE_EXT | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_SWIZZLE_R: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_SWIZZLE_G: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_SWIZZLE_B: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_SWIZZLE_A: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_SWIZZLE_RGBA: get 0 set 0x502
+core glTexParameteri(GL_TEXTURE_1D) GL_TEXTURE_IMMUTABLE_FORMAT: get 0 set 0x500
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_BORDER_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_MAG_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_MIN_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR GL_NEAREST_MIPMAP_NEAREST GL_LINEAR_MIPMAP_NEAREST GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR | rejected enum 1841 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_WRAP_S: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_WRAP_T: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_WRAP_R: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_MIN_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_MAX_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_BASE_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_MAX_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_MAX_ANISOTROPY_EXT: get 0 set 0 values: 1846 enums | rejected enum 0 value 1 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_MINIMIZE_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_RANGE_LENGTH_APPLE: get 0 set 0x500
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_STORAGE_HINT_APPLE: get 0 set 0 values: GL_STORAGE_PRIVATE_APPLE GL_STORAGE_CACHED_APPLE GL_STORAGE_SHARED_APPLE | rejected enum 1844 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_COMPARE_MODE: get 0 set 0 values: GL_POINTS GL_COMPARE_R_TO_TEXTURE | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_COMPARE_FUNC: get 0 set 0 values: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS | rejected enum 1839 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_SRGB_DECODE_EXT: get 0 set 0 values: GL_DECODE_EXT GL_SKIP_DECODE_EXT | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_SWIZZLE_R: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_SWIZZLE_G: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_SWIZZLE_B: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_SWIZZLE_A: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_SWIZZLE_RGBA: get 0 set 0x502
+core glTexParameteri(GL_TEXTURE_2D) GL_TEXTURE_IMMUTABLE_FORMAT: get 0 set 0x500
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_BORDER_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_MAG_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_MIN_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR GL_NEAREST_MIPMAP_NEAREST GL_LINEAR_MIPMAP_NEAREST GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR | rejected enum 1841 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_WRAP_S: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_WRAP_T: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_WRAP_R: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_MIN_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_MAX_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_BASE_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_MAX_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_MAX_ANISOTROPY_EXT: get 0 set 0 values: 1846 enums | rejected enum 0 value 1 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_MINIMIZE_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_RANGE_LENGTH_APPLE: get 0 set 0x500
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_STORAGE_HINT_APPLE: get 0 set 0 values: GL_STORAGE_PRIVATE_APPLE GL_STORAGE_CACHED_APPLE GL_STORAGE_SHARED_APPLE | rejected enum 1844 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_COMPARE_MODE: get 0 set 0 values: GL_POINTS GL_COMPARE_R_TO_TEXTURE | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_COMPARE_FUNC: get 0 set 0 values: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS | rejected enum 1839 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_SRGB_DECODE_EXT: get 0 set 0 values: GL_DECODE_EXT GL_SKIP_DECODE_EXT | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_SWIZZLE_R: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_SWIZZLE_G: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_SWIZZLE_B: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_SWIZZLE_A: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_SWIZZLE_RGBA: get 0 set 0x502
+core glTexParameteri(GL_TEXTURE_3D) GL_TEXTURE_IMMUTABLE_FORMAT: get 0 set 0x500
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_BORDER_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_MAG_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_MIN_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR GL_NEAREST_MIPMAP_NEAREST GL_LINEAR_MIPMAP_NEAREST GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR | rejected enum 1841 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_WRAP_S: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_WRAP_T: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_WRAP_R: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_MIN_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_MAX_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_BASE_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_MAX_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_MAX_ANISOTROPY_EXT: get 0 set 0 values: 1846 enums | rejected enum 0 value 1 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_MINIMIZE_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_RANGE_LENGTH_APPLE: get 0 set 0x500
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_STORAGE_HINT_APPLE: get 0 set 0 values: GL_STORAGE_PRIVATE_APPLE GL_STORAGE_CACHED_APPLE GL_STORAGE_SHARED_APPLE | rejected enum 1844 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_COMPARE_MODE: get 0 set 0 values: GL_POINTS GL_COMPARE_R_TO_TEXTURE | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_COMPARE_FUNC: get 0 set 0 values: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS | rejected enum 1839 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_SRGB_DECODE_EXT: get 0 set 0 values: GL_DECODE_EXT GL_SKIP_DECODE_EXT | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_SWIZZLE_R: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_SWIZZLE_G: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_SWIZZLE_B: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_SWIZZLE_A: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_SWIZZLE_RGBA: get 0 set 0x502
+core glTexParameteri(GL_TEXTURE_CUBE_MAP) GL_TEXTURE_IMMUTABLE_FORMAT: get 0 set 0x500
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_BORDER_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_MAG_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_MIN_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_WRAP_S: get 0 set 0 values: GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_WRAP_T: get 0 set 0 values: GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_WRAP_R: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_MIN_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_MAX_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_BASE_LEVEL: get 0 set 0 values: GL_POINTS | rejected enum 0 value 1846 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_MAX_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_MAX_ANISOTROPY_EXT: get 0 set 0 values: 1846 enums | rejected enum 0 value 1 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_MINIMIZE_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_RANGE_LENGTH_APPLE: get 0 set 0x500
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_STORAGE_HINT_APPLE: get 0 set 0 values: GL_STORAGE_PRIVATE_APPLE GL_STORAGE_CACHED_APPLE GL_STORAGE_SHARED_APPLE | rejected enum 1844 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_COMPARE_MODE: get 0 set 0 values: GL_POINTS GL_COMPARE_R_TO_TEXTURE | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_COMPARE_FUNC: get 0 set 0 values: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS | rejected enum 1839 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_SRGB_DECODE_EXT: get 0 set 0 values: GL_DECODE_EXT GL_SKIP_DECODE_EXT | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_SWIZZLE_R: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_SWIZZLE_G: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_SWIZZLE_B: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_SWIZZLE_A: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_SWIZZLE_RGBA: get 0 set 0x502
+core glTexParameteri(GL_TEXTURE_RECTANGLE_ARB) GL_TEXTURE_IMMUTABLE_FORMAT: get 0 set 0x500
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_BORDER_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_MAG_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_MIN_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR GL_NEAREST_MIPMAP_NEAREST GL_LINEAR_MIPMAP_NEAREST GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR | rejected enum 1841 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_WRAP_S: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_WRAP_T: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_WRAP_R: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_MIN_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_MAX_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_BASE_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_MAX_LEVEL: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_MAX_ANISOTROPY_EXT: get 0 set 0 values: 1846 enums | rejected enum 0 value 1 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_MINIMIZE_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_RANGE_LENGTH_APPLE: get 0 set 0x500
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_STORAGE_HINT_APPLE: get 0 set 0 values: GL_STORAGE_PRIVATE_APPLE GL_STORAGE_CACHED_APPLE GL_STORAGE_SHARED_APPLE | rejected enum 1844 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_COMPARE_MODE: get 0 set 0 values: GL_POINTS GL_COMPARE_R_TO_TEXTURE | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_COMPARE_FUNC: get 0 set 0 values: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS | rejected enum 1839 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_SRGB_DECODE_EXT: get 0 set 0 values: GL_DECODE_EXT GL_SKIP_DECODE_EXT | rejected enum 1845 value 0 operation 0
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_SWIZZLE_R: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_SWIZZLE_G: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_SWIZZLE_B: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_SWIZZLE_A: get 0 set 0 values: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_RED GL_GREEN GL_BLUE GL_ALPHA | rejected enum 0 value 0 operation 1841
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_SWIZZLE_RGBA: get 0 set 0x502
+core glTexParameteri(GL_TEXTURE_2D_ARRAY_EXT) GL_TEXTURE_IMMUTABLE_FORMAT: get 0 set 0x500
+core glPixelStorei GL_UNPACK_SWAP_BYTES: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_UNPACK_LSB_FIRST: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_UNPACK_ROW_LENGTH: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_UNPACK_SKIP_ROWS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_UNPACK_SKIP_PIXELS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_UNPACK_ALIGNMENT: get 0 set 0 values: GL_GLEXT_FUNCTION_POINTERS GL_LINE_LOOP GL_TRIANGLES GL_QUAD_STRIP | rejected enum 0 value 1843 operation 0
+core glPixelStorei GL_PACK_SWAP_BYTES: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_PACK_LSB_FIRST: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_PACK_ROW_LENGTH: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_PACK_SKIP_ROWS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_PACK_SKIP_PIXELS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_PACK_ALIGNMENT: get 0 set 0 values: GL_GLEXT_FUNCTION_POINTERS GL_LINE_LOOP GL_TRIANGLES GL_QUAD_STRIP | rejected enum 0 value 1843 operation 0
+core glPixelStorei GL_PACK_SKIP_IMAGES: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_PACK_IMAGE_HEIGHT: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_UNPACK_SKIP_IMAGES: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_UNPACK_IMAGE_HEIGHT: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_UNPACK_CLIENT_STORAGE_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_PACK_ROW_BYTES_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_UNPACK_ROW_BYTES_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_PACK_IMAGE_BYTES_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPixelStorei GL_UNPACK_IMAGE_BYTES_APPLE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glHint GL_LINE_SMOOTH_HINT: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+core glHint GL_POLYGON_SMOOTH_HINT: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+core glHint GL_TEXTURE_COMPRESSION_HINT: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+core glHint GL_FRAGMENT_SHADER_DERIVATIVE_HINT: get 0 set 0 values: GL_DONT_CARE GL_FASTEST GL_NICEST | rejected enum 1844 value 0 operation 0
+core glPointParameteri GL_POINT_SIZE_MIN: get 0x500 set 0
+core glPointParameteri GL_POINT_SIZE_MAX: get 0x500 set 0
+core glPointParameteri GL_POINT_FADE_THRESHOLD_SIZE: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glPointParameteri GL_POINT_SPRITE_R_MODE_NV: get 0x500 set 0
+core glPointParameteri GL_POINT_SPRITE_COORD_ORIGIN: get 0 set 0 values: GL_LOWER_LEFT GL_UPPER_LEFT | rejected enum 1845 value 0 operation 0
+core glSamplerParameteri GL_TEXTURE_BORDER_COLOR: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glSamplerParameteri GL_TEXTURE_MAG_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR | rejected enum 1845 value 0 operation 0
+core glSamplerParameteri GL_TEXTURE_MIN_FILTER: get 0 set 0 values: GL_NEAREST GL_LINEAR GL_NEAREST_MIPMAP_NEAREST GL_LINEAR_MIPMAP_NEAREST GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR | rejected enum 1841 value 0 operation 0
+core glSamplerParameteri GL_TEXTURE_WRAP_S: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glSamplerParameteri GL_TEXTURE_WRAP_T: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glSamplerParameteri GL_TEXTURE_WRAP_R: get 0 set 0 values: GL_REPEAT GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_MIRRORED_REPEAT GL_MIRROR_CLAMP_EXT GL_MIRROR_CLAMP_TO_EDGE_EXT GL_MIRROR_CLAMP_TO_BORDER_EXT | rejected enum 1840 value 0 operation 0
+core glSamplerParameteri GL_TEXTURE_MIN_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glSamplerParameteri GL_TEXTURE_MAX_LOD: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glSamplerParameteri GL_TEXTURE_MAX_ANISOTROPY_EXT: get 0 set 0 values: 1846 enums | rejected enum 0 value 1 operation 0
+core glSamplerParameteri GL_TEXTURE_LOD_BIAS: get 0 set 0 values: 1847 enums | rejected enum 0 value 0 operation 0
+core glSamplerParameteri GL_TEXTURE_COMPARE_MODE: get 0 set 0 values: GL_POINTS GL_COMPARE_R_TO_TEXTURE | rejected enum 1845 value 0 operation 0
+core glSamplerParameteri GL_TEXTURE_COMPARE_FUNC: get 0 set 0 values: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS | rejected enum 1839 value 0 operation 0
+core glSamplerParameteri GL_TEXTURE_SRGB_DECODE_EXT: get 0 set 0 values: GL_DECODE_EXT GL_SKIP_DECODE_EXT | rejected enum 1845 value 0 operation 0
+core glGetTexLevelParameteriv GL_TEXTURE_WIDTH: 4
+core glGetTexLevelParameteriv GL_TEXTURE_HEIGHT: 4
+core glGetTexLevelParameteriv GL_TEXTURE_INTERNAL_FORMAT: 32856
+core glGetTexLevelParameteriv GL_TEXTURE_RED_SIZE: 8
+core glGetTexLevelParameteriv GL_TEXTURE_GREEN_SIZE: 8
+core glGetTexLevelParameteriv GL_TEXTURE_BLUE_SIZE: 8
+core glGetTexLevelParameteriv GL_TEXTURE_ALPHA_SIZE: 8
+core glGetTexLevelParameteriv GL_TEXTURE_DEPTH: 1
+core glGetTexLevelParameteriv GL_TEXTURE_COMPRESSED_IMAGE_SIZE: error 0x502
+core glGetTexLevelParameteriv GL_TEXTURE_COMPRESSED: 0
+core glGetTexLevelParameteriv GL_TEXTURE_DEPTH_SIZE: 0
+core glGetTexLevelParameteriv GL_TEXTURE_STENCIL_SIZE: 0
+core glGetTexLevelParameteriv GL_TEXTURE_RED_TYPE: 35863
+core glGetTexLevelParameteriv GL_TEXTURE_GREEN_TYPE: 35863
+core glGetTexLevelParameteriv GL_TEXTURE_BLUE_TYPE: 35863
+core glGetTexLevelParameteriv GL_TEXTURE_ALPHA_TYPE: 35863
+core glGetTexLevelParameteriv GL_TEXTURE_DEPTH_TYPE: 0
+core glGetTexLevelParameteriv GL_TEXTURE_BUFFER_DATA_STORE_BINDING: 0
+core glGetTexLevelParameteriv GL_TEXTURE_SHARED_SIZE_EXT: 0
+core glGetTexLevelParameteriv GL_TEXTURE_SAMPLES: 0
+core glGetTexLevelParameteriv GL_TEXTURE_FIXED_SAMPLE_LOCATIONS: 1
+core glGetBufferParameteriv GL_BUFFER_SIZE: 64
+core glGetBufferParameteriv GL_BUFFER_USAGE: 35044
+core glGetBufferParameteriv GL_BUFFER_ACCESS: 35002
+core glGetBufferParameteriv GL_BUFFER_MAPPED: 0
+core glGetBufferParameteriv GL_BUFFER_ACCESS_FLAGS: 0
+core glGetBufferParameteriv GL_BUFFER_MAP_LENGTH: 0
+core glGetBufferParameteriv GL_BUFFER_MAP_OFFSET: 0
+core glGetRenderbufferParameteriv GL_RENDERBUFFER_SAMPLES: 0
+core glGetRenderbufferParameteriv GL_RENDERBUFFER_WIDTH: 4
+core glGetRenderbufferParameteriv GL_RENDERBUFFER_HEIGHT: 4
+core glGetRenderbufferParameteriv GL_RENDERBUFFER_INTERNAL_FORMAT: 32856
+core glGetRenderbufferParameteriv GL_RENDERBUFFER_RED_SIZE: 8
+core glGetRenderbufferParameteriv GL_RENDERBUFFER_GREEN_SIZE: 8
+core glGetRenderbufferParameteriv GL_RENDERBUFFER_BLUE_SIZE: 8
+core glGetRenderbufferParameteriv GL_RENDERBUFFER_ALPHA_SIZE: 8
+core glGetRenderbufferParameteriv GL_RENDERBUFFER_DEPTH_SIZE: 0
+core glGetRenderbufferParameteriv GL_RENDERBUFFER_STENCIL_SIZE: 0
+core glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING: 9729
+core glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE: 35863
+core glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE: 8
+core glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE: 8
+core glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE: 8
+core glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE: 8
+core glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE: 0
+core glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE: 0
+core glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE: 36161
+core glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME: 1
+core glGetFramebufferAttachmentParameteriv GL_FRAMEBUFFER_ATTACHMENT_LAYERED_EXT: 0
+core glGetQueryiv GL_QUERY_COUNTER_BITS_ARB: 32
+core glGetQueryiv GL_CURRENT_QUERY: 0
+core glGetShaderiv GL_PROGRAM_BINARY_RETRIEVABLE_HINT: error 0x502
+core glGetShaderiv GL_PROGRAM_SEPARABLE: error 0x502
+core glGetShaderiv GL_PROGRAM_BINARY_LENGTH: error 0x502
+core glGetShaderiv GL_GEOMETRY_SHADER_INVOCATIONS: error 0x502
+core glGetShaderiv GL_GEOMETRY_VERTICES_OUT: error 0x502
+core glGetShaderiv GL_GEOMETRY_INPUT_TYPE: error 0x502
+core glGetShaderiv GL_GEOMETRY_OUTPUT_TYPE: error 0x502
+core glGetShaderiv GL_ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH: error 0x502
+core glGetShaderiv GL_ACTIVE_UNIFORM_BLOCKS: error 0x502
+core glGetShaderiv GL_OBJECT_TYPE_ARB: 35633
+core glGetShaderiv GL_SHADER_TYPE: 35633
+core glGetShaderiv GL_DELETE_STATUS: 0
+core glGetShaderiv GL_COMPILE_STATUS: 0
+core glGetShaderiv GL_LINK_STATUS: error 0x502
+core glGetShaderiv GL_VALIDATE_STATUS: error 0x502
+core glGetShaderiv GL_INFO_LOG_LENGTH: 0
+core glGetShaderiv GL_ATTACHED_SHADERS: error 0x502
+core glGetShaderiv GL_ACTIVE_UNIFORMS: error 0x502
+core glGetShaderiv GL_ACTIVE_UNIFORM_MAX_LENGTH: error 0x502
+core glGetShaderiv GL_SHADER_SOURCE_LENGTH: 0
+core glGetShaderiv GL_ACTIVE_ATTRIBUTES: error 0x502
+core glGetShaderiv GL_ACTIVE_ATTRIBUTE_MAX_LENGTH: error 0x502
+core glGetShaderiv GL_TRANSFORM_FEEDBACK_VARYING_MAX_LENGTH_EXT: error 0x502
+core glGetShaderiv GL_TRANSFORM_FEEDBACK_BUFFER_MODE_EXT: error 0x502
+core glGetShaderiv GL_TRANSFORM_FEEDBACK_VARYINGS_EXT: error 0x502
+core glGetShaderiv GL_TESS_CONTROL_OUTPUT_VERTICES: error 0x502
+core glGetShaderiv GL_TESS_GEN_MODE: error 0x502
+core glGetShaderiv GL_TESS_GEN_SPACING: error 0x502
+core glGetShaderiv GL_TESS_GEN_VERTEX_ORDER: error 0x502
+core glGetShaderiv GL_TESS_GEN_POINT_MODE: error 0x502
+core glGetProgramiv GL_PROGRAM_BINARY_RETRIEVABLE_HINT: 0
+core glGetProgramiv GL_PROGRAM_SEPARABLE: 0
+core glGetProgramiv GL_PROGRAM_BINARY_LENGTH: 0
+core glGetProgramiv GL_GEOMETRY_SHADER_INVOCATIONS: error 0x502
+core glGetProgramiv GL_GEOMETRY_VERTICES_OUT: error 0x502
+core glGetProgramiv GL_GEOMETRY_INPUT_TYPE: error 0x502
+core glGetProgramiv GL_GEOMETRY_OUTPUT_TYPE: error 0x502
+core glGetProgramiv GL_ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH: 0
+core glGetProgramiv GL_ACTIVE_UNIFORM_BLOCKS: 0
+core glGetProgramiv GL_OBJECT_TYPE_ARB: 35648
+core glGetProgramiv GL_SHADER_TYPE: error 0x502
+core glGetProgramiv GL_DELETE_STATUS: 0
+core glGetProgramiv GL_LINK_STATUS: 0
+core glGetProgramiv GL_VALIDATE_STATUS: 0
+core glGetProgramiv GL_INFO_LOG_LENGTH: 0
+core glGetProgramiv GL_ATTACHED_SHADERS: 0
+core glGetProgramiv GL_ACTIVE_UNIFORMS: 0
+core glGetProgramiv GL_ACTIVE_UNIFORM_MAX_LENGTH: 0
+core glGetProgramiv GL_ACTIVE_ATTRIBUTES: 0
+core glGetProgramiv GL_ACTIVE_ATTRIBUTE_MAX_LENGTH: 0
+core glGetProgramiv GL_TRANSFORM_FEEDBACK_VARYING_MAX_LENGTH_EXT: 0
+core glGetProgramiv GL_TRANSFORM_FEEDBACK_BUFFER_MODE_EXT: 35980
+core glGetProgramiv GL_TRANSFORM_FEEDBACK_VARYINGS_EXT: 0
+core glGetProgramiv GL_TESS_CONTROL_OUTPUT_VERTICES: error 0x502
+core glGetProgramiv GL_TESS_GEN_MODE: error 0x502
+core glGetProgramiv GL_TESS_GEN_SPACING: error 0x502
+core glGetProgramiv GL_TESS_GEN_VERTEX_ORDER: error 0x502
+core glGetProgramiv GL_TESS_GEN_POINT_MODE: error 0x502
+core glGetQueryObjectiv GL_QUERY_RESULT: 0
+core glGetQueryObjectiv GL_QUERY_RESULT_AVAILABLE: 1
+core GL_POINT_SIZE: float 1 double 1 boolean 1
+core GL_POINT_SIZE_RANGE: float 1 double 1 boolean 1
+core GL_POINT_SIZE_GRANULARITY: float 0.0001 double 0.0001 boolean 1
+core GL_LINE_SMOOTH: float 0 double 0 boolean 0
+core GL_LINE_WIDTH: float 1 double 1 boolean 1
+core GL_LINE_WIDTH_RANGE: float 1 double 1 boolean 1
+core GL_LINE_WIDTH_GRANULARITY: float 0.0001 double 0.0001 boolean 1
+core GL_POLYGON_MODE: float 6914 double 6914 boolean 1
+core GL_POLYGON_SMOOTH: float 0 double 0 boolean 0
+core GL_CULL_FACE: float 0 double 0 boolean 0
+core GL_CULL_FACE_MODE: float 1029 double 1029 boolean 1
+core GL_FRONT_FACE: float 2305 double 2305 boolean 1
+core GL_DEPTH_RANGE: float 0 double 0 boolean 0
+core GL_DEPTH_TEST: float 0 double 0 boolean 0
+core GL_DEPTH_WRITEMASK: float 1 double 1 boolean 1
+core GL_DEPTH_CLEAR_VALUE: float 1 double 1 boolean 1
+core GL_DEPTH_FUNC: float 513 double 513 boolean 1
+core GL_STENCIL_TEST: float 0 double 0 boolean 0
+core GL_STENCIL_CLEAR_VALUE: float 0 double 0 boolean 0
+core GL_STENCIL_FUNC: float 519 double 519 boolean 1
+core GL_STENCIL_VALUE_MASK: float 4.29497e+09 double 4.29497e+09 boolean 1
+core GL_STENCIL_FAIL: float 7680 double 7680 boolean 1
+core GL_STENCIL_PASS_DEPTH_FAIL: float 7680 double 7680 boolean 1
+core GL_STENCIL_PASS_DEPTH_PASS: float 7680 double 7680 boolean 1
+core GL_STENCIL_REF: float 0 double 0 boolean 0
+core GL_STENCIL_WRITEMASK: float 4.29497e+09 double 4.29497e+09 boolean 1
+core GL_VIEWPORT: float 0 double 0 boolean 0
+core GL_DITHER: float 1 double 1 boolean 1
+core GL_BLEND_DST: float 0 double 0 boolean 0
+core GL_BLEND_SRC: float 1 double 1 boolean 1
+core GL_BLEND: float 0 double 0 boolean 0
+core GL_LOGIC_OP_MODE: float 5379 double 5379 boolean 1
+core GL_COLOR_LOGIC_OP: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER: float 36064 double 36064 boolean 1
+core GL_READ_BUFFER: float 36064 double 36064 boolean 1
+core GL_SCISSOR_BOX: float 0 double 0 boolean 0
+core GL_SCISSOR_TEST: float 0 double 0 boolean 0
+core GL_COLOR_CLEAR_VALUE: float 0 double 0 boolean 0
+core GL_COLOR_WRITEMASK: float 1 double 1 boolean 1
+core GL_DOUBLEBUFFER: float 0 double 0 boolean 0
+core GL_STEREO: float 0 double 0 boolean 0
+core GL_LINE_SMOOTH_HINT: float 4352 double 4352 boolean 1
+core GL_POLYGON_SMOOTH_HINT: float 4352 double 4352 boolean 1
+core GL_UNPACK_SWAP_BYTES: float 0 double 0 boolean 0
+core GL_UNPACK_LSB_FIRST: float 0 double 0 boolean 0
+core GL_UNPACK_ROW_LENGTH: float 0 double 0 boolean 0
+core GL_UNPACK_SKIP_ROWS: float 0 double 0 boolean 0
+core GL_UNPACK_SKIP_PIXELS: float 0 double 0 boolean 0
+core GL_UNPACK_ALIGNMENT: float 4 double 4 boolean 1
+core GL_PACK_SWAP_BYTES: float 0 double 0 boolean 0
+core GL_PACK_LSB_FIRST: float 0 double 0 boolean 0
+core GL_PACK_ROW_LENGTH: float 0 double 0 boolean 0
+core GL_PACK_SKIP_ROWS: float 0 double 0 boolean 0
+core GL_PACK_SKIP_PIXELS: float 0 double 0 boolean 0
+core GL_PACK_ALIGNMENT: float 4 double 4 boolean 1
+core GL_MAX_CLIP_PLANES: float 8 double 8 boolean 1
+core GL_MAX_TEXTURE_SIZE: float 16384 double 16384 boolean 1
+core GL_MAX_VIEWPORT_DIMS: float 16384 double 16384 boolean 1
+core GL_POLYGON_OFFSET_UNITS: float 0 double 0 boolean 0
+core GL_POLYGON_OFFSET_POINT: float 0 double 0 boolean 0
+core GL_POLYGON_OFFSET_LINE: float 0 double 0 boolean 0
+core GL_CLIP_PLANE0: float 0 double 0 boolean 0
+core GL_CLIP_PLANE1: float 0 double 0 boolean 0
+core GL_CLIP_PLANE2: float 0 double 0 boolean 0
+core GL_CLIP_PLANE3: float 0 double 0 boolean 0
+core GL_CLIP_PLANE4: float 0 double 0 boolean 0
+core GL_CLIP_PLANE5: float 0 double 0 boolean 0
+core GL_CLIP_DISTANCE6: float 0 double 0 boolean 0
+core GL_CLIP_DISTANCE7: float 0 double 0 boolean 0
+core GL_BLEND_COLOR: float 0 double 0 boolean 0
+core GL_BLEND_EQUATION: float 32774 double 32774 boolean 1
+core GL_POLYGON_OFFSET_FILL: float 0 double 0 boolean 0
+core GL_POLYGON_OFFSET_FACTOR: float 0 double 0 boolean 0
+core GL_TEXTURE_BINDING_1D: float 0 double 0 boolean 0
+core GL_TEXTURE_BINDING_2D: float 1 double 1 boolean 1
+core GL_TEXTURE_BINDING_3D: float 0 double 0 boolean 0
+core GL_PACK_SKIP_IMAGES: float 0 double 0 boolean 0
+core GL_PACK_IMAGE_HEIGHT: float 0 double 0 boolean 0
+core GL_UNPACK_SKIP_IMAGES: float 0 double 0 boolean 0
+core GL_UNPACK_IMAGE_HEIGHT: float 0 double 0 boolean 0
+core GL_MAX_3D_TEXTURE_SIZE: float 2048 double 2048 boolean 1
+core GL_MULTISAMPLE: float 1 double 1 boolean 1
+core GL_SAMPLE_ALPHA_TO_COVERAGE: float 0 double 0 boolean 0
+core GL_SAMPLE_ALPHA_TO_ONE: float 0 double 0 boolean 0
+core GL_SAMPLE_COVERAGE: float 0 double 0 boolean 0
+core GL_SAMPLE_BUFFERS: float 0 double 0 boolean 0
+core GL_SAMPLES: float 0 double 0 boolean 0
+core GL_SAMPLE_COVERAGE_VALUE: float 1 double 1 boolean 1
+core GL_SAMPLE_COVERAGE_INVERT: float 0 double 0 boolean 0
+core GL_BLEND_DST_RGB: float 0 double 0 boolean 0
+core GL_BLEND_SRC_RGB: float 1 double 1 boolean 1
+core GL_BLEND_DST_ALPHA: float 0 double 0 boolean 0
+core GL_BLEND_SRC_ALPHA: float 1 double 1 boolean 1
+core GL_MAX_ELEMENTS_VERTICES: float 1.04858e+06 double 1.04858e+06 boolean 1
+core GL_MAX_ELEMENTS_INDICES: float 150000 double 150000 boolean 1
+core GL_POINT_FADE_THRESHOLD_SIZE: float 1 double 1 boolean 1
+core GL_MAJOR_VERSION: float 4 double 4 boolean 1
+core GL_MINOR_VERSION: float 1 double 1 boolean 1
+core GL_NUM_EXTENSIONS: float 43 double 43 boolean 1
+core GL_CONTEXT_FLAGS: float 1 double 1 boolean 1
+core GL_PROGRAM_PIPELINE_BINDING: float 0 double 0 boolean 0
+core GL_MAX_VIEWPORTS: float 16 double 16 boolean 1
+core GL_VIEWPORT_BOUNDS_RANGE: float -32768 double -32768 boolean 1
+core GL_LAYER_PROVOKING_VERTEX: float 33376 double 33376 boolean 1
+core GL_VIEWPORT_INDEX_PROVOKING_VERTEX: float 33376 double 33376 boolean 1
+core GL_ALIASED_LINE_WIDTH_RANGE: float 1 double 1 boolean 1
+core GL_ACTIVE_TEXTURE: float 33984 double 33984 boolean 1
+core GL_MAX_RENDERBUFFER_SIZE: float 16384 double 16384 boolean 1
+core GL_TEXTURE_COMPRESSION_HINT: float 4352 double 4352 boolean 1
+core GL_TEXTURE_BINDING_RECTANGLE_ARB: float 0 double 0 boolean 0
+core GL_MAX_RECTANGLE_TEXTURE_SIZE_ARB: float 16384 double 16384 boolean 1
+core GL_MAX_TEXTURE_LOD_BIAS: float 16 double 16 boolean 1
+core GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT: float 16 double 16 boolean 1
+core GL_TEXTURE_BINDING_CUBE_MAP: float 0 double 0 boolean 0
+core GL_MAX_CUBE_MAP_TEXTURE_SIZE: float 16384 double 16384 boolean 1
+core GL_UNPACK_CLIENT_STORAGE_APPLE: float 0 double 0 boolean 0
+core GL_VERTEX_ARRAY_BINDING_APPLE: float 0 double 0 boolean 0
+core GL_VERTEX_PROGRAM_POINT_SIZE: float 0 double 0 boolean 0
+core GL_DEPTH_CLAMP: float 0 double 0 boolean 0
+core GL_NUM_COMPRESSED_TEXTURE_FORMATS: float 3 double 3 boolean 1
+core GL_COMPRESSED_TEXTURE_FORMATS: float 33776 double 33776 boolean 1
+core GL_NUM_PROGRAM_BINARY_FORMATS: float 0 double 0 boolean 0
+core GL_PROGRAM_BINARY_FORMATS: float 0 double 0 boolean 0
+core GL_STENCIL_BACK_FUNC: float 519 double 519 boolean 1
+core GL_STENCIL_BACK_FAIL: float 7680 double 7680 boolean 1
+core GL_STENCIL_BACK_PASS_DEPTH_FAIL: float 7680 double 7680 boolean 1
+core GL_STENCIL_BACK_PASS_DEPTH_PASS: float 7680 double 7680 boolean 1
+core GL_MAX_DRAW_BUFFERS: float 8 double 8 boolean 1
+core GL_DRAW_BUFFER0: float 36064 double 36064 boolean 1
+core GL_DRAW_BUFFER1: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER2: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER3: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER4: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER5: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER6: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER7: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER8: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER9: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER10: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER11: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER12: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER13: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER14: float 0 double 0 boolean 0
+core GL_DRAW_BUFFER15: float 0 double 0 boolean 0
+core GL_BLEND_EQUATION_ALPHA: float 32774 double 32774 boolean 1
+core GL_TEXTURE_CUBE_MAP_SEAMLESS: float 0 double 0 boolean 0
+core GL_MAX_VERTEX_ATTRIBS: float 16 double 16 boolean 1
+core GL_MAX_TESS_CONTROL_INPUT_COMPONENTS: float 128 double 128 boolean 1
+core GL_MAX_TESS_EVALUATION_INPUT_COMPONENTS: float 128 double 128 boolean 1
+core GL_MAX_TEXTURE_IMAGE_UNITS: float 16 double 16 boolean 1
+core GL_DEPTH_BOUNDS_TEST_EXT: float 0 double 0 boolean 0
+core GL_DEPTH_BOUNDS_EXT: float 0 double 0 boolean 0
+core GL_ARRAY_BUFFER_BINDING: float 1 double 1 boolean 1
+core GL_ELEMENT_ARRAY_BUFFER_BINDING: float 0 double 0 boolean 0
+core GL_PIXEL_PACK_BUFFER_BINDING: float 0 double 0 boolean 0
+core GL_PIXEL_UNPACK_BUFFER_BINDING: float 0 double 0 boolean 0
+core GL_MAX_DUAL_SOURCE_DRAW_BUFFERS: float 1 double 1 boolean 1
+core GL_MAX_ARRAY_TEXTURE_LAYERS_EXT: float 2048 double 2048 boolean 1
+core GL_MIN_PROGRAM_TEXEL_OFFSET_EXT: float -8 double -8 boolean 1
+core GL_MAX_PROGRAM_TEXEL_OFFSET_EXT: float 7 double 7 boolean 1
+core GL_SAMPLER_BINDING: float 0 double 0 boolean 0
+core GL_CLAMP_READ_COLOR_ARB: float 35101 double 35101 boolean 1
+core GL_PACK_ROW_BYTES_APPLE: float 0 double 0 boolean 0
+core GL_UNPACK_ROW_BYTES_APPLE: float 0 double 0 boolean 0
+core GL_PACK_IMAGE_BYTES_APPLE: float 0 double 0 boolean 0
+core GL_UNPACK_IMAGE_BYTES_APPLE: float 0 double 0 boolean 0
+core GL_UNIFORM_BUFFER_BINDING: float 0 double 0 boolean 0
+core GL_MAX_VERTEX_UNIFORM_BLOCKS: float 16 double 16 boolean 1
+core GL_MAX_GEOMETRY_UNIFORM_BLOCKS: float 16 double 16 boolean 1
+core GL_MAX_FRAGMENT_UNIFORM_BLOCKS: float 16 double 16 boolean 1
+core GL_MAX_COMBINED_UNIFORM_BLOCKS: float 80 double 80 boolean 1
+core GL_MAX_UNIFORM_BUFFER_BINDINGS: float 80 double 80 boolean 1
+core GL_MAX_UNIFORM_BLOCK_SIZE: float 65536 double 65536 boolean 1
+core GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS: float 266240 double 266240 boolean 1
+core GL_MAX_COMBINED_GEOMETRY_UNIFORM_COMPONENTS: float 266240 double 266240 boolean 1
+core GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS: float 266240 double 266240 boolean 1
+core GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT: float 256 double 256 boolean 1
+core GL_MAX_FRAGMENT_UNIFORM_COMPONENTS: float 4096 double 4096 boolean 1
+core GL_MAX_VERTEX_UNIFORM_COMPONENTS: float 4096 double 4096 boolean 1
+core GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS: float 16 double 16 boolean 1
+core GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS: float 80 double 80 boolean 1
+core GL_FRAGMENT_SHADER_DERIVATIVE_HINT: float 4352 double 4352 boolean 1
+core GL_CURRENT_PROGRAM: float 0 double 0 boolean 0
+core GL_IMPLEMENTATION_COLOR_READ_TYPE: float 5121 double 5121 boolean 1
+core GL_IMPLEMENTATION_COLOR_READ_FORMAT: float 6408 double 6408 boolean 1
+core GL_TEXTURE_BINDING_1D_ARRAY_EXT: float 0 double 0 boolean 0
+core GL_TEXTURE_BINDING_2D_ARRAY_EXT: float 0 double 0 boolean 0
+core GL_MAX_GEOMETRY_TEXTURE_IMAGE_UNITS_EXT: float 16 double 16 boolean 1
+core GL_TEXTURE_BUFFER: float 0 double 0 boolean 0
+core GL_MAX_TEXTURE_BUFFER_SIZE: float 2.68435e+08 double 2.68435e+08 boolean 1
+core GL_TEXTURE_BINDING_BUFFER: float 0 double 0 boolean 0
+core GL_SAMPLE_SHADING: float 0 double 0 boolean 0
+core GL_MIN_SAMPLE_SHADING_VALUE: float 0 double 0 boolean 0
+core GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS_EXT: float 4 double 4 boolean 1
+core GL_RASTERIZER_DISCARD_EXT: float 0 double 0 boolean 0
+core GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS_EXT: float 64 double 64 boolean 1
+core GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS_EXT: float 4 double 4 boolean 1
+core GL_TRANSFORM_FEEDBACK_BUFFER_BINDING_EXT: float 0 double 0 boolean 0
+core GL_POINT_SPRITE_COORD_ORIGIN: float 36002 double 36002 boolean 1
+core GL_STENCIL_BACK_REF: float 0 double 0 boolean 0
+core GL_STENCIL_BACK_VALUE_MASK: float 4.29497e+09 double 4.29497e+09 boolean 1
+core GL_STENCIL_BACK_WRITEMASK: float 4.29497e+09 double 4.29497e+09 boolean 1
+core GL_FRAMEBUFFER_BINDING: float 1 double 1 boolean 1
+core GL_RENDERBUFFER_BINDING: float 1 double 1 boolean 1
+core GL_READ_FRAMEBUFFER_BINDING: float 1 double 1 boolean 1
+core GL_MAX_COLOR_ATTACHMENTS: float 8 double 8 boolean 1
+core GL_MAX_SAMPLES: float 8 double 8 boolean 1
+core GL_FRAMEBUFFER_SRGB: float 0 double 0 boolean 0
+core GL_MAX_GEOMETRY_UNIFORM_COMPONENTS_EXT: float 4096 double 4096 boolean 1
+core GL_MAX_GEOMETRY_OUTPUT_VERTICES_EXT: float 1024 double 1024 boolean 1
+core GL_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS_EXT: float 1024 double 1024 boolean 1
+core GL_MAX_SUBROUTINES: float 4096 double 4096 boolean 1
+core GL_MAX_SUBROUTINE_UNIFORM_LOCATIONS: float 4096 double 4096 boolean 1
+core GL_SHADER_BINARY_FORMATS: float 4096 double 4096 boolean 1
+core GL_NUM_SHADER_BINARY_FORMATS: float 0 double 0 boolean 0
+core GL_SHADER_COMPILER: float 1 double 1 boolean 1
+core GL_MAX_VERTEX_UNIFORM_VECTORS: float 1024 double 1024 boolean 1
+core GL_MAX_VARYING_VECTORS: float 31 double 31 boolean 1
+core GL_MAX_FRAGMENT_UNIFORM_VECTORS: float 1024 double 1024 boolean 1
+core GL_MAX_COMBINED_TESS_CONTROL_UNIFORM_COMPONENTS: float 266240 double 266240 boolean 1
+core GL_MAX_COMBINED_TESS_EVALUATION_UNIFORM_COMPONENTS: float 266240 double 266240 boolean 1
+core GL_TRANSFORM_FEEDBACK_BUFFER_PAUSED: float 0 double 0 boolean 0
+core GL_TRANSFORM_FEEDBACK_BUFFER_ACTIVE: float 0 double 0 boolean 0
+core GL_TRANSFORM_FEEDBACK_BINDING: float 0 double 0 boolean 0
+core GL_TIMESTAMP: float 0 double 0 boolean 0
+core GL_PROVOKING_VERTEX: float 36430 double 36430 boolean 1
+core GL_SAMPLE_MASK: float 0 double 0 boolean 0
+core GL_MAX_SAMPLE_MASK_WORDS: float 1 double 1 boolean 1
+core GL_MAX_GEOMETRY_SHADER_INVOCATIONS: float 32 double 32 boolean 1
+core GL_MIN_FRAGMENT_INTERPOLATION_OFFSET: float -0.5 double -0.5 boolean 1
+core GL_MAX_FRAGMENT_INTERPOLATION_OFFSET: float 0.5 double 0.5 boolean 1
+core GL_MIN_PROGRAM_TEXTURE_GATHER_OFFSET: float -8 double -8 boolean 1
+core GL_MAX_PROGRAM_TEXTURE_GATHER_OFFSET: float 7 double 7 boolean 1
+core GL_MAX_TRANSFORM_FEEDBACK_BUFFERS: float 4 double 4 boolean 1
+core GL_MAX_VERTEX_STREAMS: float 4 double 4 boolean 1
+core GL_PATCH_VERTICES: float 3 double 3 boolean 1
+core GL_PATCH_DEFAULT_INNER_LEVEL: float 1 double 1 boolean 1
+core GL_PATCH_DEFAULT_OUTER_LEVEL: float 1 double 1 boolean 1
+core GL_MAX_PATCH_VERTICES: float 32 double 32 boolean 1
+core GL_MAX_TESS_GEN_LEVEL: float 64 double 64 boolean 1
+core GL_MAX_TESS_CONTROL_UNIFORM_COMPONENTS: float 4096 double 4096 boolean 1
+core GL_MAX_TESS_EVALUATION_UNIFORM_COMPONENTS: float 4096 double 4096 boolean 1
+core GL_MAX_TESS_CONTROL_TEXTURE_IMAGE_UNITS: float 16 double 16 boolean 1
+core GL_MAX_TESS_EVALUATION_TEXTURE_IMAGE_UNITS: float 16 double 16 boolean 1
+core GL_MAX_TESS_CONTROL_OUTPUT_COMPONENTS: float 128 double 128 boolean 1
+core GL_MAX_TESS_PATCH_COMPONENTS: float 120 double 120 boolean 1
+core GL_MAX_TESS_CONTROL_TOTAL_OUTPUT_COMPONENTS: float 4216 double 4216 boolean 1
+core GL_MAX_TESS_EVALUATION_OUTPUT_COMPONENTS: float 128 double 128 boolean 1
+core GL_MAX_TESS_CONTROL_UNIFORM_BLOCKS: float 16 double 16 boolean 1
+core GL_MAX_TESS_EVALUATION_UNIFORM_BLOCKS: float 16 double 16 boolean 1
+core GL_COPY_READ_BUFFER: float 0 double 0 boolean 0
+core GL_COPY_WRITE_BUFFER: float 0 double 0 boolean 0
+core GL_DRAW_INDIRECT_BUFFER_BINDING: float 0 double 0 boolean 0
+core GL_PRIMITIVE_RESTART: float 0 double 0 boolean 0
+core GL_PRIMITIVE_RESTART_INDEX: float 0 double 0 boolean 0
+core GL_MAX_PROGRAM_TEXTURE_GATHER_COMPONENTS_ARB: float 4 double 4 boolean 1
+core GL_TEXTURE_BINDING_CUBE_MAP_ARRAY: float 0 double 0 boolean 0
+core GL_TEXTURE_BINDING_2D_MULTISAMPLE: float 0 double 0 boolean 0
+core GL_TEXTURE_BINDING_2D_MULTISAMPLE_ARRAY: float 0 double 0 boolean 0
+core GL_MAX_COLOR_TEXTURE_SAMPLES: float 8 double 8 boolean 1
+core GL_MAX_DEPTH_TEXTURE_SAMPLES: float 8 double 8 boolean 1
+core GL_MAX_INTEGER_SAMPLES: float 1 double 1 boolean 1
+core GL_MAX_SERVER_WAIT_TIMEOUT: float -1 double -1 boolean 1
+core GL_MAX_VERTEX_OUTPUT_COMPONENTS: float 64 double 64 boolean 1
+core GL_MAX_GEOMETRY_INPUT_COMPONENTS: float 64 double 64 boolean 1
+core GL_MAX_GEOMETRY_OUTPUT_COMPONENTS: float 128 double 128 boolean 1
+core GL_MAX_FRAGMENT_INPUT_COMPONENTS: float 128 double 128 boolean 1
+core GL_CONTEXT_PROFILE_MASK: float 1 double 1 boolean 1
+core glGetString GL_VENDOR: string 0
+core glGetString GL_RENDERER: string 0
+core glGetString GL_VERSION: string 0
+core glGetString GL_PROGRAM_ERROR_STRING_ARB: string 0
+core glGetString GL_SHADING_LANGUAGE_VERSION: string 0
+core glDepthFunc: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS
+core glBlendFunc src: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_SRC_COLOR GL_ONE_MINUS_SRC_COLOR GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA GL_DST_ALPHA GL_ONE_MINUS_DST_ALPHA GL_DST_COLOR GL_ONE_MINUS_DST_COLOR GL_SRC_ALPHA_SATURATE GL_CONSTANT_COLOR GL_ONE_MINUS_CONSTANT_COLOR GL_CONSTANT_ALPHA GL_ONE_MINUS_CONSTANT_ALPHA GL_SRC1_ALPHA GL_SRC1_COLOR GL_ONE_MINUS_SRC1_COLOR GL_ONE_MINUS_SRC1_ALPHA
+core glBlendFunc dst: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_SRC_COLOR GL_ONE_MINUS_SRC_COLOR GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA GL_DST_ALPHA GL_ONE_MINUS_DST_ALPHA GL_DST_COLOR GL_ONE_MINUS_DST_COLOR GL_SRC_ALPHA_SATURATE GL_CONSTANT_COLOR GL_ONE_MINUS_CONSTANT_COLOR GL_CONSTANT_ALPHA GL_ONE_MINUS_CONSTANT_ALPHA GL_SRC1_ALPHA GL_SRC1_COLOR GL_ONE_MINUS_SRC1_COLOR GL_ONE_MINUS_SRC1_ALPHA
+core glBlendFuncSeparate alpha src: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_SRC_COLOR GL_ONE_MINUS_SRC_COLOR GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA GL_DST_ALPHA GL_ONE_MINUS_DST_ALPHA GL_DST_COLOR GL_ONE_MINUS_DST_COLOR GL_SRC_ALPHA_SATURATE GL_CONSTANT_COLOR GL_ONE_MINUS_CONSTANT_COLOR GL_CONSTANT_ALPHA GL_ONE_MINUS_CONSTANT_ALPHA GL_SRC1_ALPHA GL_SRC1_COLOR GL_ONE_MINUS_SRC1_COLOR GL_ONE_MINUS_SRC1_ALPHA
+core glBlendEquation: GL_FUNC_ADD GL_MIN GL_MAX GL_FUNC_SUBTRACT GL_FUNC_REVERSE_SUBTRACT GL_MIN_WEIGHTED_ATI GL_MAX_WEIGHTED_ATI
+core glBlendEquationSeparate alpha: GL_FUNC_ADD GL_MIN GL_MAX GL_FUNC_SUBTRACT GL_FUNC_REVERSE_SUBTRACT GL_MIN_WEIGHTED_ATI GL_MAX_WEIGHTED_ATI
+core glLogicOp: GL_CLEAR GL_AND GL_AND_REVERSE GL_COPY GL_AND_INVERTED GL_NOOP GL_XOR GL_OR GL_NOR GL_EQUIV GL_INVERT GL_OR_REVERSE GL_COPY_INVERTED GL_OR_INVERTED GL_NAND GL_SET
+core glCullFace: GL_FRONT GL_BACK GL_FRONT_AND_BACK
+core glFrontFace: GL_CW GL_CCW
+core glPolygonMode face: GL_FRONT_AND_BACK
+core glPolygonMode mode: GL_POINT GL_LINE GL_FILL
+core glStencilFunc: GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS
+core glStencilOp: GL_POINTS GL_INVERT GL_KEEP GL_REPLACE GL_INCR GL_DECR GL_INCR_WRAP GL_DECR_WRAP
+core glStencilOpSeparate face: GL_FRONT GL_BACK GL_FRONT_AND_BACK
+core glStencilFuncSeparate face: GL_FRONT GL_BACK GL_FRONT_AND_BACK
+core glDrawBuffer: GL_POINTS GL_FRONT_LEFT(0x502) GL_FRONT_RIGHT(0x502) GL_BACK_LEFT(0x502) GL_BACK_RIGHT(0x502) GL_FRONT(0x502) GL_BACK(0x502) GL_LEFT(0x502) GL_RIGHT(0x502) GL_FRONT_AND_BACK(0x502) GL_AUX0(0x502) GL_AUX1(0x502) GL_AUX2(0x502) GL_AUX3(0x502) GL_COLOR_ATTACHMENT0 GL_COLOR_ATTACHMENT1 GL_COLOR_ATTACHMENT2 GL_COLOR_ATTACHMENT3 GL_COLOR_ATTACHMENT4 GL_COLOR_ATTACHMENT5 GL_COLOR_ATTACHMENT6 GL_COLOR_ATTACHMENT7
+core glReadBuffer: GL_POINTS GL_FRONT_LEFT(0x502) GL_FRONT_RIGHT(0x502) GL_BACK_LEFT(0x502) GL_BACK_RIGHT(0x502) GL_FRONT(0x502) GL_BACK(0x502) GL_LEFT(0x502) GL_RIGHT(0x502) GL_AUX0(0x502) GL_AUX1(0x502) GL_AUX2(0x502) GL_AUX3(0x502) GL_COLOR_ATTACHMENT0 GL_COLOR_ATTACHMENT1 GL_COLOR_ATTACHMENT2 GL_COLOR_ATTACHMENT3 GL_COLOR_ATTACHMENT4 GL_COLOR_ATTACHMENT5 GL_COLOR_ATTACHMENT6 GL_COLOR_ATTACHMENT7
+core glBindTexture: GL_TEXTURE_1D GL_TEXTURE_2D GL_TEXTURE_3D GL_TEXTURE_RECTANGLE_ARB GL_TEXTURE_CUBE_MAP GL_TEXTURE_1D_ARRAY_EXT GL_TEXTURE_2D_ARRAY_EXT GL_TEXTURE_BUFFER GL_TEXTURE_CUBE_MAP_ARRAY GL_TEXTURE_2D_MULTISAMPLE GL_TEXTURE_2D_MULTISAMPLE_ARRAY
+core glBindBuffer: GL_ARRAY_BUFFER GL_ELEMENT_ARRAY_BUFFER GL_PIXEL_PACK_BUFFER GL_PIXEL_UNPACK_BUFFER GL_UNIFORM_BUFFER GL_TEXTURE_BUFFER GL_TRANSFORM_FEEDBACK_BUFFER_EXT GL_COPY_READ_BUFFER GL_COPY_WRITE_BUFFER GL_DRAW_INDIRECT_BUFFER
+core glIsEnabled: GL_LINE_SMOOTH GL_POLYGON_SMOOTH GL_CULL_FACE GL_DEPTH_TEST GL_STENCIL_TEST GL_DITHER GL_BLEND GL_COLOR_LOGIC_OP GL_SCISSOR_TEST GL_POLYGON_OFFSET_POINT GL_POLYGON_OFFSET_LINE GL_CLIP_PLANE0 GL_CLIP_PLANE1 GL_CLIP_PLANE2 GL_CLIP_PLANE3 GL_CLIP_PLANE4 GL_CLIP_PLANE5 GL_CLIP_DISTANCE6 GL_CLIP_DISTANCE7 GL_POLYGON_OFFSET_FILL GL_MULTISAMPLE GL_SAMPLE_ALPHA_TO_COVERAGE GL_SAMPLE_ALPHA_TO_ONE GL_SAMPLE_COVERAGE GL_VERTEX_PROGRAM_POINT_SIZE GL_DEPTH_CLAMP GL_TEXTURE_CUBE_MAP_SEAMLESS GL_DEPTH_BOUNDS_TEST_EXT GL_SAMPLE_SHADING GL_RASTERIZER_DISCARD_EXT GL_FRAMEBUFFER_SRGB GL_SAMPLE_MASK GL_PRIMITIVE_RESTART
+core glClampColorARB target: GL_CLAMP_READ_COLOR_ARB
+core glClampColorARB value:
+core glProvokingVertexEXT: GL_FIRST_VERTEX_CONVENTION GL_LAST_VERTEX_CONVENTION
+core glActiveTexture: GL_TEXTURE0 GL_TEXTURE1 GL_TEXTURE2 GL_TEXTURE3 GL_TEXTURE4 GL_TEXTURE5 GL_TEXTURE6 GL_TEXTURE7 GL_TEXTURE8 GL_TEXTURE9 GL_TEXTURE10 GL_TEXTURE11 GL_TEXTURE12 GL_TEXTURE13 GL_TEXTURE14 GL_TEXTURE15 GL_TEXTURE16 GL_TEXTURE17 GL_TEXTURE18 GL_TEXTURE19 GL_TEXTURE20 GL_TEXTURE21 GL_TEXTURE22 GL_TEXTURE23 GL_TEXTURE24 GL_TEXTURE25 GL_TEXTURE26 GL_TEXTURE27 GL_TEXTURE28 GL_TEXTURE29 GL_TEXTURE30 GL_TEXTURE31 GL_ACTIVE_TEXTURE GL_CLIENT_ACTIVE_TEXTURE GL_MAX_TEXTURE_UNITS GL_TRANSPOSE_MODELVIEW_MATRIX GL_TRANSPOSE_PROJECTION_MATRIX GL_TRANSPOSE_TEXTURE_MATRIX GL_TRANSPOSE_COLOR_MATRIX GL_SUBTRACT GL_MAX_RENDERBUFFER_SIZE GL_COMPRESSED_ALPHA GL_COMPRESSED_LUMINANCE GL_COMPRESSED_LUMINANCE_ALPHA GL_COMPRESSED_INTENSITY GL_COMPRESSED_RGB GL_COMPRESSED_RGBA GL_TEXTURE_COMPRESSION_HINT GL_UNIFORM_BLOCK_REFERENCED_BY_TESS_CONTROL_SHADER GL_UNIFORM_BLOCK_REFERENCED_BY_TESS_EVALUATION_SHADER GL_TEXTURE_RECTANGLE_ARB GL_TEXTURE_BINDING_RECTANGLE_ARB GL_PROXY_TEXTURE_RECTANGLE_ARB GL_MAX_RECTANGLE_TEXTURE_SIZE_ARB GL_DEPTH_STENCIL GL_UNSIGNED_INT_24_8 GL_MAX_TEXTURE_LOD_BIAS GL_TEXTURE_MAX_ANISOTROPY_EXT GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT GL_TEXTURE_FILTER_CONTROL GL_TEXTURE_LOD_BIAS GL_MAX_SHININESS_NV GL_MAX_SPOT_EXPONENT_NV GL_INCR_WRAP GL_DECR_WRAP GL_MODELVIEW1_ARB
+core glCreateShader: GL_FRAGMENT_SHADER GL_VERTEX_SHADER GL_GEOMETRY_SHADER_EXT GL_TESS_EVALUATION_SHADER GL_TESS_CONTROL_SHADER
+core glBeginQuery: GL_POINTS GL_GLEXT_FUNCTION_POINTERS GL_LINE_LOOP GL_LINE_STRIP GL_TRIANGLES GL_TRIANGLE_STRIP GL_TRIANGLE_FAN GL_QUADS GL_QUAD_STRIP GL_POLYGON GL_LINES_ADJACENCY_EXT GL_LINE_STRIP_ADJACENCY_EXT GL_TRIANGLES_ADJACENCY_EXT GL_TRIANGLE_STRIP_ADJACENCY_EXT GL_PATCHES GL_ACCUM GL_LOAD GL_RETURN GL_MULT GL_ADD GL_NEVER GL_LESS GL_EQUAL GL_LEQUAL GL_GREATER GL_NOTEQUAL GL_GEQUAL GL_ALWAYS GL_SRC_COLOR GL_ONE_MINUS_SRC_COLOR GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA GL_DST_ALPHA GL_ONE_MINUS_DST_ALPHA GL_DST_COLOR GL_ONE_MINUS_DST_COLOR GL_SRC_ALPHA_SATURATE GL_FRONT_LEFT GL_FRONT_RIGHT GL_BACK_LEFT GL_BACK_RIGHT GL_FRONT GL_BACK GL_LEFT GL_RIGHT GL_FRONT_AND_BACK GL_AUX0 GL_AUX1 GL_AUX2 GL_AUX3 GL_INVALID_ENUM GL_INVALID_VALUE GL_INVALID_OPERATION GL_STACK_OVERFLOW GL_STACK_UNDERFLOW GL_OUT_OF_MEMORY GL_INVALID_FRAMEBUFFER_OPERATION GL_2D GL_3D GL_3D_COLOR GL_3D_COLOR_TEXTURE GL_4D_COLOR_TEXTURE GL_PASS_THROUGH_TOKEN GL_POINT_TOKEN GL_LINE_TOKEN GL_POLYGON_TOKEN GL_BITMAP_TOKEN GL_DRAW_PIXEL_TOKEN GL_COPY_PIXEL_TOKEN GL_LINE_RESET_TOKEN GL_EXP GL_EXP2 GL_CW GL_CCW GL_COEFF GL_ORDER GL_DOMAIN GL_CURRENT_COLOR GL_CURRENT_INDEX GL_CURRENT_NORMAL GL_CURRENT_TEXTURE_COORDS GL_CURRENT_RASTER_COLOR GL_CURRENT_RASTER_INDEX GL_CURRENT_RASTER_TEXTURE_COORDS GL_CURRENT_RASTER_POSITION GL_CURRENT_RASTER_POSITION_VALID GL_CURRENT_RASTER_DISTANCE GL_POINT_SMOOTH GL_POINT_SIZE GL_POINT_SIZE_RANGE GL_POINT_SIZE_GRANULARITY GL_LINE_SMOOTH GL_LINE_WIDTH GL_LINE_WIDTH_RANGE GL_LINE_WIDTH_GRANULARITY GL_LINE_STIPPLE GL_LINE_STIPPLE_PATTERN GL_LINE_STIPPLE_REPEAT GL_LIST_MODE GL_MAX_LIST_NESTING GL_LIST_BASE GL_LIST_INDEX GL_POLYGON_MODE GL_POLYGON_SMOOTH GL_POLYGON_STIPPLE GL_EDGE_FLAG GL_CULL_FACE GL_CULL_FACE_MODE GL_FRONT_FACE GL_LIGHTING GL_LIGHT_MODEL_LOCAL_VIEWER GL_LIGHT_MODEL_TWO_SIDE GL_LIGHT_MODEL_AMBIENT GL_SHADE_MODEL GL_COLOR_MATERIAL_FACE GL_COLOR_MATERIAL_PARAMETER GL_COLOR_MATERIAL GL_FOG GL_FOG_INDEX GL_FOG_DENSITY GL_FOG_START GL_FOG_END GL_FOG_MODE GL_FOG_COLOR GL_DEPTH_RANGE GL_DEPTH_TEST GL_DEPTH_WRITEMASK GL_DEPTH_CLEAR_VALUE GL_DEPTH_FUNC GL_ACCUM_CLEAR_VALUE GL_STENCIL_TEST GL_STENCIL_CLEAR_VALUE GL_STENCIL_FUNC GL_STENCIL_VALUE_MASK GL_STENCIL_FAIL GL_STENCIL_PASS_DEPTH_FAIL GL_STENCIL_PASS_DEPTH_PASS GL_STENCIL_REF GL_STENCIL_WRITEMASK GL_MATRIX_MODE GL_NORMALIZE GL_VIEWPORT GL_MODELVIEW_STACK_DEPTH GL_PROJECTION_STACK_DEPTH GL_TEXTURE_STACK_DEPTH GL_MODELVIEW_MATRIX GL_PROJECTION_MATRIX GL_TEXTURE_MATRIX GL_ATTRIB_STACK_DEPTH GL_CLIENT_ATTRIB_STACK_DEPTH GL_ALPHA_TEST GL_ALPHA_TEST_FUNC GL_ALPHA_TEST_REF GL_DITHER GL_BLEND_DST GL_BLEND_SRC GL_BLEND GL_LOGIC_OP_MODE GL_INDEX_LOGIC_OP GL_COLOR_LOGIC_OP GL_AUX_BUFFERS GL_DRAW_BUFFER GL_READ_BUFFER GL_SCISSOR_BOX GL_SCISSOR_TEST GL_INDEX_CLEAR_VALUE GL_INDEX_WRITEMASK GL_COLOR_CLEAR_VALUE GL_COLOR_WRITEMASK GL_INDEX_MODE GL_RGBA_MODE GL_DOUBLEBUFFER GL_STEREO GL_RENDER_MODE GL_PERSPECTIVE_CORRECTION_HINT GL_POINT_SMOOTH_HINT GL_LINE_SMOOTH_HINT GL_POLYGON_SMOOTH_HINT GL_FOG_HINT GL_TEXTURE_GEN_S GL_TEXTURE_GEN_T GL_TEXTURE_GEN_R GL_TEXTURE_GEN_Q GL_PIXEL_MAP_I_TO_I GL_PIXEL_MAP_S_TO_S GL_PIXEL_MAP_I_TO_R GL_PIXEL_MAP_I_TO_G GL_PIXEL_MAP_I_TO_B GL_PIXEL_MAP_I_TO_A GL_PIXEL_MAP_R_TO_R GL_PIXEL_MAP_G_TO_G GL_PIXEL_MAP_B_TO_B GL_PIXEL_MAP_A_TO_A GL_PIXEL_MAP_I_TO_I_SIZE GL_PIXEL_MAP_S_TO_S_SIZE GL_PIXEL_MAP_I_TO_R_SIZE GL_PIXEL_MAP_I_TO_G_SIZE GL_PIXEL_MAP_I_TO_B_SIZE GL_PIXEL_MAP_I_TO_A_SIZE GL_PIXEL_MAP_R_TO_R_SIZE GL_PIXEL_MAP_G_TO_G_SIZE GL_PIXEL_MAP_B_TO_B_SIZE GL_PIXEL_MAP_A_TO_A_SIZE GL_UNPACK_SWAP_BYTES GL_UNPACK_LSB_FIRST GL_UNPACK_ROW_LENGTH GL_UNPACK_SKIP_ROWS GL_UNPACK_SKIP_PIXELS GL_UNPACK_ALIGNMENT GL_PACK_SWAP_BYTES GL_PACK_LSB_FIRST GL_PACK_ROW_LENGTH GL_PACK_SKIP_ROWS GL_PACK_SKIP_PIXELS GL_PACK_ALIGNMENT GL_MAP_COLOR GL_MAP_STENCIL GL_INDEX_SHIFT GL_INDEX_OFFSET GL_RED_SCALE GL_RED_BIAS GL_ZOOM_X GL_ZOOM_Y GL_GREEN_SCALE GL_GREEN_BIAS GL_BLUE_SCALE GL_BLUE_BIAS GL_ALPHA_SCALE GL_ALPHA_BIAS GL_DEPTH_SCALE GL_DEPTH_BIAS GL_MAX_EVAL_ORDER GL_MAX_LIGHTS GL_MAX_CLIP_PLANES GL_MAX_TEXTURE_SIZE GL_MAX_PIXEL_MAP_TABLE GL_MAX_ATTRIB_STACK_DEPTH GL_MAX_MODELVIEW_STACK_DEPTH GL_MAX_NAME_STACK_DEPTH GL_MAX_PROJECTION_STACK_DEPTH GL_MAX_TEXTURE_STACK_DEPTH GL_MAX_VIEWPORT_DIMS GL_MAX_CLIENT_ATTRIB_STACK_DEPTH GL_NAME_STACK_DEPTH GL_AUTO_NORMAL GL_MAP1_COLOR_4 GL_MAP1_INDEX GL_MAP1_NORMAL GL_MAP1_TEXTURE_COORD_1 GL_MAP1_TEXTURE_COORD_2 GL_MAP1_TEXTURE_COORD_3 GL_MAP1_TEXTURE_COORD_4 GL_MAP1_VERTEX_3 GL_MAP1_VERTEX_4 GL_MAP2_COLOR_4 GL_MAP2_INDEX GL_MAP2_NORMAL GL_MAP2_TEXTURE_COORD_1 GL_MAP2_TEXTURE_COORD_2 GL_MAP2_TEXTURE_COORD_3 GL_MAP2_TEXTURE_COORD_4 GL_MAP2_VERTEX_3 GL_MAP2_VERTEX_4 GL_MAP1_GRID_DOMAIN GL_MAP1_GRID_SEGMENTS GL_MAP2_GRID_DOMAIN GL_MAP2_GRID_SEGMENTS GL_TEXTURE_1D GL_TEXTURE_2D GL_FEEDBACK_BUFFER_POINTER GL_FEEDBACK_BUFFER_SIZE GL_FEEDBACK_BUFFER_TYPE GL_SELECTION_BUFFER_POINTER GL_SELECTION_BUFFER_SIZE GL_TEXTURE_WIDTH GL_TEXTURE_HEIGHT GL_TEXTURE_INTERNAL_FORMAT GL_TEXTURE_BORDER_COLOR GL_TEXTURE_BORDER GL_DONT_CARE GL_FASTEST GL_NICEST GL_AMBIENT GL_DIFFUSE GL_SPECULAR GL_POSITION GL_SPOT_DIRECTION GL_SPOT_EXPONENT GL_SPOT_CUTOFF GL_CONSTANT_ATTENUATION GL_LINEAR_ATTENUATION GL_QUADRATIC_ATTENUATION GL_COMPILE GL_COMPILE_AND_EXECUTE GL_BYTE GL_UNSIGNED_BYTE GL_SHORT GL_UNSIGNED_SHORT GL_INT GL_UNSIGNED_INT GL_FLOAT GL_2_BYTES GL_3_BYTES GL_4_BYTES GL_DOUBLE GL_HALF_FLOAT_ARB GL_FIXED GL_CLEAR GL_AND GL_AND_REVERSE GL_COPY GL_AND_INVERTED GL_NOOP GL_XOR GL_OR GL_NOR GL_EQUIV GL_INVERT GL_OR_REVERSE GL_COPY_INVERTED GL_OR_INVERTED GL_NAND GL_SET GL_EMISSION GL_SHININESS GL_AMBIENT_AND_DIFFUSE GL_COLOR_INDEXES GL_MODELVIEW GL_PROJECTION GL_TEXTURE GL_COLOR GL_DEPTH GL_STENCIL GL_COLOR_INDEX GL_STENCIL_INDEX GL_DEPTH_COMPONENT GL_RED GL_GREEN GL_BLUE GL_ALPHA GL_RGB GL_RGBA GL_LUMINANCE GL_LUMINANCE_ALPHA GL_BITMAP GL_POINT GL_LINE GL_FILL GL_RENDER GL_FEEDBACK GL_SELECT GL_FLAT GL_SMOOTH GL_KEEP GL_REPLACE GL_INCR GL_DECR GL_VENDOR GL_RENDERER GL_VERSION GL_EXTENSIONS GL_S GL_T GL_R GL_Q GL_MODULATE GL_DECAL GL_TEXTURE_ENV_MODE GL_TEXTURE_ENV_COLOR GL_TEXTURE_ENV GL_EYE_LINEAR GL_OBJECT_LINEAR GL_SPHERE_MAP GL_TEXTURE_GEN_MODE GL_OBJECT_PLANE GL_EYE_PLANE GL_NEAREST GL_LINEAR GL_NEAREST_MIPMAP_NEAREST GL_LINEAR_MIPMAP_NEAREST GL_NEAREST_MIPMAP_LINEAR GL_LINEAR_MIPMAP_LINEAR GL_TEXTURE_MAG_FILTER GL_TEXTURE_MIN_FILTER GL_TEXTURE_WRAP_S GL_TEXTURE_WRAP_T GL_CLAMP GL_REPEAT GL_POLYGON_OFFSET_UNITS GL_POLYGON_OFFSET_POINT GL_POLYGON_OFFSET_LINE GL_R3_G3_B2 GL_V2F GL_V3F GL_C4UB_V2F GL_C4UB_V3F GL_C3F_V3F GL_N3F_V3F GL_C4F_N3F_V3F GL_T2F_V3F GL_T4F_V4F GL_T2F_C4UB_V3F GL_T2F_C3F_V3F GL_T2F_N3F_V3F GL_T2F_C4F_N3F_V3F GL_T4F_C4F_N3F_V4F GL_CLIP_PLANE0 GL_CLIP_PLANE1 GL_CLIP_PLANE2 GL_CLIP_PLANE3 GL_CLIP_PLANE4 GL_CLIP_PLANE5 GL_CLIP_DISTANCE6 GL_CLIP_DISTANCE7 GL_LIGHT0 GL_LIGHT1 GL_LIGHT2 GL_LIGHT3 GL_LIGHT4 GL_LIGHT5 GL_LIGHT6 GL_LIGHT7 GL_PN_TRIANGLES_ATI GL_MAX_PN_TRIANGLES_TESSELATION_LEVEL_ATI GL_PN_TRIANGLES_POINT_MODE_ATI GL_PN_TRIANGLES_NORMAL_MODE_ATI GL_PN_TRIANGLES_TESSELATION_LEVEL_ATI GL_PN_TRIANGLES_POINT_MODE_LINEAR_ATI GL_PN_TRIANGLES_POINT_MODE_CUBIC_ATI GL_PN_TRIANGLES_NORMAL_MODE_LINEAR_ATI GL_PN_TRIANGLES_NORMAL_MODE_QUADRATIC_ATI GL_POINT_CULL_MODE_ATI GL_POINT_CULL_CENTER_ATI GL_POINT_CULL_CLIP_ATI GL_ABGR_EXT GL_CONSTANT_COLOR GL_ONE_MINUS_CONSTANT_COLOR GL_CONSTANT_ALPHA GL_ONE_MINUS_CONSTANT_ALPHA GL_BLEND_COLOR GL_FUNC_ADD GL_MIN GL_MAX GL_BLEND_EQUATION GL_FUNC_SUBTRACT GL_FUNC_REVERSE_SUBTRACT GL_CONVOLUTION_1D GL_CONVOLUTION_2D GL_SEPARABLE_2D GL_CONVOLUTION_BORDER_MODE GL_CONVOLUTION_FILTER_SCALE GL_CONVOLUTION_FILTER_BIAS GL_REDUCE GL_CONVOLUTION_FORMAT GL_CONVOLUTION_WIDTH GL_CONVOLUTION_HEIGHT GL_MAX_CONVOLUTION_WIDTH GL_MAX_CONVOLUTION_HEIGHT GL_POST_CONVOLUTION_RED_SCALE GL_POST_CONVOLUTION_GREEN_SCALE GL_POST_CONVOLUTION_BLUE_SCALE GL_POST_CONVOLUTION_ALPHA_SCALE GL_POST_CONVOLUTION_RED_BIAS GL_POST_CONVOLUTION_GREEN_BIAS GL_POST_CONVOLUTION_BLUE_BIAS GL_POST_CONVOLUTION_ALPHA_BIAS GL_HISTOGRAM GL_PROXY_HISTOGRAM GL_HISTOGRAM_WIDTH GL_HISTOGRAM_FORMAT GL_HISTOGRAM_RED_SIZE GL_HISTOGRAM_GREEN_SIZE GL_HISTOGRAM_BLUE_SIZE GL_HISTOGRAM_ALPHA_SIZE GL_HISTOGRAM_LUMINANCE_SIZE GL_HISTOGRAM_SINK GL_MINMAX GL_MINMAX_FORMAT GL_MINMAX_SINK GL_TABLE_TOO_LARGE GL_UNSIGNED_BYTE_3_3_2 GL_UNSIGNED_SHORT_4_4_4_4 GL_UNSIGNED_SHORT_5_5_5_1 GL_UNSIGNED_INT_8_8_8_8 GL_UNSIGNED_INT_10_10_10_2 GL_POLYGON_OFFSET_FILL GL_POLYGON_OFFSET_FACTOR GL_POLYGON_OFFSET_BIAS_EXT GL_RESCALE_NORMAL GL_ALPHA4 GL_ALPHA8 GL_ALPHA12 GL_ALPHA16 GL_LUMINANCE4 GL_LUMINANCE8 GL_LUMINANCE12 GL_LUMINANCE16 GL_LUMINANCE4_ALPHA4 GL_LUMINANCE6_ALPHA2 GL_LUMINANCE8_ALPHA8 GL_LUMINANCE12_ALPHA4 GL_LUMINANCE12_ALPHA12 GL_LUMINANCE16_ALPHA16 GL_INTENSITY GL_INTENSITY4 GL_INTENSITY8 GL_INTENSITY12 GL_INTENSITY16 GL_RGB2_EXT GL_RGB4 GL_RGB5 GL_RGB8 GL_RGB10 GL_RGB12 GL_RGB16 GL_RGBA2 GL_RGBA4 GL_RGB5_A1 GL_RGBA8 GL_RGB10_A2 GL_RGBA12 GL_RGBA16 GL_TEXTURE_RED_SIZE GL_TEXTURE_GREEN_SIZE GL_TEXTURE_BLUE_SIZE GL_TEXTURE_ALPHA_SIZE GL_TEXTURE_LUMINANCE_SIZE GL_TEXTURE_INTENSITY_SIZE GL_REPLACE_EXT GL_PROXY_TEXTURE_1D GL_PROXY_TEXTURE_2D GL_TEXTURE_TOO_LARGE_EXT GL_TEXTURE_PRIORITY GL_TEXTURE_RESIDENT GL_TEXTURE_BINDING_1D GL_TEXTURE_BINDING_2D GL_TEXTURE_BINDING_3D GL_PACK_SKIP_IMAGES GL_PACK_IMAGE_HEIGHT GL_UNPACK_SKIP_IMAGES GL_UNPACK_IMAGE_HEIGHT GL_TEXTURE_3D GL_PROXY_TEXTURE_3D GL_TEXTURE_DEPTH GL_TEXTURE_WRAP_R GL_MAX_3D_TEXTURE_SIZE GL_VERTEX_ARRAY GL_NORMAL_ARRAY GL_COLOR_ARRAY GL_INDEX_ARRAY GL_TEXTURE_COORD_ARRAY GL_EDGE_FLAG_ARRAY GL_VERTEX_ARRAY_SIZE GL_VERTEX_ARRAY_TYPE GL_VERTEX_ARRAY_STRIDE GL_VERTEX_ARRAY_COUNT_EXT GL_NORMAL_ARRAY_TYPE GL_NORMAL_ARRAY_STRIDE GL_NORMAL_ARRAY_COUNT_EXT GL_COLOR_ARRAY_SIZE GL_COLOR_ARRAY_TYPE GL_COLOR_ARRAY_STRIDE GL_COLOR_ARRAY_COUNT_EXT GL_INDEX_ARRAY_TYPE GL_INDEX_ARRAY_STRIDE GL_INDEX_ARRAY_COUNT_EXT GL_TEXTURE_COORD_ARRAY_SIZE GL_TEXTURE_COORD_ARRAY_TYPE GL_TEXTURE_COORD_ARRAY_STRIDE GL_TEXTURE_COORD_ARRAY_COUNT_EXT GL_EDGE_FLAG_ARRAY_STRIDE GL_EDGE_FLAG_ARRAY_COUNT_EXT GL_VERTEX_ARRAY_POINTER GL_NORMAL_ARRAY_POINTER GL_COLOR_ARRAY_POINTER GL_INDEX_ARRAY_POINTER GL_TEXTURE_COORD_ARRAY_POINTER GL_EDGE_FLAG_ARRAY_POINTER GL_MULTISAMPLE GL_SAMPLE_ALPHA_TO_COVERAGE GL_SAMPLE_ALPHA_TO_ONE GL_SAMPLE_COVERAGE GL_SAMPLE_BUFFERS GL_SAMPLES GL_SAMPLE_COVERAGE_VALUE GL_SAMPLE_COVERAGE_INVERT GL_COLOR_MATRIX GL_COLOR_MATRIX_STACK_DEPTH GL_MAX_COLOR_MATRIX_STACK_DEPTH GL_POST_COLOR_MATRIX_RED_SCALE GL_POST_COLOR_MATRIX_GREEN_SCALE GL_POST_COLOR_MATRIX_BLUE_SCALE GL_POST_COLOR_MATRIX_ALPHA_SCALE GL_POST_COLOR_MATRIX_RED_BIAS GL_POST_COLOR_MATRIX_GREEN_BIAS GL_POST_COLOR_MATRIX_BLUE_BIAS GL_POST_COLOR_MATRIX_ALPHA_BIAS GL_TEXTURE_COMPARE_FAIL_VALUE_ARB GL_BLEND_DST_RGB GL_BLEND_SRC_RGB GL_BLEND_DST_ALPHA GL_BLEND_SRC_ALPHA GL_COLOR_TABLE GL_POST_CONVOLUTION_COLOR_TABLE GL_POST_COLOR_MATRIX_COLOR_TABLE GL_PROXY_COLOR_TABLE GL_PROXY_POST_CONVOLUTION_COLOR_TABLE GL_PROXY_POST_COLOR_MATRIX_COLOR_TABLE GL_COLOR_TABLE_SCALE GL_COLOR_TABLE_BIAS GL_COLOR_TABLE_FORMAT GL_COLOR_TABLE_WIDTH GL_COLOR_TABLE_RED_SIZE GL_COLOR_TABLE_GREEN_SIZE GL_COLOR_TABLE_BLUE_SIZE GL_COLOR_TABLE_ALPHA_SIZE GL_COLOR_TABLE_LUMINANCE_SIZE GL_COLOR_TABLE_INTENSITY_SIZE GL_BGR GL_BGRA GL_COLOR_INDEX1_EXT GL_COLOR_INDEX2_EXT GL_COLOR_INDEX4_EXT GL_COLOR_INDEX8_EXT GL_COLOR_INDEX12_EXT GL_COLOR_INDEX16_EXT GL_MAX_ELEMENTS_VERTICES GL_MAX_ELEMENTS_INDICES GL_TEXTURE_INDEX_SIZE_EXT GL_CLIP_VOLUME_CLIPPING_HINT_EXT GL_POINT_SIZE_MIN GL_POINT_SIZE_MAX GL_POINT_FADE_THRESHOLD_SIZE GL_POINT_DISTANCE_ATTENUATION GL_CLAMP_TO_BORDER GL_CLAMP_TO_EDGE GL_TEXTURE_MIN_LOD GL_TEXTURE_MAX_LOD GL_TEXTURE_BASE_LEVEL GL_TEXTURE_MAX_LEVEL GL_IGNORE_BORDER_HP GL_CONSTANT_BORDER GL_REPLICATE_BORDER GL_CONVOLUTION_BORDER_COLOR GL_GENERATE_MIPMAP GL_GENERATE_MIPMAP_HINT GL_DEPTH_COMPONENT16 GL_DEPTH_COMPONENT24 GL_DEPTH_COMPONENT32 GL_ARRAY_ELEMENT_LOCK_FIRST_EXT GL_ARRAY_ELEMENT_LOCK_COUNT_EXT GL_LIGHT_MODEL_COLOR_CONTROL GL_SINGLE_COLOR GL_SEPARATE_SPECULAR_COLOR GL_SHARED_TEXTURE_PALETTE_EXT GL_TEXT_FRAGMENT_SHADER_ATI GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE GL_FRAMEBUFFER_DEFAULT GL_FRAMEBUFFER_UNDEFINED GL_DEPTH_STENCIL_ATTACHMENT GL_MAJOR_VERSION GL_MINOR_VERSION GL_NUM_EXTENSIONS GL_CONTEXT_FLAGS GL_COMPRESSED_RED GL_COMPRESSED_RG GL_RG GL_RG_INTEGER GL_R8 GL_R16 GL_RG8 GL_RG16 GL_R16F GL_R32F GL_RG16F GL_RG32F GL_R8I GL_R8UI GL_R16I GL_R16UI GL_R32I GL_R32UI GL_RG8I GL_RG8UI GL_RG16I GL_RG16UI GL_RG32I GL_RG32UI GL_PROGRAM_BINARY_RETRIEVABLE_HINT GL_PROGRAM_SEPARABLE GL_ACTIVE_PROGRAM GL_PROGRAM_PIPELINE_BINDING GL_MAX_VIEWPORTS GL_VIEWPORT_BOUNDS_RANGE GL_LAYER_PROVOKING_VERTEX GL_VIEWPORT_INDEX_PROVOKING_VERTEX GL_UNDEFINED_VERTEX GL_SAMPLER GL_UNSIGNED_BYTE_2_3_3_REV GL_UNSIGNED_SHORT_5_6_5 GL_UNSIGNED_SHORT_5_6_5_REV GL_UNSIGNED_SHORT_4_4_4_4_REV GL_UNSIGNED_SHORT_1_5_5_5_REV GL_UNSIGNED_INT_8_8_8_8_REV GL_UNSIGNED_INT_2_10_10_10_REV GL_MIRRORED_REPEAT GL_COMPRESSED_RGB_S3TC_DXT1_EXT GL_COMPRESSED_RGBA_S3TC_DXT1_EXT GL_COMPRESSED_RGBA_S3TC_DXT3_EXT GL_COMPRESSED_RGBA_S3TC_DXT5_EXT GL_FOG_COORD_SRC GL_FOG_COORD GL_FRAGMENT_DEPTH GL_CURRENT_FOG_COORD GL_FOG_COORD_ARRAY_TYPE GL_FOG_COORD_ARRAY_STRIDE GL_FOG_COORD_ARRAY_POINTER GL_FOG_COORD_ARRAY GL_COLOR_SUM GL_CURRENT_SECONDARY_COLOR GL_SECONDARY_COLOR_ARRAY_SIZE GL_SECONDARY_COLOR_ARRAY_TYPE GL_SECONDARY_COLOR_ARRAY_STRIDE GL_SECONDARY_COLOR_ARRAY_POINTER GL_SECONDARY_COLOR_ARRAY GL_CURRENT_RASTER_SECONDARY_COLOR GL_ALIASED_POINT_SIZE_RANGE GL_ALIASED_LINE_WIDTH_RANGE GL_TEXTURE0 GL_TEXTURE1 GL_TEXTURE2 GL_TEXTURE3 GL_TEXTURE4 GL_TEXTURE5 GL_TEXTURE6 GL_TEXTURE7 GL_TEXTURE8 GL_TEXTURE9 GL_TEXTURE10 GL_TEXTURE11 GL_TEXTURE12 GL_TEXTURE13 GL_TEXTURE14 GL_TEXTURE15 GL_TEXTURE16 GL_TEXTURE17 GL_TEXTURE18 GL_TEXTURE19 GL_TEXTURE20 GL_TEXTURE21 GL_TEXTURE22 GL_TEXTURE23 GL_TEXTURE24 GL_TEXTURE25 GL_TEXTURE26 GL_TEXTURE27 GL_TEXTURE28 GL_TEXTURE29 GL_TEXTURE30 GL_TEXTURE31 GL_ACTIVE_TEXTURE GL_CLIENT_ACTIVE_TEXTURE GL_MAX_TEXTURE_UNITS GL_TRANSPOSE_MODELVIEW_MATRIX GL_TRANSPOSE_PROJECTION_MATRIX GL_TRANSPOSE_TEXTURE_MATRIX GL_TRANSPOSE_COLOR_MATRIX GL_SUBTRACT GL_MAX_RENDERBUFFER_SIZE GL_COMPRESSED_ALPHA GL_COMPRESSED_LUMINANCE GL_COMPRESSED_LUMINANCE_ALPHA GL_COMPRESSED_INTENSITY GL_COMPRESSED_RGB GL_COMPRESSED_RGBA GL_TEXTURE_COMPRESSION_HINT GL_UNIFORM_BLOCK_REFERENCED_BY_TESS_CONTROL_SHADER GL_UNIFORM_BLOCK_REFERENCED_BY_TESS_EVALUATION_SHADER GL_TEXTURE_RECTANGLE_ARB GL_TEXTURE_BINDING_RECTANGLE_ARB GL_PROXY_TEXTURE_RECTANGLE_ARB GL_MAX_RECTANGLE_TEXTURE_SIZE_ARB GL_DEPTH_STENCIL GL_UNSIGNED_INT_24_8 GL_MAX_TEXTURE_LOD_BIAS GL_TEXTURE_MAX_ANISOTROPY_EXT GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT GL_TEXTURE_FILTER_CONTROL GL_TEXTURE_LOD_BIAS GL_MAX_SHININESS_NV GL_MAX_SPOT_EXPONENT_NV GL_INCR_WRAP GL_DECR_WRAP GL_MODELVIEW1_ARB GL_NORMAL_MAP GL_REFLECTION_MAP GL_TEXTURE_CUBE_MAP GL_TEXTURE_BINDING_CUBE_MAP GL_TEXTURE_CUBE_MAP_POSITIVE_X GL_TEXTURE_CUBE_MAP_NEGATIVE_X GL_TEXTURE_CUBE_MAP_POSITIVE_Y GL_TEXTURE_CUBE_MAP_NEGATIVE_Y GL_TEXTURE_CUBE_MAP_POSITIVE_Z GL_TEXTURE_CUBE_MAP_NEGATIVE_Z GL_PROXY_TEXTURE_CUBE_MAP GL_MAX_CUBE_MAP_TEXTURE_SIZE GL_VERTEX_ARRAY_RANGE_APPLE GL_VERTEX_ARRAY_RANGE_LENGTH_APPLE GL_VERTEX_ARRAY_STORAGE_HINT_APPLE GL_MAX_VERTEX_ARRAY_RANGE_ELEMENT_APPLE GL_VERTEX_ARRAY_RANGE_POINTER_APPLE GL_REGISTER_COMBINERS_NV GL_VARIABLE_A_NV GL_VARIABLE_B_NV GL_VARIABLE_C_NV GL_VARIABLE_D_NV GL_VARIABLE_E_NV GL_VARIABLE_F_NV GL_VARIABLE_G_NV GL_CONSTANT_COLOR0_NV GL_CONSTANT_COLOR1_NV GL_PRIMARY_COLOR_NV GL_SECONDARY_COLOR_NV GL_SPARE0_NV GL_SPARE1_NV GL_DISCARD_NV GL_E_TIMES_F_NV GL_SPARE0_PLUS_SECONDARY_COLOR_NV GL_VERTEX_ARRAY_RANGE_WITHOUT_FLUSH_NV GL_MULTISAMPLE_FILTER_HINT_NV GL_PER_STAGE_CONSTANTS_NV GL_UNSIGNED_IDENTITY_NV GL_UNSIGNED_INVERT_NV GL_EXPAND_NORMAL_NV GL_EXPAND_NEGATE_NV GL_HALF_BIAS_NORMAL_NV GL_HALF_BIAS_NEGATE_NV GL_SIGNED_IDENTITY_NV GL_SIGNED_NEGATE_NV GL_SCALE_BY_TWO_NV GL_SCALE_BY_FOUR_NV GL_SCALE_BY_ONE_HALF_NV GL_BIAS_BY_NEGATIVE_ONE_HALF_NV GL_COMBINER_INPUT_NV GL_COMBINER_MAPPING_NV GL_COMBINER_COMPONENT_USAGE_NV GL_COMBINER_AB_DOT_PRODUCT_NV GL_COMBINER_CD_DOT_PRODUCT_NV GL_COMBINER_MUX_SUM_NV GL_COMBINER_SCALE_NV GL_COMBINER_BIAS_NV GL_COMBINER_AB_OUTPUT_NV GL_COMBINER_CD_OUTPUT_NV GL_COMBINER0_NV

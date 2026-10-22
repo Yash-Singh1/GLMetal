@@ -367,6 +367,7 @@ struct glm_backend_context {
         bool valid, live_sampling;
         uint64_t serial, encoder_serial, sampling_generation, links[2], sampler_serials[2];
         uint32_t layout_id;
+        bool points; /* fixed-function point sprites depend on the primitive */
         __unsafe_unretained id vertex_override, fragment_override;
         struct draw_stages st;
         struct glm_ff_key key;
@@ -2761,11 +2762,21 @@ static void set_stages(struct glm_backend_context *b, __unsafe_unretained id<MTL
 static void bind_arb_parameters(struct glm_context *ctx, struct glm_arb_program *p, int index)
 {
     struct glm_backend_context *b = ctx->backend;
-    NSUInteger bytes = (NSUInteger)(p->env_count + p->local_count) * 16, offset;
+    bool matrices = p->counts.program_matrices;
+    NSUInteger bytes = (NSUInteger)(p->env_count + p->local_count + (matrices ? 64 : 0)) * 16, offset;
     id<MTLBuffer> buffer = transient_alloc(b, bytes, &offset);
     uint8_t *dst = (uint8_t *)mtl_contents(buffer) + offset;
     memcpy(dst, ctx->arb_env[index], (size_t)p->env_count * 16);
     memcpy(dst + p->env_count * 16, p->local, (size_t)p->local_count * 16);
+    /* Program matrices: each one's columns, then its inverse's. */
+    if (matrices) {
+        float *m = (float *)(dst + (p->env_count + p->local_count) * 16);
+        for (int i = 0; i < 8; ++i) {
+            const struct glm_matrix_stack *s = &ctx->program_matrices[i];
+            memcpy(m + i * 32, s->m[s->depth], 64);
+            glm_mat4_invert(m + i * 32 + 16, s->m[s->depth]);
+        }
+    }
     set_stages(b, buffer, offset, GLM_SLOT_ARB, index == 0 ? STAGE_VERTEX : STAGE_FRAGMENT);
 }
 
@@ -2902,13 +2913,41 @@ static bool program_sampling_cacheable(const struct glm_program *p)
     return true;
 }
 
+/* ARB_color_buffer_float's GL_FIXED_ONLY clamps when no colour target is
+   floating-point. */
+static bool float_color_targets(const struct glm_backend_context *b)
+{
+    for (int i = 0; i < GLM_MAX_DRAW_BUFFERS; ++i) {
+        if (!b->color[i]) continue;
+        switch (b->color[i].pixelFormat) {
+        case MTLPixelFormatR16Float: case MTLPixelFormatRG16Float: case MTLPixelFormatRGBA16Float:
+        case MTLPixelFormatR32Float: case MTLPixelFormatRG32Float: case MTLPixelFormatRGBA32Float:
+        case MTLPixelFormatRG11B10Float: case MTLPixelFormatRGB9E5Float:
+            return true;
+        default: break;
+        }
+    }
+    return false;
+}
+
+/* Whether vertex (fragment) colours are clamped for this draw
+   (GL_CLAMP_VERTEX_COLOR / GL_CLAMP_FRAGMENT_COLOR; the core profile
+   clamps neither). */
+static bool clamp_colors(const struct glm_context *ctx, bool fragment)
+{
+    if (ctx->profile == GLM_PROFILE_CORE) return false;
+    GLenum mode = fragment ? ctx->clamp_fragment_color : ctx->clamp_vertex_color;
+    return mode == GL_TRUE || (mode == GL_FIXED_ONLY && !float_color_targets(ctx->backend));
+}
+
 static bool bind_program_state(struct glm_context *ctx, struct glm_program *p, unsigned stages)
 {
     struct glm_backend_context *b = ctx->backend;
-    struct { float size, program_size, upper; uint32_t vertex_id_base, offset, mapped, pad[2]; } point = {
+    struct { float size, program_size, upper; uint32_t vertex_id_base, offset, mapped; float clamp_vertex, clamp_fragment; } point = {
         ctx->state.point_size, ctx->state.program_point_size ? 1.0f : 0.0f,
         ctx->point_sprite_origin == GL_UPPER_LEFT ? 1.0f : 0.0f, b->vertex_id_base,
-        b->vertex_id_offset, b->vertex_id_mapped, {0, 0}};
+        b->vertex_id_offset, b->vertex_id_mapped, clamp_colors(ctx, false) ? 1.0f : 0.0f,
+        clamp_colors(ctx, true) ? 1.0f : 0.0f};
     enc_bytes(b, stages, &point, sizeof point, GLM_SLOT_POINT);
     if (!p->result.sampler_count) return true;
     uint32_t border_mask = (stages & STAGE_FRAGMENT) ? b->border_mask : 0;
@@ -3119,11 +3158,15 @@ static void *prepare_draw_once(struct glm_context *ctx, const struct draw_stages
                 b->fast.fragment_override == b->fragment_override &&
                 b->fast.st.vertex_program == st->vertex_program &&
                 b->fast.st.fragment_program == st->fragment_program && b->fast.st.ff_vertex == st->ff_vertex &&
-                b->fast.st.ff_fragment == st->ff_fragment;
+                b->fast.st.ff_fragment == st->ff_fragment && b->fast.points == (metal_primitive == 0 && !ctx->polygon_split);
     if (!fast) {
         struct glm_ff_key key;
         id<MTLFunction> vertex = nil, fragment = nil;
         if (st->ff_vertex || st->ff_fragment) {
+            /* Point primitives (not GL_POINT polygon mode: Apple's sprites skip those). */
+            ctx->ff_drawing_points = metal_primitive == 0 && !ctx->polygon_split;
+            ctx->ff_clamp_vertex = clamp_colors(ctx, false);
+            ctx->ff_clamp_fragment = clamp_colors(ctx, true);
             glm_ff_key_build(ctx, color_attachment_count(b), st->ff_vertex, st->ff_fragment, &key);
             ff_functions(b, &key, &vertex, &fragment);
             b->fast.key = key;
@@ -3213,6 +3256,7 @@ static void *prepare_draw_once(struct glm_context *ctx, const struct draw_stages
         b->fast.links[1] = fragment_link;
         b->fast.encoder_serial = b->encoder_serial;
         b->fast.layout_id = layout_id;
+        b->fast.points = metal_primitive == 0 && !ctx->polygon_split;
         b->fast.vertex_override = b->vertex_override;
         b->fast.fragment_override = b->fragment_override;
         b->fast.st = *st;

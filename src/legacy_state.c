@@ -49,15 +49,32 @@ GLM_EXPORT void glLightfv(GLenum light, GLenum pname, const GLfloat *params)
         if (!(params[0] >= 0 && params[0] <= 128)) return glm_error(ctx, GL_INVALID_VALUE);
         l->spot_exponent = params[0];
         break;
-    case GL_SPOT_CUTOFF: l->spot_cutoff = params[0]; break;
+    case GL_SPOT_CUTOFF:
+        if (!((params[0] >= 0 && params[0] <= 90) || params[0] == 180)) return glm_error(ctx, GL_INVALID_VALUE);
+        l->spot_cutoff = params[0];
+        break;
     case GL_CONSTANT_ATTENUATION: l->attenuation[0] = params[0]; break;
     case GL_LINEAR_ATTENUATION: l->attenuation[1] = params[0]; break;
     case GL_QUADRATIC_ATTENUATION: l->attenuation[2] = params[0]; break;
     default: glm_error(ctx, GL_INVALID_ENUM);
     }
 }
-GLM_EXPORT void glLightf(GLenum light, GLenum pname, GLfloat param) { glLightfv(light, pname, &param); }
-GLM_EXPORT void glLighti(GLenum light, GLenum pname, GLint param) { GLfloat f = (GLfloat)param; glLightfv(light, pname, &f); }
+/* The scalar forms take the scalar parameters only (Apple's:
+   GL_INVALID_ENUM for the vector ones). */
+static bool light_vector(GLenum pname)
+{
+    return pname == GL_AMBIENT || pname == GL_DIFFUSE || pname == GL_SPECULAR || pname == GL_POSITION ||
+           pname == GL_SPOT_DIRECTION;
+}
+GLM_EXPORT void glLightf(GLenum light, GLenum pname, GLfloat param)
+{
+    if (light_vector(pname)) {
+        GLM_CONTEXT(ctx);
+        return glm_error(ctx, GL_INVALID_ENUM);
+    }
+    glLightfv(light, pname, &param);
+}
+GLM_EXPORT void glLighti(GLenum light, GLenum pname, GLint param) { glLightf(light, pname, (GLfloat)param); }
 GLM_EXPORT void glLightiv(GLenum light, GLenum pname, const GLint *params)
 {
     GLfloat f[4];
@@ -93,12 +110,25 @@ GLM_EXPORT void glLightModelfv(GLenum pname, const GLfloat *params)
     case GL_LIGHT_MODEL_AMBIENT: memcpy(ctx->state.light_model_ambient, params, 16); break;
     case GL_LIGHT_MODEL_LOCAL_VIEWER: ctx->state.light_model_local_viewer = params[0] != 0; break;
     case GL_LIGHT_MODEL_TWO_SIDE: ctx->state.light_model_two_side = params[0] != 0; break;
-    case GL_LIGHT_MODEL_COLOR_CONTROL: ctx->state.light_model_separate_specular = params[0] == GL_SEPARATE_SPECULAR_COLOR; break;
+    case GL_LIGHT_MODEL_COLOR_CONTROL:
+        if ((GLenum)params[0] != GL_SINGLE_COLOR && (GLenum)params[0] != GL_SEPARATE_SPECULAR_COLOR)
+            return glm_error(ctx, GL_INVALID_ENUM);
+        ctx->state.light_model_separate_specular = params[0] == GL_SEPARATE_SPECULAR_COLOR;
+        break;
+    /* APPLE_specular_vector: Phong's reflection vector for specular terms. */
+    case GL_LIGHT_MODEL_SPECULAR_VECTOR_APPLE: ctx->state.light_model_specular_vector = params[0] != 0; break;
     default: glm_error(ctx, GL_INVALID_ENUM);
     }
 }
-GLM_EXPORT void glLightModelf(GLenum pname, GLfloat param) { glLightModelfv(pname, &param); }
-GLM_EXPORT void glLightModeli(GLenum pname, GLint param) { GLfloat f = (GLfloat)param; glLightModelfv(pname, &f); }
+GLM_EXPORT void glLightModelf(GLenum pname, GLfloat param)
+{
+    if (pname == GL_LIGHT_MODEL_AMBIENT) {
+        GLM_CONTEXT(ctx);
+        return glm_error(ctx, GL_INVALID_ENUM);
+    }
+    glLightModelfv(pname, &param);
+}
+GLM_EXPORT void glLightModeli(GLenum pname, GLint param) { glLightModelf(pname, (GLfloat)param); }
 GLM_EXPORT void glLightModeliv(GLenum pname, const GLint *params)
 {
     GLfloat f[4] = {0};
@@ -160,8 +190,15 @@ GLM_EXPORT void glMaterialfv(GLenum face, GLenum pname, const GLfloat *params)
         }
     }
 }
-GLM_EXPORT void glMaterialf(GLenum face, GLenum pname, GLfloat param) { glMaterialfv(face, pname, &param); }
-GLM_EXPORT void glMateriali(GLenum face, GLenum pname, GLint param) { GLfloat f = (GLfloat)param; glMaterialfv(face, pname, &f); }
+GLM_EXPORT void glMaterialf(GLenum face, GLenum pname, GLfloat param)
+{
+    if (pname != GL_SHININESS) { /* the only scalar material parameter */
+        GLM_CONTEXT(ctx);
+        return glm_error(ctx, GL_INVALID_ENUM);
+    }
+    glMaterialfv(face, pname, &param);
+}
+GLM_EXPORT void glMateriali(GLenum face, GLenum pname, GLint param) { glMaterialf(face, pname, (GLfloat)param); }
 GLM_EXPORT void glMaterialiv(GLenum face, GLenum pname, const GLint *params)
 {
     GLfloat f[4];
@@ -210,6 +247,10 @@ GLM_EXPORT void glGetLightiv(GLenum light, GLenum pname, GLint *params)
 GLM_EXPORT void glColorMaterial(GLenum face, GLenum mode)
 {
     GLM_CONTEXT(ctx);
+    if (face != GL_FRONT && face != GL_BACK && face != GL_FRONT_AND_BACK) return glm_error(ctx, GL_INVALID_ENUM);
+    if (mode != GL_AMBIENT && mode != GL_DIFFUSE && mode != GL_SPECULAR && mode != GL_EMISSION &&
+        mode != GL_AMBIENT_AND_DIFFUSE)
+        return glm_error(ctx, GL_INVALID_ENUM);
     glm_color_material_sync(ctx);
     ctx->state.color_material_face = face;
     ctx->state.color_material_mode = mode;
@@ -223,12 +264,20 @@ GLM_EXPORT void glFogfv(GLenum pname, const GLfloat *params)
     GLM_CONTEXT(ctx);
     struct glm_state *s = &ctx->state;
     switch (pname) {
-    case GL_FOG_MODE: s->fog_mode = (GLenum)params[0]; break;
+    case GL_FOG_MODE:
+        if ((GLenum)params[0] != GL_EXP && (GLenum)params[0] != GL_EXP2 && (GLenum)params[0] != GL_LINEAR)
+            return glm_error(ctx, GL_INVALID_ENUM);
+        s->fog_mode = (GLenum)params[0];
+        break;
     case GL_FOG_DENSITY: s->fog_density = params[0]; break;
     case GL_FOG_START: s->fog_start = params[0]; break;
     case GL_FOG_END: s->fog_end = params[0]; break;
     case GL_FOG_COLOR: memcpy(s->fog_color, params, 16); break;
-    case GL_FOG_COORD_SRC: s->fog_coord_source = (GLenum)params[0]; break;
+    case GL_FOG_COORD_SRC:
+        if ((GLenum)params[0] != GL_FOG_COORD && (GLenum)params[0] != GL_FRAGMENT_DEPTH)
+            return glm_error(ctx, GL_INVALID_ENUM);
+        s->fog_coord_source = (GLenum)params[0];
+        break;
     case GL_FOG_DISTANCE_MODE_NV: {
         GLenum mode = (GLenum)params[0];
         if (mode != GL_EYE_RADIAL_NV && mode != GL_EYE_PLANE && mode != GL_EYE_PLANE_ABSOLUTE_NV)
@@ -236,12 +285,19 @@ GLM_EXPORT void glFogfv(GLenum pname, const GLfloat *params)
         s->fog_distance_mode = mode;
         break;
     }
-    case GL_FOG_INDEX: case GL_FOG_HINT: break;
+    case GL_FOG_INDEX: break;
     default: glm_error(ctx, GL_INVALID_ENUM);
     }
 }
-GLM_EXPORT void glFogf(GLenum pname, GLfloat param) { glFogfv(pname, &param); }
-GLM_EXPORT void glFogi(GLenum pname, GLint param) { GLfloat f = (GLfloat)param; glFogfv(pname, &f); }
+GLM_EXPORT void glFogf(GLenum pname, GLfloat param)
+{
+    if (pname == GL_FOG_COLOR) {
+        GLM_CONTEXT(ctx);
+        return glm_error(ctx, GL_INVALID_ENUM);
+    }
+    glFogfv(pname, &param);
+}
+GLM_EXPORT void glFogi(GLenum pname, GLint param) { glFogf(pname, (GLfloat)param); }
 GLM_EXPORT void glFogiv(GLenum pname, const GLint *params)
 {
     GLfloat f[4];
@@ -258,13 +314,46 @@ GLM_EXPORT void glTexEnvfv(GLenum target, GLenum pname, const GLfloat *params)
 {
     GLM_CONTEXT(ctx);
     if (target == GL_TEXTURE_FILTER_CONTROL) {
-        if (pname == GL_TEXTURE_LOD_BIAS) active_env(ctx)->lod_bias = params[0];
+        if (pname != GL_TEXTURE_LOD_BIAS) return glm_error(ctx, GL_INVALID_ENUM);
+        active_env(ctx)->lod_bias = params[0];
         return;
     }
-    if (target == GL_POINT_SPRITE) return;
+    if (target == GL_POINT_SPRITE) {
+        if (pname != GL_COORD_REPLACE || (params[0] != 0 && params[0] != 1)) return glm_error(ctx, GL_INVALID_ENUM);
+        active_env(ctx)->coord_replace = params[0] != 0;
+        return;
+    }
     if (target != GL_TEXTURE_ENV) return glm_error(ctx, GL_INVALID_ENUM);
     struct glm_texenv *e = active_env(ctx);
     GLenum v = (GLenum)params[0];
+    /* The values Apple's implementation accepts (ATI_texture_env_combine3
+       adds its three functions and GL_ZERO/GL_ONE sources). */
+    bool ok = true;
+    switch (pname) {
+    case GL_TEXTURE_ENV_MODE:
+        ok = v == GL_ADD || v == GL_BLEND || v == GL_REPLACE || v == GL_MODULATE || v == GL_DECAL || v == GL_COMBINE;
+        break;
+    case GL_COMBINE_RGB: case GL_COMBINE_ALPHA:
+        ok = v == GL_ADD || v == GL_REPLACE || v == GL_MODULATE || v == GL_SUBTRACT || v == GL_ADD_SIGNED ||
+             v == GL_INTERPOLATE || v == GL_MODULATE_ADD_ATI || v == GL_MODULATE_SIGNED_ADD_ATI ||
+             v == GL_MODULATE_SUBTRACT_ATI || (pname == GL_COMBINE_RGB && (v == GL_DOT3_RGB || v == GL_DOT3_RGBA));
+        break;
+    case GL_SOURCE0_RGB: case GL_SOURCE1_RGB: case GL_SOURCE2_RGB:
+    case GL_SOURCE0_ALPHA: case GL_SOURCE1_ALPHA: case GL_SOURCE2_ALPHA:
+        ok = v == GL_ZERO || v == GL_ONE || v == GL_TEXTURE || (v >= GL_TEXTURE0 && v <= GL_TEXTURE7) || v == GL_CONSTANT ||
+             v == GL_PRIMARY_COLOR || v == GL_PREVIOUS;
+        break;
+    case GL_OPERAND0_RGB: case GL_OPERAND1_RGB: case GL_OPERAND2_RGB:
+        ok = v == GL_SRC_COLOR || v == GL_ONE_MINUS_SRC_COLOR || v == GL_SRC_ALPHA || v == GL_ONE_MINUS_SRC_ALPHA;
+        break;
+    case GL_OPERAND0_ALPHA: case GL_OPERAND1_ALPHA: case GL_OPERAND2_ALPHA:
+        ok = v == GL_SRC_ALPHA || v == GL_ONE_MINUS_SRC_ALPHA;
+        break;
+    case GL_RGB_SCALE: case GL_ALPHA_SCALE:
+        if (params[0] != 1 && params[0] != 2 && params[0] != 4) return glm_error(ctx, GL_INVALID_VALUE);
+        break;
+    }
+    if (!ok) return glm_error(ctx, GL_INVALID_ENUM);
     switch (pname) {
     case GL_TEXTURE_ENV_MODE: e->mode = v; break;
     case GL_TEXTURE_ENV_COLOR: memcpy(e->color, params, 16); break;
@@ -279,8 +368,15 @@ GLM_EXPORT void glTexEnvfv(GLenum target, GLenum pname, const GLfloat *params)
     default: glm_error(ctx, GL_INVALID_ENUM);
     }
 }
-GLM_EXPORT void glTexEnvf(GLenum target, GLenum pname, GLfloat param) { glTexEnvfv(target, pname, &param); }
-GLM_EXPORT void glTexEnvi(GLenum target, GLenum pname, GLint param) { GLfloat f = (GLfloat)param; glTexEnvfv(target, pname, &f); }
+GLM_EXPORT void glTexEnvf(GLenum target, GLenum pname, GLfloat param)
+{
+    if (pname == GL_TEXTURE_ENV_COLOR) {
+        GLM_CONTEXT(ctx);
+        return glm_error(ctx, GL_INVALID_ENUM);
+    }
+    glTexEnvfv(target, pname, &param);
+}
+GLM_EXPORT void glTexEnvi(GLenum target, GLenum pname, GLint param) { glTexEnvf(target, pname, (GLfloat)param); }
 GLM_EXPORT void glTexEnviv(GLenum target, GLenum pname, const GLint *params)
 {
     GLfloat f[4];
@@ -293,12 +389,14 @@ GLM_EXPORT void glGetTexEnvfv(GLenum target, GLenum pname, GLfloat *params)
 {
     GLM_CONTEXT(ctx);
     const struct glm_texenv *e = active_env(ctx);
-    if (target == GL_TEXTURE_FILTER_CONTROL && pname == GL_TEXTURE_LOD_BIAS) {
+    if (target == GL_TEXTURE_FILTER_CONTROL) {
+        if (pname != GL_TEXTURE_LOD_BIAS) return glm_error(ctx, GL_INVALID_ENUM);
         *params = e->lod_bias;
         return;
     }
-    if (target == GL_POINT_SPRITE && pname == GL_COORD_REPLACE) {
-        *params = 0;
+    if (target == GL_POINT_SPRITE) {
+        if (pname != GL_COORD_REPLACE) return glm_error(ctx, GL_INVALID_ENUM);
+        *params = e->coord_replace;
         return;
     }
     if (target != GL_TEXTURE_ENV) return glm_error(ctx, GL_INVALID_ENUM);
@@ -338,7 +436,15 @@ GLM_EXPORT void glTexGenfv(GLenum coord, GLenum pname, const GLfloat *params)
     if (coord < GL_S || coord > GL_Q) return glm_error(ctx, GL_INVALID_ENUM);
     struct glm_texgen *g = &ctx->state.units[ctx->state.active_texture - GL_TEXTURE0].gen[coord - GL_S];
     switch (pname) {
-    case GL_TEXTURE_GEN_MODE: g->mode = (GLenum)params[0]; break;
+    case GL_TEXTURE_GEN_MODE: {
+        /* Sphere maps for s and t, normal and reflection maps for s, t and r. */
+        GLenum m = (GLenum)params[0];
+        bool ok = m == GL_EYE_LINEAR || m == GL_OBJECT_LINEAR || (m == GL_SPHERE_MAP && coord <= GL_T) ||
+                  ((m == GL_NORMAL_MAP || m == GL_REFLECTION_MAP) && coord <= GL_R);
+        if (!ok) return glm_error(ctx, GL_INVALID_ENUM);
+        g->mode = m;
+        break;
+    }
     case GL_OBJECT_PLANE: memcpy(g->object_plane, params, 16); break;
     case GL_EYE_PLANE: {
         double in[4] = {params[0], params[1], params[2], params[3]}, out[4];
@@ -349,9 +455,14 @@ GLM_EXPORT void glTexGenfv(GLenum coord, GLenum pname, const GLfloat *params)
     default: glm_error(ctx, GL_INVALID_ENUM);
     }
 }
-GLM_EXPORT void glTexGenf(GLenum coord, GLenum pname, GLfloat param) { glTexGenfv(coord, pname, &param); }
-GLM_EXPORT void glTexGeni(GLenum coord, GLenum pname, GLint param) { GLfloat f = (GLfloat)param; glTexGenfv(coord, pname, &f); }
-GLM_EXPORT void glTexGend(GLenum coord, GLenum pname, GLdouble param) { GLfloat f = (GLfloat)param; glTexGenfv(coord, pname, &f); }
+/* Apple's scalar forms take the planes too; their other components are 0. */
+GLM_EXPORT void glTexGenf(GLenum coord, GLenum pname, GLfloat param)
+{
+    GLfloat f[4] = {param, 0, 0, 0};
+    glTexGenfv(coord, pname, f);
+}
+GLM_EXPORT void glTexGeni(GLenum coord, GLenum pname, GLint param) { glTexGenf(coord, pname, (GLfloat)param); }
+GLM_EXPORT void glTexGend(GLenum coord, GLenum pname, GLdouble param) { glTexGenf(coord, pname, (GLfloat)param); }
 GLM_EXPORT void glTexGeniv(GLenum coord, GLenum pname, const GLint *params)
 {
     GLfloat f[4];

@@ -99,7 +99,15 @@ static struct glm_texture *new_texture(GLuint name)
 /* Default textures (name 0) exist per target and per context. */
 static struct glm_texture *default_texture(struct glm_context *ctx, int slot)
 {
-    if (!ctx->default_textures[slot]) ctx->default_textures[slot] = new_texture(0);
+    if (!ctx->default_textures[slot]) {
+        struct glm_texture *t = ctx->default_textures[slot] = new_texture(0);
+        /* Rectangle textures, the default one too, start clamped and
+           unmipmapped. */
+        if (slot == glm_texture_slot(GL_TEXTURE_RECTANGLE_ARB)) {
+            t->sampler.min_filter = GL_LINEAR;
+            t->sampler.wrap_s = t->sampler.wrap_t = t->sampler.wrap_r = GL_CLAMP_TO_EDGE;
+        }
+    }
     return ctx->default_textures[slot];
 }
 
@@ -149,6 +157,9 @@ GLM_EXPORT void glBindTexture(GLenum target, GLuint name)
     GLM_CONTEXT(ctx);
     int slot = glm_texture_slot(target);
     if (slot < 0) return glm_error(ctx, GL_INVALID_ENUM);
+    /* Buffer and cube array textures are core-profile only, as in Apple's. */
+    if (ctx->profile != GLM_PROFILE_CORE && (target == GL_TEXTURE_BUFFER || target == GL_TEXTURE_CUBE_MAP_ARRAY))
+        return glm_error(ctx, GL_INVALID_ENUM);
     if (name) {
         struct glm_texture *t = glm_texture_get(ctx, name);
         if (!t) {
@@ -218,8 +229,38 @@ static bool metal_border(const float *b)
     return (rgb0 && (b[3] == 0 || b[3] == 1)) || (rgb1 && b[3] == 1);
 }
 
-static void sampler_parameter(struct glm_context *ctx, struct glm_sampler_state *s, GLenum pname, const float *v)
+/* The values Apple's implementation accepts (tools/apple_enum_sweep.c):
+   GL_CLAMP in the legacy profile only, rectangle textures (target) neither
+   mipmap filters nor repeating wraps (the legacy profile's for r too), and
+   GL_INVALID_ENUM for every other value. */
+static bool sampler_value_valid(const struct glm_context *ctx, GLenum target, GLenum pname, const float *v)
 {
+    GLenum e = (GLenum)v[0];
+    bool rect = target == GL_TEXTURE_RECTANGLE_ARB, legacy = ctx->profile != GLM_PROFILE_CORE;
+    if ((float)e != v[0] && pname != GL_TEXTURE_MAX_ANISOTROPY_EXT) e = 0xFFFFFFFFu; /* not an enum */
+    switch (pname) {
+    case GL_TEXTURE_MAG_FILTER: return e == GL_NEAREST || e == GL_LINEAR;
+    case GL_TEXTURE_MIN_FILTER:
+        return e == GL_NEAREST || e == GL_LINEAR ||
+               (!rect && (e == GL_NEAREST_MIPMAP_NEAREST || e == GL_LINEAR_MIPMAP_NEAREST ||
+                          e == GL_NEAREST_MIPMAP_LINEAR || e == GL_LINEAR_MIPMAP_LINEAR));
+    case GL_TEXTURE_WRAP_S: case GL_TEXTURE_WRAP_T: case GL_TEXTURE_WRAP_R:
+        if (e == GL_CLAMP) return legacy;
+        if (e == GL_CLAMP_TO_EDGE || e == GL_CLAMP_TO_BORDER) return true;
+        if (rect && (pname != GL_TEXTURE_WRAP_R || legacy)) return false;
+        return e == GL_REPEAT || e == GL_MIRRORED_REPEAT || e == GL_MIRROR_CLAMP_EXT || e == GL_MIRROR_CLAMP_TO_EDGE_EXT ||
+               e == GL_MIRROR_CLAMP_TO_BORDER_EXT;
+    case GL_TEXTURE_COMPARE_MODE: return e == GL_NONE || e == GL_COMPARE_R_TO_TEXTURE;
+    case GL_TEXTURE_COMPARE_FUNC: return e >= GL_NEVER && e <= GL_ALWAYS;
+    }
+    return true;
+}
+
+static void sampler_parameter(struct glm_context *ctx, struct glm_sampler_state *s, GLenum target, GLenum pname,
+                              const float *v)
+{
+    if (pname == GL_TEXTURE_MAX_ANISOTROPY_EXT && !(v[0] >= 1)) return glm_error(ctx, GL_INVALID_VALUE);
+    if (!sampler_value_valid(ctx, target, pname, v)) return glm_error(ctx, GL_INVALID_ENUM);
     struct glm_sampler_state previous;
     memcpy(&previous, s, sizeof previous);
     GLenum e = (GLenum)v[0];
@@ -291,10 +332,20 @@ static void texture_parameter(GLenum target, GLenum pname, const float *v)
     return; \
 } while (0)
     switch (pname) {
-    case GL_TEXTURE_BASE_LEVEL: SET_TEXTURE_PARAMETER(base_level, (GLint)v[0]);
+    case GL_TEXTURE_BASE_LEVEL:
+        /* Rectangle textures have level 0 only. */
+        if (target == GL_TEXTURE_RECTANGLE_ARB && v[0] != 0)
+            return glm_error(ctx, GL_INVALID_VALUE);
+        SET_TEXTURE_PARAMETER(base_level, (GLint)v[0]);
     case GL_TEXTURE_MAX_LEVEL: SET_TEXTURE_PARAMETER(max_level, (GLint)v[0]);
-    case GL_GENERATE_MIPMAP: SET_TEXTURE_PARAMETER(generate_mipmap, v[0] != 0);
-    case GL_DEPTH_TEXTURE_MODE: SET_TEXTURE_PARAMETER(depth_texture_mode, (GLenum)v[0]);
+    case GL_GENERATE_MIPMAP:
+        if (v[0] != 0 && v[0] != 1) return glm_error(ctx, GL_INVALID_ENUM);
+        SET_TEXTURE_PARAMETER(generate_mipmap, v[0] != 0);
+    case GL_DEPTH_TEXTURE_MODE:
+        if ((GLenum)v[0] != GL_RED && (GLenum)v[0] != GL_ALPHA && (GLenum)v[0] != GL_LUMINANCE &&
+            (GLenum)v[0] != GL_INTENSITY)
+            return glm_error(ctx, GL_INVALID_ENUM);
+        SET_TEXTURE_PARAMETER(depth_texture_mode, (GLenum)v[0]);
     case GL_TEXTURE_PRIORITY: SET_TEXTURE_PARAMETER(priority, v[0] < 0 ? 0 : v[0] > 1 ? 1 : v[0]);
     case GL_TEXTURE_COMPARE_FAIL_VALUE_ARB: SET_TEXTURE_PARAMETER(compare_fail_value, v[0]);
     case 0x8A4B: SET_TEXTURE_PARAMETER(apple_private[0], (GLint)v[0]);
@@ -315,8 +366,9 @@ static void texture_parameter(GLenum target, GLenum pname, const float *v)
             /* Validate before converting to unsigned: negative float values can
              * otherwise saturate to GL_ZERO on ARM. Preserve the existing
              * float-to-enum conversion for values inside the legal enum range. */
+            /* Apple's error for a bad swizzle is GL_INVALID_OPERATION. */
             if (!(v[i] >= 0.0f && v[i] <= (float)GL_ALPHA))
-                return glm_error(ctx, GL_INVALID_ENUM);
+                return glm_error(ctx, GL_INVALID_OPERATION);
             switch ((GLenum)v[i]) {
             case GL_RED: values[i] = 0; break;
             case GL_GREEN: values[i] = 1; break;
@@ -324,7 +376,7 @@ static void texture_parameter(GLenum target, GLenum pname, const float *v)
             case GL_ALPHA: values[i] = 3; break;
             case GL_ZERO: values[i] = 4; break;
             case GL_ONE: values[i] = 5; break;
-            default: return glm_error(ctx, GL_INVALID_ENUM);
+            default: return glm_error(ctx, GL_INVALID_OPERATION);
             }
         }
         if (memcmp(t->swizzle + first, values, (size_t)count)) {
@@ -333,13 +385,24 @@ static void texture_parameter(GLenum target, GLenum pname, const float *v)
         }
         return;
     }
-    default: sampler_parameter(ctx, &t->sampler, pname, v);
+    default: sampler_parameter(ctx, &t->sampler, target, pname, v);
     }
 #undef SET_TEXTURE_PARAMETER
 }
 
-GLM_EXPORT void glTexParameterf(GLenum target, GLenum pname, GLfloat param) { texture_parameter(target, pname, &param); }
-GLM_EXPORT void glTexParameteri(GLenum target, GLenum pname, GLint param) { float f = (float)param; texture_parameter(target, pname, &f); }
+/* The scalar forms of the vector parameters: Apple's takes a border colour
+   (the rest 0 here) and rejects a whole swizzle. */
+GLM_EXPORT void glTexParameterf(GLenum target, GLenum pname, GLfloat param)
+{
+    if (pname == GL_TEXTURE_SWIZZLE_RGBA) {
+        GLM_CONTEXT(ctx);
+        bool known = parameter_texture(ctx, target) && glm_texture_pname_in_profile(ctx, pname);
+        return glm_error(ctx, known ? GL_INVALID_OPERATION : GL_INVALID_ENUM);
+    }
+    float v[4] = {param, 0, 0, 0};
+    texture_parameter(target, pname, v);
+}
+GLM_EXPORT void glTexParameteri(GLenum target, GLenum pname, GLint param) { glTexParameterf(target, pname, (float)param); }
 GLM_EXPORT void glTexParameterfv(GLenum target, GLenum pname, const GLfloat *params) { texture_parameter(target, pname, params); }
 GLM_EXPORT void glTexParameteriv(GLenum target, GLenum pname, const GLint *params)
 {
@@ -436,9 +499,31 @@ static int proxy_index(GLenum target)
     }
 }
 
+/* The pnames Apple's implementation answers in each profile
+   (tools/apple_enum_sweep.c). */
+static bool level_pname_known(const struct glm_context *ctx, GLenum pname)
+{
+    bool core = ctx->profile == GLM_PROFILE_CORE;
+    switch (pname) {
+    case GL_TEXTURE_WIDTH: case GL_TEXTURE_HEIGHT: case GL_TEXTURE_DEPTH: case GL_TEXTURE_INTERNAL_FORMAT:
+    case GL_TEXTURE_RED_SIZE: case GL_TEXTURE_GREEN_SIZE: case GL_TEXTURE_BLUE_SIZE: case GL_TEXTURE_ALPHA_SIZE:
+    case GL_TEXTURE_DEPTH_SIZE: case GL_TEXTURE_STENCIL_SIZE: case GL_TEXTURE_SHARED_SIZE: case GL_TEXTURE_RED_TYPE:
+    case GL_TEXTURE_GREEN_TYPE: case GL_TEXTURE_BLUE_TYPE: case GL_TEXTURE_ALPHA_TYPE: case GL_TEXTURE_DEPTH_TYPE:
+    case GL_TEXTURE_COMPRESSED: case GL_TEXTURE_COMPRESSED_IMAGE_SIZE:
+        return true;
+    case GL_TEXTURE_BORDER: case GL_TEXTURE_LUMINANCE_SIZE: case GL_TEXTURE_INTENSITY_SIZE:
+    case GL_TEXTURE_LUMINANCE_TYPE: case GL_TEXTURE_INTENSITY_TYPE:
+        return !core;
+    case GL_TEXTURE_SAMPLES: case GL_TEXTURE_FIXED_SAMPLE_LOCATIONS: case GL_TEXTURE_BUFFER_DATA_STORE_BINDING:
+        return core;
+    }
+    return false;
+}
+
 GLM_EXPORT void glGetTexLevelParameteriv(GLenum target, GLint level, GLenum pname, GLint *params)
 {
     GLM_CONTEXT(ctx);
+    if (!level_pname_known(ctx, pname)) return glm_error(ctx, GL_INVALID_ENUM);
     int proxy = proxy_index(target);
     if (proxy >= 0) {
         if (level < 0 || level >= GLM_MAX_LEVELS) return glm_error(ctx, GL_INVALID_VALUE);
@@ -584,7 +669,7 @@ static void sampler_object_parameter(GLuint name, GLenum pname, const float *v)
     GLM_CONTEXT(ctx);
     struct glm_sampler_object *s = sampler_object(ctx, name);
     if (!s) return glm_error(ctx, GL_INVALID_OPERATION);
-    sampler_parameter(ctx, &s->state, pname, v);
+    sampler_parameter(ctx, &s->state, 0, pname, v);
 }
 
 GLM_EXPORT void glSamplerParameterf(GLuint s, GLenum pname, GLfloat param) { sampler_object_parameter(s, pname, &param); }

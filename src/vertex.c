@@ -273,6 +273,12 @@ GLM_EXPORT void glEnableClientState(GLenum array)
             return;
         }
         if (array == GL_ELEMENT_ARRAY_APPLE) return;
+        /* APPLE_vertex_array_range: a storage hint (client arrays are read
+           at draw time); the enable is kept for glIsEnabled. */
+        if (array == GL_VERTEX_ARRAY_RANGE_APPLE && ctx->profile != GLM_PROFILE_CORE) {
+            ctx->vertex_array_range = true;
+            return;
+        }
         return glm_error(ctx, GL_INVALID_ENUM);
     }
     if (ctx->vao->arrays[slot].enabled) return;
@@ -292,6 +298,10 @@ GLM_EXPORT void glDisableClientState(GLenum array)
             return;
         }
         if (array == GL_ELEMENT_ARRAY_APPLE) return;
+        if (array == GL_VERTEX_ARRAY_RANGE_APPLE && ctx->profile != GLM_PROFILE_CORE) {
+            ctx->vertex_array_range = false;
+            return;
+        }
         return glm_error(ctx, GL_INVALID_ENUM);
     }
     if (!ctx->vao->arrays[slot].enabled) return;
@@ -416,6 +426,7 @@ GLM_EXPORT void glGetPointerv(GLenum pname, GLvoid **params)
     case GL_FEEDBACK_BUFFER_POINTER: *params = ctx->render_modes.feedback_buffer; break;
     case GL_SELECTION_BUFFER_POINTER: *params = ctx->render_modes.select_buffer; break;
     case GL_ELEMENT_ARRAY_POINTER_APPLE: *params = (GLvoid *)ctx->apple_element_pointer; break;
+    case GL_VERTEX_ARRAY_RANGE_POINTER_APPLE: *params = (GLvoid *)ctx->vertex_array_range_pointer; break;
     default: glm_error(ctx, GL_INVALID_ENUM);
     }
 }

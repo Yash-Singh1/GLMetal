@@ -281,7 +281,7 @@ GLM_EXPORT void glGetQueryiv(GLenum target, GLenum pname, GLint *params)
     if (c < 0) return glm_error(ctx, GL_INVALID_ENUM);
     switch (pname) {
     case GL_CURRENT_QUERY: *params = ctx->active_queries[c] && ctx->active_queries[c]->target == target ? (GLint)ctx->active_queries[c]->name : 0; return;
-    case GL_QUERY_COUNTER_BITS: *params = c == GLM_QUERY_OCCLUSION || c == GLM_QUERY_TIME ? 64 : 32; return;
+    case GL_QUERY_COUNTER_BITS: *params = c == GLM_QUERY_TIME ? 64 : 32; return; /* Apple: 32 for occlusion */
     }
     glm_error(ctx, GL_INVALID_ENUM);
 }

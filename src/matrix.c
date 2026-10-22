@@ -64,6 +64,9 @@ struct glm_matrix_stack *glm_matrix_stack(struct glm_context *ctx)
     case GL_MODELVIEW1_ARB: return &s->vertex_units[0];
     case GL_MODELVIEW2_ARB: return &s->vertex_units[1];
     case GL_MODELVIEW3_ARB: return &s->vertex_units[2];
+    case GL_MATRIX0_ARB: case GL_MATRIX1_ARB: case GL_MATRIX2_ARB: case GL_MATRIX3_ARB:
+    case GL_MATRIX4_ARB: case GL_MATRIX5_ARB: case GL_MATRIX6_ARB: case GL_MATRIX7_ARB:
+        return &ctx->program_matrices[s->matrix_mode - GL_MATRIX0_ARB];
     default: return &s->modelview;
     }
 }
@@ -85,8 +88,9 @@ GLM_EXPORT void glMatrixMode(GLenum mode)
     GLM_CONTEXT(ctx);
     /* GL_MODELVIEW1_ARB .. GL_MODELVIEW3_ARB: the vertex units past the
        first (GL_MAX_VERTEX_UNITS_ARB is 4). */
+    bool program = mode >= GL_MATRIX0_ARB && mode <= GL_MATRIX7_ARB && ctx->profile != GLM_PROFILE_CORE;
     if (mode != GL_MODELVIEW && mode != GL_PROJECTION && mode != GL_TEXTURE && mode != GL_COLOR &&
-        mode != GL_MODELVIEW1_ARB && mode != GL_MODELVIEW2_ARB && mode != GL_MODELVIEW3_ARB)
+        mode != GL_MODELVIEW1_ARB && mode != GL_MODELVIEW2_ARB && mode != GL_MODELVIEW3_ARB && !program)
         return glm_error(ctx, GL_INVALID_ENUM);
     ctx->state.matrix_mode = mode;
 }
@@ -139,7 +143,8 @@ GLM_EXPORT void glPushMatrix(void)
 {
     GLM_CONTEXT(ctx);
     struct glm_matrix_stack *stack = glm_matrix_stack(ctx);
-    if (stack->depth + 1 >= GLM_MATRIX_STACK_DEPTH) return glm_error(ctx, GL_STACK_OVERFLOW);
+    bool program = ctx->state.matrix_mode >= GL_MATRIX0_ARB && ctx->state.matrix_mode <= GL_MATRIX7_ARB;
+    if (stack->depth + 1 >= (program ? 1 : GLM_MATRIX_STACK_DEPTH)) return glm_error(ctx, GL_STACK_OVERFLOW);
     memcpy(stack->m[stack->depth + 1], stack->m[stack->depth], 16 * sizeof(float));
     ++stack->depth;
 }

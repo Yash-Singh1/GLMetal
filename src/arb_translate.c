@@ -139,6 +139,7 @@ struct parser {
     uint8_t clips_written;
     bool clip_vertex_ok;
     bool dest_address; /* the last destination was an address register */
+    bool program_matrices; /* reads state.matrix.program[n] */
 };
 
 enum nv_helper { HELPER_PACK = 1, HELPER_RCC = 2 };
@@ -354,7 +355,15 @@ static int matrix_rows(struct parser *p, char rows[4][160], int *first_row)
     else if (!strcmp(which, "texture")) {
         index = optional_index(p, 0);
         snprintf(base, sizeof base, "gl_TextureMatrix");
-    } else if (!strcmp(which, "program") || !strcmp(which, "palette")) {
+    } else if (!strcmp(which, "program")) {
+        /* glMatrixMode(GL_MATRIXn_ARB): the GLMARB block's
+           glm_arb_matrices[8n..8n+3] are its columns, [8n+4..8n+7] its
+           inverse's. */
+        index = optional_index(p, 0);
+        if (index < 0 || index > 7) fail(p, "invalid program matrix");
+        p->program_matrices = true;
+        snprintf(base, sizeof base, "program");
+    } else if (!strcmp(which, "palette")) {
         optional_index(p, 0);
         snprintf(base, sizeof base, "identity");
     } else {
@@ -384,7 +393,17 @@ static int matrix_rows(struct parser *p, char rows[4][160], int *first_row)
         if (!strcmp(base, "identity"))
             snprintf(rows[r - lo], 160, "vec4(%s)", r == 0 ? "1.0, 0.0, 0.0, 0.0" : r == 1 ? "0.0, 1.0, 0.0, 0.0"
                                                      : r == 2 ? "0.0, 0.0, 1.0, 0.0" : "0.0, 0.0, 0.0, 1.0");
-        else if (!strcmp(base, "gl_TextureMatrix"))
+        else if (!strcmp(base, "program")) {
+            /* Rows of M or of its inverse gather a component of each
+               column; the transposed forms are the columns. */
+            bool inverse = strstr(suffix, "Inverse") != NULL, rows_of = strstr(suffix, "Transpose") != NULL;
+            int first = index * 8 + (inverse ? 4 : 0);
+            if (rows_of)
+                snprintf(rows[r - lo], 160, "vec4(glm_arb_matrices[%d][%d], glm_arb_matrices[%d][%d], glm_arb_matrices[%d][%d], "
+                         "glm_arb_matrices[%d][%d])", first, r, first + 1, r, first + 2, r, first + 3, r);
+            else
+                snprintf(rows[r - lo], 160, "glm_arb_matrices[%d]", first + r);
+        } else if (!strcmp(base, "gl_TextureMatrix"))
             snprintf(rows[r - lo], 160, "gl_TextureMatrix%s[%d][%d]", suffix, index, r);
         else
             snprintf(rows[r - lo], 160, "%s%s[%d]", base, suffix, r);
@@ -2019,7 +2038,9 @@ bool glm_arb_translate(const char *source, size_t length, bool vertex, struct gl
     int local_count = p->local_dynamic ? GLM_ARB_LOCAL_PARAMETERS : p->local_max + 1;
     if (env_count < 1) env_count = 1;
     if (local_count < 1) local_count = 1;
-    emit(&t, "layout(std140, set = 1, binding = 13) uniform GLMARB { vec4 glm_arb_env[%d]; vec4 glm_arb_local[%d]; };\n", env_count, local_count);
+    emit(&t, "layout(std140, set = 1, binding = 13) uniform GLMARB { vec4 glm_arb_env[%d]; vec4 glm_arb_local[%d];%s };\n",
+         env_count, local_count, p->program_matrices ? " vec4 glm_arb_matrices[64];" : "");
+    out->program_matrices = p->program_matrices;
     out->env_count = env_count;
     out->local_count = local_count;
     for (int i = 0; i < 16; ++i)

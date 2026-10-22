@@ -790,7 +790,7 @@ std::string without_doubles(const std::string &text)
 // Rows are rendered bottom-up (Y flipped), so Metal's point_coord has its
 // origin at GL's lower left: GL_UPPER_LEFT (the default) flips it.
 const char *const point_coord_code =
-    "layout(std140, set = 1, binding = 15) uniform GLMPoint { float glm_point_size; float glm_program_point_size; float glm_point_upper; uint glm_vertex_id_base; uint glm_vertex_id_offset; uint glm_vertex_id_mapped; };\n"
+    "layout(std140, set = 1, binding = 15) uniform GLMPoint { float glm_point_size; float glm_program_point_size; float glm_point_upper; uint glm_vertex_id_base; uint glm_vertex_id_offset; uint glm_vertex_id_mapped; float glm_clamp_vertex; float glm_clamp_fragment; };\n"
     "vec2 glm_point_coord() { return vec2(gl_PointCoord.x, glm_point_upper > 0.5 ? 1.0 - gl_PointCoord.y : gl_PointCoord.y); }\n";
 
 std::string point_coord_flip(const std::string &text)
@@ -1051,7 +1051,7 @@ Prepared prepare_stage(const char *source, glm_stage stage, Bindings *bindings)
             // input topology must not write a point size.
             bool point_size = body.find("#define GLM_NO_POINT_SIZE") == std::string::npos;
             p.text = header +
-                     "layout(std140, set = 1, binding = 15) uniform GLMPoint { float glm_point_size; float glm_program_point_size; float glm_point_upper; uint glm_vertex_id_base; uint glm_vertex_id_offset; uint glm_vertex_id_mapped; };\n" +
+                     "layout(std140, set = 1, binding = 15) uniform GLMPoint { float glm_point_size; float glm_program_point_size; float glm_point_upper; uint glm_vertex_id_base; uint glm_vertex_id_offset; uint glm_vertex_id_mapped; float glm_clamp_vertex; float glm_clamp_fragment; };\n" +
                      (vertex_id ? "#define glm_user_vertex_id (int(uint(gl_VertexID) + glm_vertex_id_base))\n" : "") + "#line 1\n" + body +
                      (capture ? xfb_code(*bindings, body) : std::string()) +
                      "void main() {\n" + conversions +
@@ -1139,7 +1139,7 @@ Prepared prepare_stage(const char *source, glm_stage stage, Bindings *bindings)
     if (state) pre << legacy_block_glsl;
     // Default point size: the small GLMPoint block, not the legacy state.
     if (stage == GLM_STAGE_VERTEX)
-        pre << "layout(std140, set = 1, binding = 15) uniform GLMPoint { float glm_point_size; float glm_program_point_size; float glm_point_upper; uint glm_vertex_id_base; uint glm_vertex_id_offset; uint glm_vertex_id_mapped; };\n";
+        pre << "layout(std140, set = 1, binding = 15) uniform GLMPoint { float glm_point_size; float glm_program_point_size; float glm_point_upper; uint glm_vertex_id_base; uint glm_vertex_id_offset; uint glm_vertex_id_mapped; float glm_clamp_vertex; float glm_clamp_fragment; };\n";
     if (stage == GLM_STAGE_VERTEX) {
         auto use = [&](const char *name) { return r.used.count(name) != 0; };
         if (use("gl_Vertex")) pre << "layout(location=0) in vec4 glm_Vertex;\n";
@@ -1165,7 +1165,12 @@ Prepared prepare_stage(const char *source, glm_stage stage, Bindings *bindings)
                "  for (int i = 0; i < 8; ++i) glm_TexCoord[i] = vec4(0.0, 0.0, 0.0, 1.0);\n"
                "  glm_ClipVertex = vec4(0.0);\n"
                "  gl_PointSize = glm_point_size;\n"
-               "  glm_user_main();\n";
+               "  glm_user_main();\n"
+               // ARB_color_buffer_float: GL_CLAMP_VERTEX_COLOR, as the backend resolves it.
+               "  if (glm_clamp_vertex > 0.5) {\n"
+               "    glm_FrontColor = clamp(glm_FrontColor, 0.0, 1.0); glm_BackColor = clamp(glm_BackColor, 0.0, 1.0);\n"
+               "    glm_FrontSecondaryColor = clamp(glm_FrontSecondaryColor, 0.0, 1.0);\n"
+               "    glm_BackSecondaryColor = clamp(glm_BackSecondaryColor, 0.0, 1.0);\n  }\n";
         if (r.used.count("gl_ClipVertex"))
             // Constant indices: gl_ClipDistance is unsized until indexed so.
             for (int i = 0; i < 8; ++i)
@@ -1186,13 +1191,19 @@ Prepared prepare_stage(const char *source, glm_stage stage, Bindings *bindings)
         if (body.find("gl_PointCoord") != std::string::npos) {
             body = point_coord_flip(body);
             pre << point_coord_code;
+        } else {
+            pre << "layout(std140, set = 1, binding = 15) uniform GLMPoint { float glm_point_size; float glm_program_point_size; float glm_point_upper; uint glm_vertex_id_base; uint glm_vertex_id_offset; uint glm_vertex_id_mapped; float glm_clamp_vertex; float glm_clamp_fragment; };\n";
         }
+        // ARB_color_buffer_float: GL_CLAMP_FRAGMENT_COLOR, as the backend resolves it.
+        const char *fragment_clamp = p.writes_frag_data
+            ? " if (glm_clamp_fragment > 0.5) for (int i = 0; i < 8; ++i) glm_FragData[i] = clamp(glm_FragData[i], 0.0, 1.0);"
+            : " if (glm_clamp_fragment > 0.5) glm_FragColor = clamp(glm_FragColor, 0.0, 1.0);";
         pre << "#line 1\n" << body << "\nvoid main() {"
             << (reads_colors ? " bool glm_back = glm_TwoSide != 0.0 && !gl_FrontFacing;"
                                " glm_Color_sel = glm_back ? glm_BackColor_in : glm_Color;"
                                " glm_SecondaryColor_sel = glm_back ? glm_BackSecondaryColor_in : glm_SecondaryColor;"
                              : "")
-            << " glm_user_main(); }\n";
+            << " glm_user_main();" << fragment_clamp << " }\n";
     } else {
         pre << "#line 1\n" << body << "\nvoid main() { glm_user_main(); }\n";
     }

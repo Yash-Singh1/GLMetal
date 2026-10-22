@@ -75,6 +75,13 @@ GLM_EXPORT void glBindBuffer(GLenum target, GLuint name)
 {
     GLM_CONTEXT(ctx);
     GLuint *binding = buffer_binding(ctx, target);
+    /* The targets of each profile, as Apple's: no texture, copy or indirect
+       buffers in the legacy one, no EXT_bindable_uniform in the core one. */
+    bool core = ctx->profile == GLM_PROFILE_CORE;
+    if (!core && (target == GL_TEXTURE_BUFFER || target == GL_COPY_READ_BUFFER || target == GL_COPY_WRITE_BUFFER ||
+                  target == GL_DRAW_INDIRECT_BUFFER))
+        binding = NULL;
+    if (core && target == GL_UNIFORM_BUFFER_EXT) binding = NULL;
     if (!binding) return glm_error(ctx, GL_INVALID_ENUM);
     if (name && !buffer_for_bind(ctx, name)) return;
     *binding = name;
@@ -305,6 +312,11 @@ GLM_EXPORT void glGetBufferParameteriv(GLenum target, GLenum pname, GLint *param
     case GL_BUFFER_ACCESS_FLAGS: *params = buffer->mapped ? (GLint)buffer->map_access : 0; break;
     case GL_BUFFER_MAP_OFFSET: *params = buffer->mapped ? (GLint)buffer->map_offset : 0; break;
     case GL_BUFFER_MAP_LENGTH: *params = buffer->mapped ? (GLint)buffer->map_length : 0; break;
+    /* APPLE_flush_buffer_range, legacy profile. */
+    case GL_BUFFER_SERIALIZED_MODIFY_APPLE: case GL_BUFFER_FLUSHING_UNMAP_APPLE:
+        if (ctx->profile == GLM_PROFILE_CORE) return glm_error(ctx, GL_INVALID_ENUM);
+        *params = pname == GL_BUFFER_SERIALIZED_MODIFY_APPLE ? buffer->apple_serialized_modify : buffer->apple_flushing_unmap;
+        break;
     default: glm_error(ctx, GL_INVALID_ENUM);
     }
 }

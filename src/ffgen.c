@@ -78,6 +78,18 @@ void glm_ff_key_build(struct glm_context *ctx, int color_attachments, bool ff_ve
     }
     k->normalize = s->normalize;
     k->rescale_normal = s->rescale_normal;
+    k->specular_vector = k->lighting && s->light_model_specular_vector;
+    k->unclamped_vertex = ff_vertex && !ctx->ff_clamp_vertex;
+    k->unclamped_fragment = ff_fragment && !ctx->ff_clamp_fragment;
+    /* Point sprites replace the coordinates of the units asking for it. */
+    if (ff_fragment && s->point_sprite && ctx->ff_drawing_points) {
+        for (int u = 0; u < GLM_FF_UNITS && u < 8; ++u)
+            if (s->units[u].env.coord_replace) k->coord_replace |= (uint8_t)(1u << u);
+        if (k->coord_replace) {
+            k->point_upper = ctx->point_sprite_origin == GL_UPPER_LEFT;
+            k->point_r_mode = ctx->point_sprite_r_mode == GL_S ? 1 : ctx->point_sprite_r_mode == GL_R ? 2 : 0;
+        }
+    }
     if (s->fog) {
         k->fog = s->fog_mode == GL_LINEAR ? 1 : s->fog_mode == GL_EXP ? 2 : 3;
     }
@@ -446,7 +458,10 @@ static void emit_vertex_shader(struct text *t, const struct glm_ff_key *k)
             }
             emit(t, "    float ndl = max(dot(N, L), 0.0);\n");
             emit(t, "    float3 E = %s;\n", k->local_viewer ? "normalize(-P)" : "float3(0.0, 0.0, 1.0)");
-            emit(t, "    float3 H = normalize(L + E); float ndh = max(dot(N, H), 0.0);\n");
+            /* APPLE_specular_vector: the light's reflection about N,
+               (2 n x (n x l) + l) . e, instead of the half vector. */
+            if (k->specular_vector) emit(t, "    float ndh = max(dot(2.0 * cross(N, cross(N, L)) + L, E), 0.0);\n");
+            else emit(t, "    float3 H = normalize(L + E); float ndh = max(dot(N, H), 0.0);\n");
             emit(t, "    float spec = ndl > 0.0 ? (shininess == 0.0 ? 1.0 : pow(ndh, shininess)) : 0.0;\n");
             emit(t, "    c += att * (ambient_m * ff.light_ambient[%d] + ndl * diffuse_m * ff.light_diffuse[%d]);\n", i, i);
             emit(t, "    spec_out += att * spec * specular_m * ff.light_specular[%d];\n  }\n", i);
@@ -511,6 +526,8 @@ static void emit_vertex_shader(struct text *t, const struct glm_ff_key *k)
                 if (mode == GL_SPECULAR) mat[f][3] = "in.color";
             }
         }
+        /* Vertex colours clamp unless GL_CLAMP_VERTEX_COLOR says otherwise. */
+        const char *clamp = k->unclamped_vertex ? "" : "saturate";
         for (int f = 0; f < (k->two_side ? 2 : 1); ++f) {
             const char *side = f ? "back" : "front";
             emit(t, "  { float4 spec; float3 n = %s;\n", f ? "-N" : "N");
@@ -518,18 +535,19 @@ static void emit_vertex_shader(struct text *t, const struct glm_ff_key *k)
                  mat[f][1], mat[f][2], mat[f][3], k->vertex_materials ? "vm[8]" : "ff.material_shininess", f ? 'y' : 'x');
             emit(t, "    float4 base = %s + %s * ff.scene_ambient + lit;\n", mat[f][0], mat[f][1]);
             if (k->separate_specular) {
-                emit(t, "    out.%s_color = float4(saturate(base.rgb), %s.a);\n", side, mat[f][2]);
-                emit(t, "    out.%s_secondary = float4(saturate(spec.rgb), 0.0);\n", side);
+                emit(t, "    out.%s_color = float4(%s(base.rgb), %s.a);\n", side, clamp, mat[f][2]);
+                emit(t, "    out.%s_secondary = float4(%s(spec.rgb), 0.0);\n", side, clamp);
             } else {
-                emit(t, "    out.%s_color = float4(saturate(base.rgb + spec.rgb), %s.a);\n", side, mat[f][2]);
+                emit(t, "    out.%s_color = float4(%s(base.rgb + spec.rgb), %s.a);\n", side, clamp, mat[f][2]);
                 emit(t, "    out.%s_secondary = float4(0.0);\n", side);
             }
             emit(t, "  }\n");
         }
         if (!k->two_side) emit(t, "  out.back_color = out.front_color; out.back_secondary = out.front_secondary;\n");
     } else {
-        emit(t, "  out.front_color = out.back_color = saturate(in.color);\n");
-        emit(t, "  out.front_secondary = out.back_secondary = saturate(in.secondary);\n");
+        const char *clamp = k->unclamped_vertex ? "" : "saturate";
+        emit(t, "  out.front_color = out.back_color = %s(in.color);\n", clamp);
+        emit(t, "  out.front_secondary = out.back_secondary = %s(in.secondary);\n", clamp);
     }
     for (int u = 0; u < GLM_FF_UNITS; ++u) {
         if (!k->unit[u].target && !k->all_outputs) continue;
@@ -600,6 +618,9 @@ static const char *combine_source(uint16_t source, int u, bool alpha)
     case GL_CONSTANT: snprintf(out, 64, "ff.texenv_color[%d]", u); break;
     case GL_PRIMARY_COLOR: snprintf(out, 64, "primary"); break;
     case GL_PREVIOUS: snprintf(out, 64, "prev"); break;
+    /* ATI_texture_env_combine3 */
+    case GL_ZERO: snprintf(out, 64, "float4(0.0)"); break;
+    case GL_ONE: snprintf(out, 64, "float4(1.0)"); break;
     default:
         if (source >= GL_TEXTURE0 && source < GL_TEXTURE0 + 8) snprintf(out, 64, "t%d", source - GL_TEXTURE0);
         else snprintf(out, 64, "prev");
@@ -628,6 +649,10 @@ static const char *combine_expression(uint16_t function)
     case GL_ADD_SIGNED: return "a0 + a1 - 0.5";
     case GL_INTERPOLATE: return "a0 * a2 + a1 * (1.0 - a2)";
     case GL_SUBTRACT: return "a0 - a1";
+    /* ATI_texture_env_combine3 */
+    case GL_MODULATE_ADD_ATI: return "a0 * a2 + a1";
+    case GL_MODULATE_SIGNED_ADD_ATI: return "a0 * a2 + a1 - 0.5";
+    case GL_MODULATE_SUBTRACT_ATI: return "a0 * a2 - a1";
     case GL_DOT3_RGB: case GL_DOT3_RGBA:
         return "float4(4.0 * ((a0.r - 0.5) * (a1.r - 0.5) + (a0.g - 0.5) * (a1.g - 0.5) + (a0.b - 0.5) * (a1.b - 0.5)))";
     default: return "a0 * a1";
@@ -676,7 +701,18 @@ static void emit_fragment_shader(struct text *t, const struct glm_ff_key *k)
     if (k->pixel_rect)
         emit(t, ",\n    texture2d<float> glm_pixels [[texture(%d)]], constant GLMPixels &px [[buffer(%d)]]", GLM_TEXTURE_FF_PIXELS,
              GLM_SLOT_FF_PIXELS);
+    if (k->coord_replace) emit(t, ",\n    float2 glm_point_coord [[point_coord]]");
     emit(t, ") {\n");
+    /* Point sprites (GL_COORD_REPLACE): s and t from the point coordinate,
+       which rows rendered bottom-up give with a lower-left origin; r by
+       NV_point_sprite's mode. */
+    for (int u = 0; u < GLM_FF_UNITS; ++u) {
+        if (!(k->coord_replace & (1u << u)) || !k->unit[u].target) continue;
+        emit(t, "  in.tex%d.xy = float2(glm_point_coord.x, %s) * in.tex%d.w;\n", u,
+             k->point_upper ? "1.0 - glm_point_coord.y" : "glm_point_coord.y", u);
+        if (k->point_r_mode == 0) emit(t, "  in.tex%d.z = 0.0;\n", u);
+        else if (k->point_r_mode == 1) emit(t, "  in.tex%d.z = in.tex%d.x;\n", u, u);
+    }
     /* Metal reports front-facing for the winding it was told is front;
        the backend sets that from GL's glFrontFace. */
     if (k->front_only) {
@@ -730,6 +766,9 @@ static void emit_fragment_shader(struct text *t, const struct glm_ff_key *k)
             emit(t, "  float4 t%d = tex%d.sample(smp%d, in.tex%d.xy / in.tex%d.w);\n", u, u, u, u, u);
             break;
         }
+        /* Float texels enter the environment clamped when fragment colours
+           clamp (ARB_color_buffer_float), as Apple's do. */
+        if (!k->unclamped_fragment) emit(t, "  t%d = saturate(t%d);\n", u, u);
         /* Texture environment (GL 2.1 table 3.22/3.23) by base format. */
         int fmt = k->unit[u].format_base;
         uint16_t mode = k->unit[u].env_mode;
@@ -791,7 +830,9 @@ static void emit_fragment_shader(struct text *t, const struct glm_ff_key *k)
         default: emit(t, "  prev = %s * %s;\n", cf, tv); break;
         }
     }
-    emit(t, "  float4 color = float4(saturate(prev.rgb + secondary.rgb), prev.a);\n");
+    /* The colour sum clamps unless GL_CLAMP_FRAGMENT_COLOR says otherwise. */
+    if (k->unclamped_fragment) emit(t, "  float4 color = float4(prev.rgb + secondary.rgb, prev.a);\n");
+    else emit(t, "  float4 color = saturate(float4(prev.rgb + secondary.rgb, prev.a));\n");
     if (k->fog) {
         emit(t, "  float z = %s;\n", k->fog_from_coord || k->fog_distance ? "in.fog_coord" : "abs(in.fog_coord)");
         switch (k->fog) {

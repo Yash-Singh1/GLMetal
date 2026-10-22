@@ -363,9 +363,17 @@ GLM_EXPORT void glGetBufferParameteri64v(GLenum target, GLenum pname, GLint64 *p
 GLM_EXPORT void glClampColor(GLenum target, GLenum clamp)
 {
     GLM_CONTEXT(ctx);
-    if (target != GL_CLAMP_READ_COLOR) return glm_error(ctx, GL_INVALID_ENUM);
+    /* Vertex and fragment colour clamping exist in the legacy profile only
+       (ARB_color_buffer_float), as in Apple's. */
+    bool legacy = ctx->profile != GLM_PROFILE_CORE;
+    GLenum *state = target == GL_CLAMP_READ_COLOR                 ? &ctx->clamp_read_color
+                  : legacy && target == GL_CLAMP_VERTEX_COLOR_ARB   ? &ctx->clamp_vertex_color
+                  : legacy && target == GL_CLAMP_FRAGMENT_COLOR_ARB ? &ctx->clamp_fragment_color
+                                                                    : NULL;
+    if (!state) return glm_error(ctx, GL_INVALID_ENUM);
     if (clamp != GL_TRUE && clamp != GL_FALSE && clamp != GL_FIXED_ONLY) return glm_error(ctx, GL_INVALID_ENUM);
-    ctx->clamp_read_color = clamp;
+    if (*state != clamp) __atomic_add_fetch(&ctx->state_serial, 1, __ATOMIC_RELAXED);
+    *state = clamp;
 }
 GLM_EXPORT void glClampColorARB(GLenum target, GLenum clamp) { glClampColor(target, clamp); }
 
@@ -386,15 +394,25 @@ GLM_EXPORT void glPointParameterfv(GLenum pname, const GLfloat *v)
         if (v[0] != GL_LOWER_LEFT && v[0] != GL_UPPER_LEFT) return glm_error(ctx, GL_INVALID_ENUM);
         ctx->point_sprite_origin = (GLenum)v[0];
         break;
+    /* NV_point_sprite's r coordinate mode, which Apple's keeps (point
+       sprites replace s and t only here; its core profile takes it but
+       does not answer it). */
+    case GL_POINT_SPRITE_R_MODE_NV:
+        if (v[0] != GL_ZERO && v[0] != GL_S && v[0] != GL_R) return glm_error(ctx, GL_INVALID_ENUM);
+        ctx->point_sprite_r_mode = (GLenum)v[0];
+        break;
     default: return glm_error(ctx, GL_INVALID_ENUM);
     }
 }
-GLM_EXPORT void glPointParameterf(GLenum pname, GLfloat v) { glPointParameterfv(pname, &v); }
-GLM_EXPORT void glPointParameteri(GLenum pname, GLint v)
+GLM_EXPORT void glPointParameterf(GLenum pname, GLfloat v)
 {
-    GLfloat f = (GLfloat)v;
-    glPointParameterfv(pname, &f);
+    if (pname == GL_POINT_DISTANCE_ATTENUATION) { /* a vector parameter */
+        GLM_CONTEXT(ctx);
+        return glm_error(ctx, GL_INVALID_ENUM);
+    }
+    glPointParameterfv(pname, &v);
 }
+GLM_EXPORT void glPointParameteri(GLenum pname, GLint v) { glPointParameterf(pname, (GLfloat)v); }
 GLM_EXPORT void glPointParameteriv(GLenum pname, const GLint *v)
 {
     GLfloat f[3] = {(GLfloat)v[0], 0, 0};

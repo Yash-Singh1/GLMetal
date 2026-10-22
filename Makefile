@@ -378,6 +378,24 @@ check-reference: lib $(OUT)/apple_get_sweep
 		diff $(OUT)/apple-get-reference.expected - > $(OUT)/reference-threaded.diff && echo "reference: threaded matches Apple" || \
 		{ echo "reference: threaded differs from Apple ($(OUT)/reference-threaded.diff)"; exit 1; }
 
+# Which enums each setter, getter and command accepts (tools/apple_enum_sweep.c)
+# against Apple's (data/apple-enum-reference.txt), less the documented
+# differences (tests/probes/enum_sweep_quirks.txt), direct and threaded.
+$(GEN)/sweep_enums.h: tools/gen_sweep_enums.py
+	@mkdir -p $(GEN)
+	python3 $< $(SDK)/System/Library/Frameworks/OpenGL.framework/Headers $@
+$(OUT)/apple_enum_sweep: tools/apple_enum_sweep.c $(GEN)/sweep_enums.h
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w -I$(GEN) $< -o $@
+.PHONY: check-enums
+check-enums: lib $(OUT)/apple_enum_sweep
+	@grep -v '^#' $(APPLE_DATA)/apple-enum-reference.txt > $(OUT)/apple-enum-reference.expected
+	@$(OUT)/apple_enum_sweep $(OUT)/libGLMetal.dylib > $(OUT)/enums-direct.txt 2>/dev/null
+	@GLMETAL_THREAD_ALL=1 $(OUT)/apple_enum_sweep $(OUT)/libGLMetal.dylib > $(OUT)/enums-threaded.txt 2>/dev/null
+	@python3 tests/probes/keydiff.py $(OUT)/apple-enum-reference.expected $(OUT)/enums-direct.txt tests/probes/enum_sweep_quirks.txt && \
+		python3 tests/probes/keydiff.py $(OUT)/apple-enum-reference.expected $(OUT)/enums-threaded.txt tests/probes/enum_sweep_quirks.txt && \
+		echo "enums: direct/threaded match Apple ($$(wc -l < $(OUT)/apple-enum-reference.expected) lines, $$(grep -c '^apple:' tests/probes/enum_sweep_quirks.txt) documented differences)"
+
 clean:
 	rm -rf $(OUT)
 

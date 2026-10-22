@@ -205,7 +205,12 @@ GLM_EXPORT void glMultiDrawElementsEXT(GLenum mode, const GLsizei *count, GLenum
 /* ---- Apple extensions with nothing to do on Metal -------------------------- */
 
 /* APPLE_vertex_array_range: client arrays are read at draw time anyway. */
-GLM_EXPORT void glVertexArrayRangeAPPLE(GLsizei length, const GLvoid *pointer) { (void)length, (void)pointer; }
+GLM_EXPORT void glVertexArrayRangeAPPLE(GLsizei length, const GLvoid *pointer)
+{
+    GLM_CONTEXT(ctx);
+    (void)length;
+    ctx->vertex_array_range_pointer = pointer; /* GL_VERTEX_ARRAY_RANGE_POINTER_APPLE */
+}
 GLM_EXPORT void glFlushVertexArrayRangeAPPLE(GLsizei length, const GLvoid *pointer) { (void)length, (void)pointer; }
 GLM_EXPORT void glVertexArrayParameteriAPPLE(GLenum pname, GLint param) { (void)pname, (void)param; }
 /* EXT_compiled_vertex_array: a hint. */

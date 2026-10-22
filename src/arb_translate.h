@@ -16,6 +16,7 @@ struct glm_arb_translation {
        implementation counts them. */
     int instructions, temporaries, parameters, attribs, address_registers;
     int alu_instructions, tex_instructions, tex_indirections;
+    bool program_matrices;  /* the GLMARB block ends with glm_arb_matrices[64] */
 };
 
 bool glm_arb_translate(const char *source, size_t length, bool vertex, struct glm_arb_translation *out);

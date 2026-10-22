@@ -30,7 +30,7 @@ static void restore(struct glm_context *ctx, const struct saved_attrib *saved, G
     }
     if (mask & GL_LIGHTING_BIT) {
         COPY(lighting); COPY(lights); COPY(material); COPY(light_model_ambient); COPY(light_model_local_viewer);
-        COPY(light_model_two_side); COPY(light_model_separate_specular); COPY(color_material);
+        COPY(light_model_two_side); COPY(light_model_separate_specular); COPY(light_model_specular_vector); COPY(color_material);
         COPY(color_material_face); COPY(color_material_mode); COPY(shade_model);
     }
     if (mask & GL_FOG_BIT) {

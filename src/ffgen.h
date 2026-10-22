@@ -47,6 +47,11 @@ struct glm_ff_key {
     uint8_t vertex_point_size;        /* APPLE_vertex_point_size: sizes in attribute 7 */
     uint8_t point_attenuation;        /* GL_POINT_DISTANCE_ATTENUATION and the size clamps apply */
     uint8_t point_round;              /* aliased points: sizes rounded to whole pixels */
+    uint8_t coord_replace;            /* units whose coordinates point sprites replace (GL_COORD_REPLACE) */
+    uint8_t point_upper;              /* GL_POINT_SPRITE_COORD_ORIGIN is GL_UPPER_LEFT */
+    uint8_t point_r_mode;             /* NV_point_sprite r: 0 zero, 1 s, 2 unchanged */
+    uint8_t specular_vector;          /* APPLE_specular_vector */
+    uint8_t unclamped_vertex, unclamped_fragment; /* ARB_color_buffer_float clamping off */
     struct {
         uint8_t target;               /* 0 none, 1 1D, 2 2D, 3 3D, 4 cube, 5 rect */
         uint8_t gen[4];               /* 0 off, 1 object, 2 eye, 3 sphere, 4 reflection, 5 normal */

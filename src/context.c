@@ -129,7 +129,10 @@ static void default_state(struct glm_context *ctx)
     ctx->point_fade_threshold = 1;
     ctx->point_distance[0] = 1;
     ctx->point_sprite_origin = GL_UPPER_LEFT;
+    ctx->point_sprite_r_mode = GL_ZERO;
     ctx->clamp_read_color = GL_FIXED_ONLY;
+    ctx->clamp_vertex_color = GL_TRUE;
+    ctx->clamp_fragment_color = GL_FIXED_ONLY;
     s->sample_mask = ~0u;
     s->sample_coverage = 1;
     for (int i = 0; i < GLM_MAX_VIEWPORTS; ++i) s->depth_ranges[i][1] = 1;
@@ -182,6 +185,7 @@ static void default_state(struct glm_context *ctx)
     glm_mat4_identity(s->projection.m[0]);
     glm_mat4_identity(s->color.m[0]);
     for (int i = 0; i < 3; ++i) glm_mat4_identity(s->vertex_units[i].m[0]);
+    for (int i = 0; i < 8; ++i) glm_mat4_identity(ctx->program_matrices[i].m[0]);
     for (int i = 0; i < GLM_MAX_TEXTURE_UNITS; ++i) glm_mat4_identity(s->texture[i].m[0]);
 
     for (int i = 0; i < GLM_MAX_LIGHTS; ++i) {
@@ -743,7 +747,8 @@ GLM_EXPORT void glAlphaFunc(GLenum func, GLclampf ref)
 GLM_EXPORT void glPolygonMode(GLenum face, GLenum mode)
 {
     GLM_CONTEXT(ctx);
-    if (face != GL_FRONT && face != GL_BACK && face != GL_FRONT_AND_BACK) return glm_error(ctx, GL_INVALID_ENUM);
+    if (face != GL_FRONT_AND_BACK && (ctx->profile == GLM_PROFILE_CORE || (face != GL_FRONT && face != GL_BACK)))
+        return glm_error(ctx, GL_INVALID_ENUM); /* the core profile has one mode for both faces */
     if (mode != GL_POINT && mode != GL_LINE && mode != GL_FILL) return glm_error(ctx, GL_INVALID_ENUM);
     if (face == GL_FRONT || face == GL_FRONT_AND_BACK) ctx->state.polygon_mode[0] = mode;
     if (face == GL_BACK || face == GL_FRONT_AND_BACK) ctx->state.polygon_mode[1] = mode;
@@ -758,9 +763,26 @@ GLM_EXPORT void glPolygonOffset(GLfloat factor, GLfloat units)
 
 GLM_EXPORT void glBlendFunc(GLenum src, GLenum dst) { glBlendFuncSeparate(src, dst, src, dst); }
 
+/* The factors Apple's implementation accepts, sources and destinations
+   alike (dual-source ones included). */
+static bool blend_factor(GLenum f)
+{
+    switch (f) {
+    case GL_ZERO: case GL_ONE: case GL_SRC_COLOR: case GL_ONE_MINUS_SRC_COLOR: case GL_SRC_ALPHA:
+    case GL_ONE_MINUS_SRC_ALPHA: case GL_DST_ALPHA: case GL_ONE_MINUS_DST_ALPHA: case GL_DST_COLOR:
+    case GL_ONE_MINUS_DST_COLOR: case GL_SRC_ALPHA_SATURATE: case GL_CONSTANT_COLOR: case GL_ONE_MINUS_CONSTANT_COLOR:
+    case GL_CONSTANT_ALPHA: case GL_ONE_MINUS_CONSTANT_ALPHA: case GL_SRC1_ALPHA: case GL_SRC1_COLOR:
+    case GL_ONE_MINUS_SRC1_COLOR: case GL_ONE_MINUS_SRC1_ALPHA:
+        return true;
+    }
+    return false;
+}
+
 GLM_EXPORT void glBlendFuncSeparate(GLenum src_rgb, GLenum dst_rgb, GLenum src_alpha, GLenum dst_alpha)
 {
     GLM_CONTEXT(ctx);
+    if (!blend_factor(src_rgb) || !blend_factor(dst_rgb) || !blend_factor(src_alpha) || !blend_factor(dst_alpha))
+        return glm_error(ctx, GL_INVALID_ENUM);
     for (int i = 0; i < GLM_MAX_DRAW_BUFFERS; ++i) {
         struct glm_blend_state *b = &ctx->state.blend[i];
         b->src_rgb = src_rgb;
@@ -774,6 +796,8 @@ GLM_EXPORT void glBlendFuncSeparatei(GLuint buf, GLenum src_rgb, GLenum dst_rgb,
 {
     GLM_CONTEXT(ctx);
     if (buf >= GLM_MAX_DRAW_BUFFERS) return glm_error(ctx, GL_INVALID_VALUE);
+    if (!blend_factor(src_rgb) || !blend_factor(dst_rgb) || !blend_factor(src_alpha) || !blend_factor(dst_alpha))
+        return glm_error(ctx, GL_INVALID_ENUM);
     struct glm_blend_state *b = &ctx->state.blend[buf];
     b->src_rgb = src_rgb;
     b->dst_rgb = dst_rgb;
@@ -888,6 +912,11 @@ GLM_EXPORT void glStencilOpSeparate(GLenum face, GLenum fail, GLenum zfail, GLen
     GLM_CONTEXT(ctx);
     int index[2], n = stencil_face_indices(face, index);
     if (!n) return glm_error(ctx, GL_INVALID_ENUM);
+    const GLenum ops[3] = {fail, zfail, zpass};
+    for (int i = 0; i < 3; ++i)
+        if (ops[i] != GL_ZERO && ops[i] != GL_INVERT && ops[i] != GL_KEEP && ops[i] != GL_REPLACE && ops[i] != GL_INCR &&
+            ops[i] != GL_DECR && ops[i] != GL_INCR_WRAP && ops[i] != GL_DECR_WRAP)
+            return glm_error(ctx, GL_INVALID_ENUM);
     for (int k = 0; k < n; ++k) {
         ctx->state.stencil[index[k]].fail = fail;
         ctx->state.stencil[index[k]].zfail = zfail;
@@ -1108,8 +1137,7 @@ GLM_EXPORT const GLubyte *glGetString(GLenum name)
     case GL_EXTENSIONS:
         if (core) break;
         return (const GLubyte *)extension_string(ctx);
-    case GL_PROGRAM_ERROR_STRING_ARB:
-        if (core) break;
+    case GL_PROGRAM_ERROR_STRING_ARB: /* both profiles, as Apple's */
         return (const GLubyte *)glm_arb_error_string(ctx);
     }
     glm_error(ctx, GL_INVALID_ENUM);
@@ -1170,7 +1198,7 @@ static int query(struct glm_context *ctx, GLenum pname, double *v, bool *is_colo
     case GL_LINE_STIPPLE_PATTERN: v[0] = s->line_stipple_pattern; return 1;
     case GL_CURRENT_INDEX: v[0] = s->current_index; return 1;
     case GL_INDEX_CLEAR_VALUE: v[0] = s->clear_index; return 1;
-    case GL_INDEX_WRITEMASK: v[0] = (GLint)s->index_mask; return 1;
+    case GL_INDEX_WRITEMASK: v[0] = s->index_mask; return 1; /* unsigned, as Apple reads it as a float */
     case GL_CURRENT_WEIGHT_ARB: for (int i = 0; i < 4; ++i) v[i] = s->current_weight[i]; return 4;
     case GL_ACTIVE_VERTEX_UNITS_ARB: v[0] = s->active_vertex_units; return 1;
     case GL_LINE_STIPPLE_REPEAT: v[0] = s->line_stipple_factor; return 1;
@@ -1321,7 +1349,7 @@ static int query(struct glm_context *ctx, GLenum pname, double *v, bool *is_colo
     case GL_RED_BITS: case GL_GREEN_BITS: case GL_BLUE_BITS: case GL_ALPHA_BITS: v[0] = 8; return 1;
     case GL_DEPTH_BITS: v[0] = 24; return 1;
     case GL_STENCIL_BITS: v[0] = 8; return 1;
-    case GL_DOUBLEBUFFER: v[0] = 1; return 1;
+    case GL_DOUBLEBUFFER: v[0] = !ctx->default_single_buffered; return 1; /* the pixel format's */
     case GL_SAMPLE_BUFFERS: case GL_SAMPLES: {
         unsigned samples = 0;
         struct glm_framebuffer *fb = glm_framebuffer_get(ctx, ctx->draw_framebuffer);
@@ -1387,6 +1415,9 @@ static int query(struct glm_context *ctx, GLenum pname, double *v, bool *is_colo
     case GL_POINT_DISTANCE_ATTENUATION: for (int i = 0; i < 3; ++i) v[i] = ctx->point_distance[i]; return 3;
     case GL_POINT_SPRITE_COORD_ORIGIN: v[0] = ctx->point_sprite_origin; return 1;
     case GL_CLAMP_READ_COLOR: v[0] = ctx->clamp_read_color; return 1;
+    case GL_CLAMP_VERTEX_COLOR_ARB: v[0] = ctx->clamp_vertex_color; return 1;
+    case GL_POINT_SPRITE_R_MODE_NV: v[0] = ctx->point_sprite_r_mode; return 1;
+    case GL_CLAMP_FRAGMENT_COLOR_ARB: v[0] = ctx->clamp_fragment_color; return 1;
     case GL_NUM_PROGRAM_BINARY_FORMATS: case GL_NUM_SHADER_BINARY_FORMATS: v[0] = 0; return 1;
     case GL_SHADER_COMPILER: v[0] = 1; return 1;
     case GL_MAX_VERTEX_STREAMS: if (ctx->profile != GLM_PROFILE_CORE) return 0; v[0] = 4; return 1;
@@ -1410,6 +1441,8 @@ static const float *current_matrix(struct glm_context *ctx)
 {
     struct glm_state *s = &ctx->state;
     struct glm_matrix_stack *stack = &s->modelview;
+    if (s->matrix_mode >= GL_MATRIX0_ARB && s->matrix_mode <= GL_MATRIX7_ARB)
+        stack = &ctx->program_matrices[s->matrix_mode - GL_MATRIX0_ARB];
     if (s->matrix_mode == GL_PROJECTION) stack = &s->projection;
     else if (s->matrix_mode == GL_TEXTURE) stack = &s->texture[(s->active_texture - GL_TEXTURE0) % GLM_MAX_TEXTURE_UNITS];
     else if (s->matrix_mode == GL_COLOR) stack = &s->color;
@@ -1523,6 +1556,7 @@ static int state_query(struct glm_context *ctx, GLenum pname, double *v, bool *i
     case GL_BLEND_DST: v[0] = s->blend[0].dst_rgb; return 1;
     case GL_LIGHT_MODEL_LOCAL_VIEWER: v[0] = s->light_model_local_viewer; return 1;
     case GL_LIGHT_MODEL_TWO_SIDE: v[0] = s->light_model_two_side; return 1;
+    case GL_LIGHT_MODEL_SPECULAR_VECTOR_APPLE: v[0] = s->light_model_specular_vector; return 1;
     case GL_LIGHT_MODEL_COLOR_CONTROL:
         v[0] = s->light_model_separate_specular ? GL_SEPARATE_SPECULAR_COLOR : GL_SINGLE_COLOR;
         return 1;
@@ -1773,6 +1807,17 @@ GLM_EXPORT void glPixelStorei(GLenum pname, GLint param)
 {
     GLM_CONTEXT(ctx);
     struct glm_state *s = &ctx->state;
+    /* An unknown pname is GL_INVALID_ENUM whatever the value, as Apple's. */
+    switch (pname) {
+    case GL_UNPACK_ALIGNMENT: case GL_UNPACK_ROW_LENGTH: case GL_UNPACK_SKIP_ROWS: case GL_UNPACK_SKIP_PIXELS:
+    case GL_UNPACK_IMAGE_HEIGHT: case GL_UNPACK_SKIP_IMAGES: case GL_UNPACK_SWAP_BYTES: case GL_UNPACK_LSB_FIRST:
+    case GL_UNPACK_CLIENT_STORAGE_APPLE: case GL_PACK_ALIGNMENT: case GL_PACK_ROW_LENGTH: case GL_PACK_SKIP_ROWS:
+    case GL_PACK_SKIP_PIXELS: case GL_PACK_IMAGE_HEIGHT: case GL_PACK_SKIP_IMAGES: case GL_PACK_SWAP_BYTES:
+    case GL_PACK_LSB_FIRST: case GL_UNPACK_ROW_BYTES_APPLE: case GL_UNPACK_IMAGE_BYTES_APPLE: case GL_PACK_ROW_BYTES_APPLE:
+    case GL_PACK_IMAGE_BYTES_APPLE:
+        break;
+    default: return glm_error(ctx, GL_INVALID_ENUM);
+    }
     if ((pname == GL_UNPACK_ALIGNMENT || pname == GL_PACK_ALIGNMENT) && param != 1 && param != 2 && param != 4 && param != 8)
         return glm_error(ctx, GL_INVALID_VALUE);
     if (param < 0) return glm_error(ctx, GL_INVALID_VALUE);
