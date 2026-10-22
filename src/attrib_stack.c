@@ -34,7 +34,7 @@ static void restore(struct glm_context *ctx, const struct saved_attrib *saved, G
         COPY(color_material_face); COPY(color_material_mode); COPY(shade_model);
     }
     if (mask & GL_FOG_BIT) {
-        COPY(fog); COPY(fog_mode); COPY(fog_coord_source); COPY(fog_color); COPY(fog_density); COPY(fog_start); COPY(fog_end);
+        COPY(fog); COPY(fog_mode); COPY(fog_coord_source); COPY(fog_distance_mode); COPY(fog_color); COPY(fog_density); COPY(fog_start); COPY(fog_end);
     }
     if (mask & GL_DEPTH_BUFFER_BIT) { COPY(depth_test); COPY(depth_func); COPY(depth_mask); COPY(clear_depth); }
     if (mask & GL_STENCIL_BUFFER_BIT) { COPY(stencil_test); COPY(stencil); COPY(clear_stencil); }

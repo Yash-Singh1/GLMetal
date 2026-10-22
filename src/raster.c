@@ -33,7 +33,10 @@ static void raster_pos(float x, float y, float z, float w)
     s->raster_pos[3] = clip[3];
     float eye[4];
     for (int r = 0; r < 4; ++r) eye[r] = mv[r] * x + mv[4 + r] * y + mv[8 + r] * z + mv[12 + r] * w;
-    s->raster_distance = s->fog_coord_source == GL_FOG_COORD ? s->current[GLM_ATTR_FOG][0] : -eye[2] / eye[3];
+    if (s->fog_coord_source == GL_FOG_COORD) s->raster_distance = s->current[GLM_ATTR_FOG][0];
+    else if (s->fog_distance_mode == GL_EYE_RADIAL_NV) /* NV_fog_distance */
+        s->raster_distance = sqrtf(eye[0] * eye[0] + eye[1] * eye[1] + eye[2] * eye[2]) / fabsf(eye[3]);
+    else s->raster_distance = -eye[2] / eye[3];
     memcpy(s->raster_color, s->current[GLM_ATTR_COLOR], sizeof s->raster_color);
     /* Texture coordinates through each unit's texture matrix. */
     for (int u = 0; u < 8; ++u) {

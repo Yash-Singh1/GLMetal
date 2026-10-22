@@ -45,7 +45,10 @@ GLM_EXPORT void glLightfv(GLenum light, GLenum pname, const GLfloat *params)
         for (int i = 0; i < 3; ++i) l->spot_direction[i] = m[i] * params[0] + m[4 + i] * params[1] + m[8 + i] * params[2];
         break;
     }
-    case GL_SPOT_EXPONENT: l->spot_exponent = params[0]; break;
+    case GL_SPOT_EXPONENT: /* up to GL_MAX_SPOT_EXPONENT_NV, 128 */
+        if (!(params[0] >= 0 && params[0] <= 128)) return glm_error(ctx, GL_INVALID_VALUE);
+        l->spot_exponent = params[0];
+        break;
     case GL_SPOT_CUTOFF: l->spot_cutoff = params[0]; break;
     case GL_CONSTANT_ATTENUATION: l->attenuation[0] = params[0]; break;
     case GL_LINEAR_ATTENUATION: l->attenuation[1] = params[0]; break;
@@ -130,6 +133,8 @@ GLM_HIDDEN void glm_color_material_sync(struct glm_context *ctx)
 GLM_EXPORT void glMaterialfv(GLenum face, GLenum pname, const GLfloat *params)
 {
     GLM_CONTEXT(ctx);
+    /* GL_MAX_SHININESS_NV (NV_light_max_exponent) is 128. */
+    if (pname == GL_SHININESS && !(params[0] >= 0 && params[0] <= 128)) return glm_error(ctx, GL_INVALID_VALUE);
     if (ctx->immediate) glm_immediate_material(ctx);
     for (int f = 0; f < 2; ++f) {
         if (f == 0 && face == GL_BACK) continue;
@@ -224,6 +229,13 @@ GLM_EXPORT void glFogfv(GLenum pname, const GLfloat *params)
     case GL_FOG_END: s->fog_end = params[0]; break;
     case GL_FOG_COLOR: memcpy(s->fog_color, params, 16); break;
     case GL_FOG_COORD_SRC: s->fog_coord_source = (GLenum)params[0]; break;
+    case GL_FOG_DISTANCE_MODE_NV: {
+        GLenum mode = (GLenum)params[0];
+        if (mode != GL_EYE_RADIAL_NV && mode != GL_EYE_PLANE && mode != GL_EYE_PLANE_ABSOLUTE_NV)
+            return glm_error(ctx, GL_INVALID_ENUM);
+        s->fog_distance_mode = mode;
+        break;
+    }
     case GL_FOG_INDEX: case GL_FOG_HINT: break;
     default: glm_error(ctx, GL_INVALID_ENUM);
     }

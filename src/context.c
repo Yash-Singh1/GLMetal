@@ -212,6 +212,7 @@ static void default_state(struct glm_context *ctx)
     s->color_material_mode = GL_AMBIENT_AND_DIFFUSE;
 
     s->fog_mode = GL_EXP;
+    s->fog_distance_mode = GL_EYE_PLANE_ABSOLUTE_NV;
     s->fog_coord_source = GL_FRAGMENT_DEPTH;
     s->fog_density = 1;
     s->fog_end = 1;
@@ -1301,6 +1302,7 @@ static int query(struct glm_context *ctx, GLenum pname, double *v, bool *is_colo
     case GL_PACK_SKIP_PIXELS: v[0] = s->pack_skip_pixels; return 1;
     case GL_FOG_COLOR: *is_color = true; for (int i = 0; i < 4; ++i) v[i] = s->fog_color[i]; return 4;
     case GL_FOG_MODE: v[0] = s->fog_mode; return 1;
+    case GL_FOG_DISTANCE_MODE_NV: v[0] = s->fog_distance_mode; return 1;
     case GL_FOG_DENSITY: v[0] = s->fog_density; return 1;
     case GL_FOG_START: v[0] = s->fog_start; return 1;
     case GL_FOG_END: v[0] = s->fog_end; return 1;

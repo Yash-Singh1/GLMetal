@@ -120,7 +120,8 @@ static void begin_query(struct glm_context *ctx, GLenum target, GLuint index, GL
         q = calloc(1, sizeof *q);
         q->name = name;
         glm_table_set(&ctx->queries, name, q);
-    } else if (q->active || (q->target && q->target != target)) {
+    } else if (q->active || (q->target && q->target != target) ||
+               (ctx->conditional_render_active && ctx->conditional_render_query == name)) {
         return glm_error(ctx, GL_INVALID_OPERATION);
     }
     q->target = target;
@@ -301,10 +302,17 @@ GLM_EXPORT void glGetQueryObjectui64vEXT(GLuint name, GLenum pname, GLuint64 *pa
 GLM_EXPORT void glBeginConditionalRender(GLuint name, GLenum mode)
 {
     GLM_CONTEXT(ctx);
+    /* Errors as Apple's: the mode first, then an unknown name (0 is the
+       operation's error). */
+    if (mode != GL_QUERY_WAIT && mode != GL_QUERY_NO_WAIT && mode != GL_QUERY_BY_REGION_WAIT &&
+        mode != GL_QUERY_BY_REGION_NO_WAIT)
+        return glm_error(ctx, GL_INVALID_ENUM);
     struct glm_query *q = query_get(ctx, name);
+    if (!q && name) return glm_error(ctx, GL_INVALID_VALUE);
     if (!q || q->active || query_class(q->target) != GLM_QUERY_OCCLUSION) return glm_error(ctx, GL_INVALID_OPERATION);
     if (ctx->conditional_render_active) return glm_error(ctx, GL_INVALID_OPERATION);
     ctx->conditional_render_active = true;
+    ctx->conditional_render_query = name;
     /* The NO_WAIT modes may draw when the result is not known yet. */
     bool wait = mode == GL_QUERY_WAIT || mode == GL_QUERY_BY_REGION_WAIT;
     ctx->conditional_discard = (wait || available(ctx, q)) && result(ctx, q) == 0;

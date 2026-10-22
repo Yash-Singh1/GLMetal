@@ -82,6 +82,8 @@ void glm_ff_key_build(struct glm_context *ctx, int color_attachments, bool ff_ve
         k->fog = s->fog_mode == GL_LINEAR ? 1 : s->fog_mode == GL_EXP ? 2 : 3;
     }
     k->fog_from_coord = (s->fog || k->all_outputs) && s->fog_coord_source == GL_FOG_COORD;
+    if (ff_vertex && (s->fog || k->all_outputs) && !k->fog_from_coord)
+        k->fog_distance = s->fog_distance_mode == GL_EYE_PLANE ? 1 : s->fog_distance_mode == GL_EYE_RADIAL_NV ? 2 : 0;
     k->alpha_func = s->alpha_test ? (uint8_t)(s->alpha_func - GL_NEVER) : 7;
     for (int i = 0; i < GLM_MAX_CLIP_PLANES; ++i)
         if (!ctx->user_clip_preprocessed && s->clip_plane_enabled[i]) k->clip_planes |= (uint8_t)(1 << i);
@@ -132,7 +134,7 @@ void glm_ff_key_build(struct glm_context *ctx, int color_attachments, bool ff_ve
         k->pixel_rect = ctx->pixel_rect;
         k->lighting = k->two_side = k->local_viewer = k->separate_specular = k->color_material = 0;
         k->color_material_face = k->light_enabled = k->light_positional = k->light_spot = k->vertex_materials = 0;
-        k->normalize = k->rescale_normal = k->fog_from_coord = 0;
+        k->normalize = k->rescale_normal = k->fog_from_coord = k->fog_distance = 0;
         k->vertex_blend = k->weight_sum_unity = k->vertex_point_size = k->point_attenuation = k->point_round = 0;
         k->front_only = 1;
         k->clip_planes = k->texgen_needs_eye = k->texgen_needs_normal = 0;
@@ -553,9 +555,16 @@ static void emit_vertex_shader(struct text *t, const struct glm_ff_key *k)
         }
         emit(t, "    out.tex%d = ff.texture_matrix[%d] * tc; }\n", u, u);
     }
-    /* Apple interpolates the signed eye depth and takes its magnitude per
-       fragment, so fog does not vanish where a primitive crosses z = 0. */
-    if (k->fog || k->all_outputs) emit(t, "  out.fog_coord = %s;\n", k->fog_from_coord ? "in.fog.x" : "-eye.z / eye.w");
+    /* Apple interpolates eye z (negative in front of the eye; fragment
+       programs read it as fragment.fogcoord) and fog takes its magnitude
+       per fragment (EYE_PLANE_ABSOLUTE_NV), so fog does not vanish where a
+       primitive crosses z = 0. EYE_PLANE fogs with eye z itself, as
+       NV_fog_distance says; EYE_RADIAL_NV interpolates the distance to the
+       eye. */
+    if (k->fog || k->all_outputs)
+        emit(t, "  out.fog_coord = %s;\n", k->fog_from_coord      ? "in.fog.x"
+                                         : k->fog_distance == 2 ? "length(eye.xyz / eye.w)"
+                                                                : "eye.z / eye.w");
     else emit(t, "  out.fog_coord = 0.0;\n");
     /* Clip planes are stored in eye space (transformed when specified). */
     for (int i = 0; i < clip_count; ++i) {
@@ -784,7 +793,7 @@ static void emit_fragment_shader(struct text *t, const struct glm_ff_key *k)
     }
     emit(t, "  float4 color = float4(saturate(prev.rgb + secondary.rgb), prev.a);\n");
     if (k->fog) {
-        emit(t, "  float z = %s;\n", k->fog_from_coord ? "in.fog_coord" : "abs(in.fog_coord)");
+        emit(t, "  float z = %s;\n", k->fog_from_coord || k->fog_distance ? "in.fog_coord" : "abs(in.fog_coord)");
         switch (k->fog) {
         case 1: emit(t, "  float f = (ff.fog_params.z - z) * ff.fog_params.w;\n"); break;
         case 2: emit(t, "  float f = exp(-ff.fog_params.x * z);\n"); break;

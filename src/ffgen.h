@@ -31,6 +31,7 @@ struct glm_ff_key {
     uint8_t light_spot;               /* bitmask: cutoff != 180 */
     uint8_t fog;                      /* 0 off, 1 linear, 2 exp, 3 exp2 */
     uint8_t fog_from_coord;
+    uint8_t fog_distance;             /* NV_fog_distance: 0 |eye z|, 1 signed eye z, 2 radial */
     uint8_t alpha_func;               /* GL_NEVER..GL_ALWAYS - GL_NEVER, 7 = always */
     uint8_t clip_planes;              /* bitmask */
     uint8_t color_attachments;        /* number of fragment outputs */

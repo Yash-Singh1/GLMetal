@@ -230,6 +230,81 @@ int main(int argc, char **argv)
     pglGetIntegerIndexedvEXT(GL_TRANSFORM_FEEDBACK_BUFFER_SIZE_EXT, 1, &size);
     printf("size past end %d\n", size);
     pglBindBufferOffsetEXT(GL_TRANSFORM_FEEDBACK_BUFFER_EXT, 1, 0, 0);
+    ERR("bind offset reset");
+
+    /* NV_fog_distance: the mode, its errors and GL_FOG_BIT. */
+    F(glFogi); F(glFogf); F(glFogfv); F(glFogiv);
+    GETI(GL_FOG_DISTANCE_MODE_NV);
+    GETF(GL_FOG_DISTANCE_MODE_NV);
+    pglFogi(GL_FOG_DISTANCE_MODE_NV, GL_EYE_RADIAL_NV); ERR("fog radial");
+    GETI(GL_FOG_DISTANCE_MODE_NV);
+    pglFogf(GL_FOG_DISTANCE_MODE_NV, (GLfloat)GL_EYE_PLANE); ERR("fog plane");
+    GETI(GL_FOG_DISTANCE_MODE_NV);
+    pglPushAttrib(GL_FOG_BIT);
+    GLint absolute = GL_EYE_PLANE_ABSOLUTE_NV;
+    pglFogiv(GL_FOG_DISTANCE_MODE_NV, &absolute); ERR("fog absolute");
+    GETI(GL_FOG_DISTANCE_MODE_NV);
+    pglPopAttrib();
+    GETI(GL_FOG_DISTANCE_MODE_NV);
+    pglFogi(GL_FOG_DISTANCE_MODE_NV, GL_EYE_LINEAR); ERR("fog distance eye linear");
+    pglFogi(GL_FOG_DISTANCE_MODE_NV, 0); ERR("fog distance 0");
+    GETI(GL_FOG_DISTANCE_MODE_NV);
+    pglFogi(GL_FOG_DISTANCE_MODE_NV, GL_EYE_PLANE_ABSOLUTE_NV);
+
+    /* NV_light_max_exponent: limits, and shininess and spot exponents up
+       to them. */
+    F(glMaterialf); F(glGetMaterialfv); F(glLightf); F(glGetLightfv);
+    GETI(GL_MAX_SHININESS_NV);
+    GETF(GL_MAX_SPOT_EXPONENT_NV);
+    const float exponents[] = {0, 100, 128, 128.5f, 129, -1};
+    for (int k = 0; k < 6; ++k) {
+        pglMaterialf(GL_FRONT, GL_SHININESS, exponents[k]);
+        printf("shininess %g: error 0x%04x", exponents[k], pglGetError());
+        GLfloat got = -7;
+        pglGetMaterialfv(GL_FRONT, GL_SHININESS, &got);
+        printf(" -> %g\n", got);
+        pglLightf(GL_LIGHT0, GL_SPOT_EXPONENT, exponents[k]);
+        printf("spot exponent %g: error 0x%04x", exponents[k], pglGetError());
+        got = -7;
+        pglGetLightfv(GL_LIGHT0, GL_SPOT_EXPONENT, &got);
+        printf(" -> %g\n", got);
+    }
+
+    /* NV_conditional_render: the NV entry points and their errors. */
+    G(void, glBeginConditionalRenderNV, (GLuint, GLenum));
+    G(void, glEndConditionalRenderNV, (void));
+    F(glGenQueries); F(glBeginQuery); F(glEndQuery);
+    GLuint query;
+    pglGenQueries(1, &query);
+    pglBeginQuery(GL_SAMPLES_PASSED, query);
+    pglEndQuery(GL_SAMPLES_PASSED);
+    const GLenum render_modes[] = {GL_QUERY_WAIT_NV, GL_QUERY_NO_WAIT_NV, GL_QUERY_BY_REGION_WAIT_NV,
+                                   GL_QUERY_BY_REGION_NO_WAIT_NV, GL_SAMPLES_PASSED};
+    for (int k = 0; k < 5; ++k) {
+        pglBeginConditionalRenderNV(query, render_modes[k]);
+        printf("conditional render mode %#x: error 0x%04x\n", render_modes[k], pglGetError());
+        pglEndConditionalRenderNV(); ERR("end conditional render");
+    }
+    pglBeginConditionalRenderNV(query + 100, GL_QUERY_WAIT_NV); ERR("conditional render unknown query");
+    pglBeginConditionalRenderNV(0, GL_QUERY_WAIT_NV); ERR("conditional render query 0");
+    pglEndConditionalRenderNV(); ERR("end without begin");
+    pglBeginConditionalRenderNV(query, GL_QUERY_WAIT_NV);
+    pglBeginConditionalRenderNV(query, GL_QUERY_WAIT_NV); ERR("conditional render nested");
+    pglEndConditionalRenderNV();
+    pglBeginQuery(GL_SAMPLES_PASSED, query); ERR("query active");
+    pglEndQuery(GL_SAMPLES_PASSED);
+    pglBeginConditionalRenderNV(query, GL_QUERY_WAIT_NV);
+    pglBeginQuery(GL_SAMPLES_PASSED, query); ERR("begin query used by conditional render");
+    pglEndConditionalRenderNV(); ERR("end conditional render");
+
+    /* NV_depth_clamp, NV_texture_barrier. */
+    pglEnable(GL_DEPTH_CLAMP_NV); ERR("enable depth clamp nv");
+    printf("depth clamp %d\n", pglIsEnabled(GL_DEPTH_CLAMP));
+    GETI(GL_DEPTH_CLAMP_NV);
+    pglDisable(GL_DEPTH_CLAMP);
+    G(void, glTextureBarrierNV, (void));
+    printf("texture barrier %s\n", pglTextureBarrierNV ? "present" : "missing");
+    if (pglTextureBarrierNV) pglTextureBarrierNV();
     ERR("end");
     return 0;
 }

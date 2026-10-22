@@ -421,6 +421,7 @@ struct glm_state {
 
     /* fog */
     GLenum fog_mode, fog_coord_source;
+    GLenum fog_distance_mode; /* NV_fog_distance */
     float fog_color[4], fog_density, fog_start, fog_end;
 
     /* textures */
@@ -515,6 +516,7 @@ struct glm_context {
     const void *apple_element_pointer;
     bool apple_element_enabled;             /* GL_ELEMENT_ARRAY_APPLE (application thread) */
     bool conditional_render_active, conditional_discard; /* glBeginConditionalRender: skip draws and clears */
+    GLuint conditional_render_query; /* its query, which glBeginQuery may not reuse meanwhile */
     GLenum clamp_read_color;
     float point_size_min, point_size_max, point_fade_threshold, point_distance[3];
     GLenum point_sprite_origin;
