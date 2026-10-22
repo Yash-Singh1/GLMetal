@@ -1,0 +1,22 @@
+# Lines of tests/probes/arb_program_queries.c on tests/probes/nv_programs.txt where Apple's OpenGL contradicts the
+# NV program extensions: what Apple prints, then what GLMetal (following the extension) prints.
+# tests/probes/quirkdiff.py accepts exactly these differences.
+
+# fp2_rejects_endif_alone: Apple's GL loads programs with unmatched blocks or BRK outside a loop; NV_fragment_program2: they fail to load.
+apple: fp 33: 0 3 0 1 0 1 0 1 0 0 0 3 0 1 0 0 0 1
+spec: fp 33: 0x502 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1
+# fp2_rejects_else_alone: Apple's GL loads programs with unmatched blocks or BRK outside a loop; NV_fragment_program2: they fail to load.
+apple: fp 34: 0 3 0 1 0 1 0 1 0 0 0 3 0 1 0 0 0 1
+spec: fp 34: 0x502 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1
+# fp2_rejects_unterminated_if: Apple's GL loads programs with unmatched blocks or BRK outside a loop; NV_fragment_program2: they fail to load.
+apple: fp 35: 0 4 0 1 0 1 0 1 0 0 0 4 0 1 0 0 0 1
+spec: fp 35: 0x502 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1
+# fp2_rejects_endrep_closes_if: Apple's GL loads programs with unmatched blocks or BRK outside a loop; NV_fragment_program2: they fail to load.
+apple: fp 36: 0 5 0 1 0 1 0 1 0 0 0 5 0 1 0 0 0 1
+spec: fp 36: 0x502 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1
+# fp2_rejects_brk_outside_loop: Apple's GL loads programs with unmatched blocks or BRK outside a loop; NV_fragment_program2: they fail to load.
+apple: fp 37: 0 3 0 1 0 1 0 1 0 0 0 3 0 1 0 0 0 1
+spec: fp 37: 0x502 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1
+# ssat: Apple's GL rejects _SSAT; NV_fragment_program2 has signed saturation.
+apple: fp 80: 0x502 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1
+spec: fp 80: 0 2 0 1 0 1 0 1 0 0 0 2 0 1 0 0 0 1

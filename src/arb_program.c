@@ -354,6 +354,13 @@ GLM_EXPORT void glGetProgramivARB(GLenum target, GLenum pname, GLint *params)
     case GL_MAX_PROGRAM_NATIVE_ATTRIBS_ARB: *params = vertex ? 16 : 32; return;
     case GL_MAX_PROGRAM_ADDRESS_REGISTERS_ARB: *params = vertex ? 2 : 0; return;
     case GL_MAX_PROGRAM_NATIVE_ADDRESS_REGISTERS_ARB: *params = vertex ? 1 : 0; return;
+    /* NV_fragment_program2 / NV_vertex_program2_option limits (vertex
+       programs have no IF or loop blocks). */
+    case 0x88F4: *params = 65536; return; /* GL_MAX_PROGRAM_EXEC_INSTRUCTIONS_NV */
+    case 0x88F5: *params = 4; return;     /* GL_MAX_PROGRAM_CALL_DEPTH_NV */
+    case 0x88F6: *params = vertex ? 0 : 48; return; /* GL_MAX_PROGRAM_IF_DEPTH_NV */
+    case 0x88F7: *params = vertex ? 0 : 4; return;  /* GL_MAX_PROGRAM_LOOP_DEPTH_NV */
+    case 0x88F8: *params = vertex ? 0 : 255; return; /* GL_MAX_PROGRAM_LOOP_COUNT_NV */
     case GL_PROGRAM_INSTRUCTIONS_ARB: *params = c ? c->instructions : 0; return;
     case GL_PROGRAM_TEMPORARIES_ARB: *params = c ? c->temporaries : 0; return;
     case GL_PROGRAM_PARAMETERS_ARB: *params = c ? c->parameters : 0; return;

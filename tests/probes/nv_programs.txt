@@ -1,0 +1,2146 @@
+%% fp option_fp1_txd_pk_rfl bits
+!!ARBfp1.0
+OPTION NV_fragment_program;
+TEMP t;
+TXD t, fragment.texcoord[0], fragment.texcoord[1], fragment.texcoord[2], texture[0], 2D;
+PK2H t.x, t;
+RFL t.yzw, fragment.texcoord[0], fragment.texcoord[1];
+MOV result.color, t;
+END
+%% fp option_fp1_rejects_div
+!!ARBfp1.0
+OPTION NV_fragment_program;
+TEMP t;
+DIV t, fragment.texcoord[0], fragment.texcoord[1].x;
+MOV result.color, t;
+END
+%% fp option_fp1_rejects_nrm
+!!ARBfp1.0
+OPTION NV_fragment_program;
+TEMP t;
+NRM t.xyz, fragment.texcoord[0];
+MOV result.color, t;
+END
+%% fp option_fp1_rejects_txl
+!!ARBfp1.0
+OPTION NV_fragment_program;
+TEMP t;
+TXL t, fragment.texcoord[0], texture[0], 2D;
+MOV result.color, t;
+END
+%% fp option_fp1_rejects_if
+!!ARBfp1.0
+OPTION NV_fragment_program;
+TEMP t;
+MOVC t, fragment.texcoord[0];
+IF GT.x;
+MOV t, 1;
+ENDIF;
+MOV result.color, t;
+END
+%% fp option_fp1_rejects_cal
+!!ARBfp1.0
+OPTION NV_fragment_program;
+TEMP t;
+CAL l;
+l:
+MOV result.color, t;
+END
+%% fp option_fp1_rejects_ssat
+!!ARBfp1.0
+OPTION NV_fragment_program;
+TEMP t;
+MOV_SSAT t, fragment.texcoord[0];
+MOV result.color, t;
+END
+%% fp option_fp1_rejects_facing
+!!ARBfp1.0
+OPTION NV_fragment_program;
+TEMP t;
+MOV t, fragment.facing;
+MOV result.color, t;
+END
+%% fp option_unknown_NV_fragment_program_option
+!!ARBfp1.0
+OPTION NV_fragment_program_option;
+MOV result.color, fragment.texcoord[0];
+END
+%% fp option_unknown_NV_vertex_program3
+!!ARBfp1.0
+OPTION NV_vertex_program3;
+MOV result.color, fragment.texcoord[0];
+END
+%% fp option_unknown_NV_foo
+!!ARBfp1.0
+OPTION NV_foo;
+MOV result.color, fragment.texcoord[0];
+END
+%% fp option_unknown_ARB_foo
+!!ARBfp1.0
+OPTION ARB_foo;
+MOV result.color, fragment.texcoord[0];
+END
+%% vp option_vp_fragment_option
+!!ARBvp1.0
+OPTION NV_fragment_program2;
+MOV result.position, vertex.position;
+MOV result.texcoord[0], vertex.texcoord[0];
+END
+%% fp short_long_temp
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+SHORT TEMP s;
+LONG TEMP l;
+SHORT OUTPUT o = result.color;
+MOV s, fragment.texcoord[0];
+MOV l, s;
+MOV o, l;
+END
+%% fp fp2_rejects_ssg
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+SSG t, fragment.texcoord[0];
+MOV result.color, t;
+END
+%% fp fp2_rejects_rcc
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+RCC t, fragment.texcoord[0].x;
+MOV result.color, t;
+END
+%% fp fp2_rejects_ara
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+ARA t, t;
+MOV result.color, t;
+END
+%% fp fp2_rejects_cc1
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+MOVC1 t, fragment.texcoord[0];
+MOV result.color, t;
+END
+%% fp fp2_rejects_gt0
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+MOVC t, fragment.texcoord[0];
+MOV t (GT0), 1;
+MOV result.color, t;
+END
+%% fp fp2_rejects_bra
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+BRA l;
+l:
+MOV result.color, t;
+END
+%% fp fp2_rejects_pusha
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+PUSHA t;
+MOV result.color, t;
+END
+%% fp fp2_rejects_rep_no_count
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+REP;
+ENDREP;
+MOV result.color, t;
+END
+%% fp fp2_rejects_brk_bare
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+MOVC t, fragment.texcoord[0];
+REP {2};
+BRK GT.x;
+ENDREP;
+MOV result.color, t;
+END
+%% fp fp2_rejects_if_paren
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+MOVC t, fragment.texcoord[0];
+IF (GT.x);
+ENDIF;
+MOV result.color, t;
+END
+%% fp fp2_rejects_kil_paren
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+MOVC t, fragment.texcoord[0];
+KIL (LT.x);
+MOV result.color, t;
+END
+%% fp fp2_rejects_ret_bare
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+MOVC t, fragment.texcoord[0];
+RET GT.x;
+MOV result.color, t;
+END
+%% fp fp2_rejects_cal_bare
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+MOVC t, fragment.texcoord[0];
+CAL l GT.x;
+l:
+MOV result.color, t;
+END
+%% fp fp2_rejects_cc_dummy_destination
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+MOVC CC, fragment.texcoord[0];
+MOV result.color, t;
+END
+%% fp fp2_rejects_loop_index
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+LOOP {2, 0, 1};
+ADD t, t, fragment.texcoord[A0.x];
+ENDLOOP;
+MOV result.color, t;
+END
+%% fp fp2_rejects_array_target
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+TEX t, fragment.texcoord[0], texture[9], ARRAY2D;
+MOV result.color, t;
+END
+%% fp fp2_rejects_shadow_without_option
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+TEX t, fragment.texcoord[0], texture[5], SHADOW2D;
+MOV result.color, t;
+END
+%% fp fp2_rejects_undefined_label
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+CAL nowhere;
+MOV result.color, t;
+END
+%% fp fp2_rejects_duplicate_label
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+a:
+MOV t, 1;
+a:
+MOV t, 2;
+MOV result.color, t;
+END
+%% fp fp2_rejects_endif_alone nodraw
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+ENDIF;
+MOV result.color, t;
+END
+%% fp fp2_rejects_else_alone nodraw
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+ELSE;
+MOV result.color, t;
+END
+%% fp fp2_rejects_unterminated_if nodraw
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+MOVC t, fragment.texcoord[0];
+IF GT.x;
+MOV result.color, t;
+END
+%% fp fp2_rejects_endrep_closes_if nodraw
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+MOVC t, fragment.texcoord[0];
+IF GT.x;
+ENDREP;
+MOV result.color, t;
+END
+%% fp fp2_rejects_brk_outside_loop nodraw
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+BRK;
+MOV result.color, t;
+END
+%% vp vp3_rejects_if
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+MOVC t, vertex.texcoord[0];
+IF GT.x;
+ENDIF;
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_rep
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+REP {2};
+ENDREP;
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_brk
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+BRK;
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_div
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+DIV t, vertex.texcoord[0], vertex.texcoord[1].x;
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_nrm
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+NRM t.xyz, vertex.texcoord[0];
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_dp2
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+DP2 t, vertex.texcoord[0], vertex.texcoord[1];
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_txd
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+TXD t, vertex.texcoord[0], vertex.texcoord[1], vertex.texcoord[2], texture[0], 2D;
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_x2d
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+X2D t, vertex.texcoord[0], vertex.texcoord[1], vertex.texcoord[2];
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_pk2h
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+PK2H t, vertex.texcoord[0];
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_scs
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+SCS t.xy, vertex.texcoord[0].x;
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_lrp
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+LRP t, vertex.texcoord[0], vertex.texcoord[1], vertex.texcoord[2];
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_cmp
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+CMP t, vertex.texcoord[0], vertex.texcoord[1], vertex.texcoord[2];
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_rfl
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+RFL t.xyz, vertex.texcoord[0], vertex.texcoord[1];
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_kil
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+KIL vertex.texcoord[0];
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_ddx
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+DDX t, vertex.texcoord[0];
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_ssat
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+MOV_SSAT t, vertex.texcoord[0];
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_precision
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+ADDH t, vertex.texcoord[0], 1;
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_shadow_target
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+TEX t, vertex.texcoord[0], texture[5], SHADOW2D;
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_array_target
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+TEX t, vertex.texcoord[0], texture[9], ARRAY2D;
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_relative_attrib
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+ARL A0.x, 1;
+MOV t, vertex.texcoord[A0.x+1];
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_undefined_label
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+BRA nowhere;
+MOV result.texcoord[0], t;
+END
+%% vp vp3_rejects_popa_mask
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+POPA A0.x;
+MOV result.texcoord[0], t;
+END
+%% vp vp2_rejects_tex
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+TEX t, vertex.texcoord[0], texture[1], 2D;
+MOV result.texcoord[0], t;
+END
+%% vp vp2_rejects_txl
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+TXL t, vertex.texcoord[0], texture[1], 2D;
+MOV result.texcoord[0], t;
+END
+%% vp vp2_rejects_sat
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+MOV_SAT t, vertex.texcoord[0];
+MOV result.texcoord[0], t;
+END
+%% vp vp2_rejects_pusha
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+PUSHA A0;
+MOV result.texcoord[0], t;
+END
+%% vp vp2_rejects_cc1
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t;
+MOV t, 0;
+MOVC1 t, vertex.texcoord[0];
+MOV result.texcoord[0], t;
+END
+%% fp seq_sne_sgt_sle
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+SEQ t.x, fragment.texcoord[0].x, fragment.texcoord[0].y;
+SNE t.y, fragment.texcoord[0].x, fragment.texcoord[0].y;
+SGT t.z, fragment.texcoord[0].x, fragment.texcoord[0].y;
+SLE t.w, fragment.texcoord[0].x, fragment.texcoord[0].y;
+MOV result.color, t;
+END
+%% fp sfl_str
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+SFL t.xy, fragment.texcoord[0], fragment.texcoord[1];
+STR t.zw, fragment.texcoord[0], fragment.texcoord[1];
+MOV result.color, t;
+END
+%% fp div
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+DIV t, fragment.texcoord[0], fragment.texcoord[0].w;
+MOV result.color, t;
+END
+%% fp div_by_local
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+DIV t, fragment.texcoord[0], program.local[0].y;
+MOV result.color, t;
+END
+%% fp nrm
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 7;
+NRM t.xyz, fragment.texcoord[0];
+MOV result.color, t;
+END
+%% fp dp2
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+DP2 t, fragment.texcoord[0], fragment.texcoord[1];
+MOV result.color, t;
+END
+%% fp dp2a
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+DP2A t, fragment.texcoord[0], fragment.texcoord[1], {0.5, 0, 5, 7};
+MOV result.color, t;
+END
+%% fp dp2a_replicated
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+DP2A t, fragment.texcoord[0], fragment.texcoord[1], fragment.texcoord[0].w;
+MOV result.color, t;
+END
+%% fp x2d
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+X2D t, fragment.texcoord[0], fragment.texcoord[1], {2, 3, 4, 5};
+MOV result.color, t;
+END
+%% fp x2d_offsets
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+X2D t, fragment.texcoord[1], fragment.texcoord[0], fragment.texcoord[2];
+MOV result.color, t;
+END
+%% fp rfl
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 7;
+RFL t.xyz, fragment.texcoord[0], fragment.texcoord[1];
+MOV result.color, t;
+END
+%% fp scs_in_range
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MUL t, fragment.texcoord[3].x, 0.2;
+SUB t, t, 1.5;
+SCS t.xy, t.x;
+MOV result.color, t;
+END
+%% fp lit
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+LIT t, fragment.texcoord[0];
+MOV result.color, t;
+END
+%% fp lit_exponents
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, a;
+MOV a, {0.5, 0.5, 0, 0};
+MUL a.w, fragment.texcoord[3].x, 10;
+SUB a.w, a.w, 20;
+LIT t, a;
+MOV result.color, t;
+END
+%% fp abs_negate
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, -|fragment.texcoord[0]|;
+ADD t, t, |fragment.texcoord[1].yxwz|;
+MOV result.color, t;
+END
+%% fp ssat
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MUL_SSAT t, fragment.texcoord[0], 2;
+MOV result.color, t;
+END
+%% fp sat_cc
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, r;
+SUBC_SAT t, fragment.texcoord[0], 0.5;
+MOV r, 0;
+MOV r (EQ), 1;
+ADD result.color, r, t;
+END
+%% fp precision_suffixes
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, u;
+ADDX t, fragment.texcoord[0], 1;
+MULH u, t, 2;
+ADDRC t, u, t;
+MOV result.color, t;
+END
+%% fp facing
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+MOV result.color, fragment.facing;
+END
+%% fp ddx_ddy
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+DDX t.xy, fragment.position;
+DDY t.zw, fragment.position;
+MOV result.color, t;
+END
+%% fp ddx_flat
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+DDX t, fragment.texcoord[0];
+MOV result.color, t;
+END
+%% vp ssg
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+TEMP t;
+SSG t, vertex.texcoord[0];
+MOV result.texcoord[0], t;
+END
+%% vp sin_cos
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+TEMP t;
+SIN t.xy, vertex.texcoord[1].x;
+COS t.zw, vertex.texcoord[2].y;
+MOV result.texcoord[0], t;
+END
+%% vp rcc
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+TEMP t;
+RCC t.x, vertex.texcoord[0].x;
+RCC t.y, vertex.texcoord[0].y;
+RCC t.z, vertex.texcoord[0].z;
+RCC t.w, vertex.texcoord[0].w;
+MOV result.texcoord[0], t;
+END
+%% vp rcc_tiny
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP t;
+MUL t, vertex.texcoord[0], 1e-30;
+RCC t.x, t.x;
+RCC t.y, t.y;
+MOV result.texcoord[0], t;
+END
+%% vp seq_sgt_vertex
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+TEMP t;
+SEQ t.x, vertex.texcoord[0].x, vertex.texcoord[0].y;
+SGT t.y, vertex.texcoord[0].x, vertex.texcoord[0].y;
+SFL t.z, vertex.texcoord[0], vertex.texcoord[0];
+STR t.w, vertex.texcoord[0], vertex.texcoord[0];
+MOV result.texcoord[0], t;
+END
+%% vp sat_vertex
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP t;
+MUL_SAT t, vertex.texcoord[0], 2;
+MOV result.texcoord[0], t;
+END
+%% vp abs_vertex
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+TEMP t;
+MOV t, -|vertex.texcoord[0]|;
+MOV result.texcoord[0], t;
+END
+%% fp pk2h bits
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+PK2H t.x, fragment.texcoord[0];
+PK2H t.y, fragment.texcoord[0].zwzw;
+MOV t.zw, fragment.texcoord[0];
+MOV result.color, t;
+END
+%% fp pk2h_special bits
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP s, t;
+RCP s.x, 0;
+MUL s.y, s.x, -1;
+MUL s.z, s.x, 0;
+MOV s.w, 1e-40;
+PK2H t.x, s;
+PK2H t.y, s.zwzw;
+PK2H t.z, {65504, 65520, 0, 0};
+PK2H t.w, {6.1035156e-05, 6.0975552e-05, 0, 0};
+MOV result.color, t;
+END
+%% fp pk2h_denormals bits
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+PK2H t.x, {5.9604645e-08, 2.9802322e-08, 0, 0};
+PK2H t.y, {8.940697e-08, 1.1920929e-07, 0, 0};
+PK2H t.z, {-3.0e-08, 6.0975552e-05, 0, 0};
+PK2H t.w, {0.33333334, 1.0009766, 0, 0};
+MOV result.color, t;
+END
+%% fp up2h_round_trip
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+PK2H t, fragment.texcoord[0];
+UP2H t, t.x;
+MOV result.color, t;
+END
+%% fp up2h_special
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP s, t;
+RCP s.x, 0;
+MUL s.y, s.x, -1;
+PK2H t.x, s;
+UP2H t, t.x;
+MOV result.color, t;
+END
+%% fp up2h_nan
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP s, t, r;
+RCP s.x, 0;
+MUL s.x, s.x, 0;
+MOV s.y, 1;
+PK2H t.x, s;
+UP2H t, t.x;
+SNE r.x, t.x, t.x;
+MOV r.yzw, t;
+MOV result.color, r;
+END
+%% fp up2h_denormals
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, u;
+PK2H t.x, {5.9604645e-08, 6.0975552e-05, 0, 0};
+UP2H u, t.x;
+MUL result.color, u, 16777216;
+END
+%% fp up2h_input_bits
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+UP2H t, fragment.texcoord[0].x;
+MOV result.color, t;
+END
+%% fp pk2us bits
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+PK2US t.x, fragment.texcoord[0];
+PK2US t.y, fragment.texcoord[0].zwzw;
+PK2US t.z, fragment.texcoord[1];
+PK2US t.w, {0.5, 0.25, 0, 0};
+MOV result.color, t;
+END
+%% fp up2us_round_trip
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+PK2US t, fragment.texcoord[0];
+UP2US t, t.x;
+MOV result.color, t;
+END
+%% fp pk4b bits
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+PK4B t.x, fragment.texcoord[0];
+PK4B t.y, fragment.texcoord[1];
+PK4B t.z, {-1, -1.0078741, 1, 0.5};
+PK4B t.w, {0, -0.5, 2, -2};
+MOV result.color, t;
+END
+%% fp up4b_round_trip
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+PK4B t, fragment.texcoord[0];
+UP4B t, t.x;
+MOV result.color, t;
+END
+%% fp pk4ub bits
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+PK4UB t.x, fragment.texcoord[0];
+PK4UB t.y, fragment.texcoord[1];
+PK4UB t.z, {0.5, 0.25, 1, 0.0019608};
+PK4UB t.w, {-1, 2, 0.0039216, 0.99803925};
+MOV result.color, t;
+END
+%% fp up4ub_round_trip
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+PK4UB t, fragment.texcoord[0];
+UP4UB t, t.x;
+MOV result.color, t;
+END
+%% fp up4ub_input_bits
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+UP4UB t, fragment.texcoord[0].y;
+MOV result.color, t;
+END
+%% fp pack_cc_unpack
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, r;
+PK4UB t.x, fragment.texcoord[0];
+UP4UBC r, t.x;
+MOV r (EQ), -1;
+MOV result.color, r;
+END
+%% fp txd_1d
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP c, t;
+TXD t, fragment.texcoord[0], fragment.texcoord[1], fragment.texcoord[2], texture[6], 1D;
+MOV result.color, t;
+END
+%% fp txl_1d
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP c, t;
+MOV c, fragment.texcoord[0];
+MUL c.w, fragment.texcoord[3].x, 0.375;
+TXL t, c, texture[6], 1D;
+MOV result.color, t;
+END
+%% fp txd_2d
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP c, t;
+TXD t, fragment.texcoord[0], fragment.texcoord[1], fragment.texcoord[2], texture[0], 2D;
+MOV result.color, t;
+END
+%% fp txl_2d
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP c, t;
+MOV c, fragment.texcoord[0];
+MUL c.w, fragment.texcoord[3].x, 0.375;
+TXL t, c, texture[0], 2D;
+MOV result.color, t;
+END
+%% fp txd_3d
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP c, t;
+TXD t, fragment.texcoord[0], fragment.texcoord[1], fragment.texcoord[2], texture[3], 3D;
+MOV result.color, t;
+END
+%% fp txl_3d
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP c, t;
+MOV c, fragment.texcoord[0];
+MUL c.w, fragment.texcoord[3].x, 0.375;
+TXL t, c, texture[3], 3D;
+MOV result.color, t;
+END
+%% fp txd_cube
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP c, t;
+SUB c, fragment.texcoord[0], 0.4;
+TXD t, c, fragment.texcoord[1], fragment.texcoord[2], texture[2], CUBE;
+MOV result.color, t;
+END
+%% fp txl_cube
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP c, t;
+SUB c, fragment.texcoord[0], 0.4;
+MUL c.w, fragment.texcoord[3].x, 0.375;
+TXL t, c, texture[2], CUBE;
+MOV result.color, t;
+END
+%% fp txd_rect
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP c, t;
+MUL c, fragment.texcoord[0], {8, 8, 1, 1};
+TXD t, c, fragment.texcoord[1], fragment.texcoord[2], texture[4], RECT;
+MOV result.color, t;
+END
+%% fp txl_rect
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP c, t;
+MUL c, fragment.texcoord[0], {8, 8, 1, 1};
+MOV c.w, 2;
+TXL t, c, texture[4], RECT;
+MOV result.color, t;
+END
+%% fp txd_shadow1d
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+OPTION ARB_fragment_program_shadow;
+TEMP c, t;
+MOV c, fragment.texcoord[0];
+MOV c.z, 0.5;
+TXD t, c, fragment.texcoord[1], fragment.texcoord[2], texture[7], SHADOW1D;
+MOV result.color, t;
+END
+%% fp txd_shadow2d
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+OPTION ARB_fragment_program_shadow;
+TEMP c, t;
+MOV c, fragment.texcoord[0];
+MOV c.z, 0.5;
+TXD t, c, fragment.texcoord[1], fragment.texcoord[2], texture[5], SHADOW2D;
+MOV result.color, t;
+END
+%% fp txd_shadowrect
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+OPTION ARB_fragment_program_shadow;
+TEMP c, t;
+MUL c, fragment.texcoord[0], {8, 8, 1, 1};
+MOV c.z, 0.5;
+TXD t, c, fragment.texcoord[1], fragment.texcoord[2], texture[8], SHADOWRECT;
+MOV result.color, t;
+END
+%% fp txd_2d_pattern
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+TXD t, fragment.texcoord[0], fragment.texcoord[1], fragment.texcoord[2], texture[1], 2D;
+MOV result.color, t;
+END
+%% fp txd_2d_anisotropic
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, dx, dy;
+MUL dx, fragment.texcoord[3].x, {0.03125, 0, 0, 0};
+MUL dy, fragment.texcoord[3].x, {0, 0.0078125, 0, 0};
+ADD dx, dx, {0.03125, 0, 0, 0};
+ADD dy, dy, {0, 0.03125, 0, 0};
+TXD t, fragment.texcoord[0], dx, dy, texture[0], 2D;
+MOV result.color, t;
+END
+%% fp txd_2d_swapped_axes
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+TXD t, fragment.texcoord[0], fragment.texcoord[2], fragment.texcoord[1], texture[0], 2D;
+MOV result.color, t;
+END
+%% fp txd_3d_lod
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, dx;
+MUL dx, fragment.texcoord[3].x, 0.0625;
+TXD t, fragment.texcoord[0], dx, {0, 0, 0, 0}, texture[3], 3D;
+MOV result.color, t;
+END
+%% fp txd_cc_sat
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, r;
+TXDC_SAT t, fragment.texcoord[0], fragment.texcoord[1], fragment.texcoord[2], texture[1], 2D;
+MOV r, 0;
+MOV r (GT), t;
+MOV result.color, r;
+END
+%% fp txd_masked
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0.5;
+TXD t.xz, fragment.texcoord[0], fragment.texcoord[1], fragment.texcoord[2], texture[0], 2D;
+MOV result.color, t;
+END
+%% fp txd_option_fp1
+!!ARBfp1.0
+OPTION NV_fragment_program;
+TEMP t;
+TXD t, fragment.texcoord[0], fragment.texcoord[1], fragment.texcoord[2], texture[0], 2D;
+MOV result.color, t;
+END
+%% fp txb_nv
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP c, t;
+MOV c, fragment.texcoord[0];
+MUL c.w, fragment.texcoord[3].x, 0.375;
+TXB t, c, texture[0], 2D;
+MOV result.color, t;
+END
+%% fp txp_nv
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP c, t;
+MOV c, fragment.texcoord[0];
+MOV c.w, 2;
+TXP t, c, texture[1], 2D;
+MOV result.color, t;
+END
+%% vp tex_vertex
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP t;
+TEX t, vertex.texcoord[0], texture[1], 2D;
+MOV result.texcoord[0], t;
+END
+%% vp txl_vertex
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP c, t;
+MOV c, vertex.texcoord[0];
+MUL c.w, vertex.texcoord[3].x, 0.375;
+TXL t, c, texture[0], 2D;
+MOV result.texcoord[0], t;
+END
+%% vp txl_vertex_cube
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP c, t;
+MAD c, vertex.texcoord[3].x, {0.1, 0, 0.05, 0}, {-0.7, 0.3, -0.5, 0};
+MUL c.w, vertex.texcoord[3].x, 0.375;
+TXL t, c, texture[2], CUBE;
+MOV result.texcoord[0], t;
+END
+%% vp txl_vertex_3d
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP c, t;
+MOV c, vertex.texcoord[0];
+MUL c.w, vertex.texcoord[3].x, 0.375;
+TXL t, c, texture[3], 3D;
+MOV result.texcoord[0], t;
+END
+%% vp txl_vertex_1d
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP c, t;
+MOV c, vertex.texcoord[0];
+MUL c.w, vertex.texcoord[3].x, 0.375;
+TXL t, c, texture[6], 1D;
+MOV result.texcoord[0], t;
+END
+%% vp txb_vertex
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP c, t;
+MOV c, vertex.texcoord[0];
+MUL c.w, vertex.texcoord[3].x, 0.375;
+TXB t, c, texture[0], 2D;
+MOV result.texcoord[0], t;
+END
+%% vp txp_vertex
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP c, t;
+MOV c, vertex.texcoord[0];
+MOV c.w, 2;
+TXP t, c, texture[1], 2D;
+MOV result.texcoord[0], t;
+END
+%% vp tex_vertex_rect
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP c, t;
+MUL c, vertex.texcoord[0], {8, 8, 1, 1};
+TEX t, c, texture[4], RECT;
+MOV result.texcoord[0], t;
+END
+%% fp cc_write_masks
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, r;
+MOVC t, fragment.texcoord[0];
+MOV r, 0;
+MOV r (GT), 1;
+MOV r.xy (LT.yxzw), -1;
+MOV result.color, r;
+END
+%% fp cc_tests
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, r;
+MOVC t, fragment.texcoord[0].x;
+MOV r, 0;
+MOV r.x (GE.x), 1;
+MOV r.y (LE.x), 1;
+MOV r.z (NE.x), 1;
+MOV r.w (EQ.x), 1;
+MOV r (FL), 5;
+MOV result.color, r;
+END
+%% fp cc_nan
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, r;
+MOV t, 0;
+RCP t.y, 0;
+MUL t.x, t.y, 0;
+MOVC t, t;
+MOV r, 0;
+MOV r.x (NE.x), 1;
+MOV r.y (EQ.x), 1;
+MOV r.z (GE.x), 1;
+MOV r.w (LE.y), 1;
+MOV result.color, r;
+END
+%% fp cc_negative_zero
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, r;
+MOVC t, {-0.0, 0, 1, -1};
+MOV r, 0;
+MOV r (EQ), 1;
+MOV result.color, r;
+END
+%% fp cc_partial_update
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, r;
+MOVC t.xy, fragment.texcoord[0];
+MOV r, 0;
+MOV r (GT), 1;
+MOV result.color, r;
+END
+%% fp cc_conditional_update
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, r;
+MOVC t, fragment.texcoord[0];
+MOVC t (LT), fragment.texcoord[1];
+MOV r, 0;
+MOV r (GT), 1;
+MOV result.color, r;
+END
+%% fp cc_result_mask
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV result.color, 0.5;
+MOVC t, fragment.texcoord[0];
+MOV result.color (GT), 1;
+END
+%% fp kil_cc
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOVC t, fragment.texcoord[0];
+KIL LT.y;
+MOV result.color, t;
+END
+%% fp kil_cc_swizzle
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOVC t, fragment.texcoord[0];
+KIL EQ.wzyx;
+MOV result.color, t;
+END
+%% vp cc0_cc1
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP t, r;
+MOVC1 t, vertex.texcoord[0];
+MOVC0 t, vertex.texcoord[1];
+MOV r, 0;
+MOV r (GT1), 1;
+MOV r.x (LT1.x), -1;
+MOV r.w (GT0.x), 2;
+MOV result.texcoord[0], r;
+END
+%% vp cc_vertex
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+TEMP t, r;
+MOVC t, vertex.texcoord[0];
+MOV r, 0;
+MOV r (GT), 1;
+MOV r.y (LT.x), -1;
+MOV result.texcoord[0], r;
+END
+%% vp arl_vector
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+PARAM c[8] = { program.local[0..7] };
+TEMP t;
+MUL t, vertex.texcoord[3], {0.5, 0, 0, 0};
+ADD t, t, {0, 3, 5.9, -0.5};
+ARL A0, t;
+MOV t, c[A0.x];
+ADD t, t, c[A0.y];
+ADD t, t, c[A0.z];
+ADD result.texcoord[0], t, c[A0.w + 2];
+END
+%% vp arl_floor
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+ADDRESS A0;
+PARAM c[8] = { program.local[0..7] };
+TEMP t;
+MUL t, vertex.texcoord[3], -0.3;
+ADD t, t, 7;
+ARL A0.x, t.x;
+MOV result.texcoord[0], c[A0.x];
+END
+%% vp arl_masked
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+PARAM c[8] = { program.local[0..7] };
+TEMP t;
+ARL A0, {1, 2, 3, 4};
+MUL t, vertex.texcoord[3], 0.25;
+ARL A0.yw, t;
+MOV t, c[A0.x];
+ADD t, t, c[A0.y];
+ADD t, t, c[A0.z];
+ADD result.texcoord[0], t, c[A0.w];
+END
+%% vp arr
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+ADDRESS A0;
+PARAM c[8] = { program.local[0..7] };
+TEMP t;
+MUL t, vertex.texcoord[3], 0.25;
+ARR A0, t;
+MOV result.texcoord[0], c[A0.x];
+END
+%% vp arr_halves
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+ADDRESS A0;
+PARAM c[8] = { program.local[0..7] };
+TEMP t;
+MUL t, vertex.texcoord[3], 0.5;
+ARR A0, t;
+MOV result.texcoord[0], c[A0.x];
+END
+%% vp arr_negative
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+ADDRESS A0;
+PARAM c[8] = { program.local[0..7] };
+TEMP t;
+MUL t, vertex.texcoord[3], -0.5;
+ARR A0, t;
+MOV result.texcoord[0], c[A0.x + 7];
+END
+%% vp ara
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+ADDRESS A0, A1;
+PARAM c[8] = { program.local[0..7] };
+TEMP t;
+MUL t, vertex.texcoord[3], {0.25, 0, 0, 0};
+ADD t, t, {0, 1, 2, 3};
+ARL A0, t;
+ARA A1, A0;
+MOV t, c[A1.x];
+ADD result.texcoord[0], t, c[A1.y];
+END
+%% vp arac_cc
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t, r;
+MUL t, vertex.texcoord[3], {1, 0, 0, 0};
+ADD t, t, {0, -1, -4, 1};
+ARL A0, t;
+ARAC A0.xy, A0;
+MOV r, 0;
+MOV r (GT), 1;
+MOV r (LT), -1;
+MOV result.texcoord[0], r;
+END
+%% vp arlc_cc
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+ADDRESS A0;
+TEMP t, r;
+SUB t, vertex.texcoord[3].x, 3.5;
+ARLC A0, t;
+MOV r, 0;
+MOV r (GT), 1;
+MOV r (LT), -1;
+MOV result.texcoord[0], r;
+END
+%% vp arl_conditional
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+ADDRESS A0;
+PARAM c[8] = { program.local[0..7] };
+TEMP t;
+ARL A0, {2, 2, 2, 2};
+SUBC t, vertex.texcoord[3].x, 7.5;
+ARL A0.x (GT), {6, 6, 6, 6};
+MOV result.texcoord[0], c[A0.x];
+END
+%% vp pusha_popa
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+PARAM c[8] = { program.local[0..7] };
+ARL A0, {2, 3, 4, 5};
+PUSHA A0;
+ARL A0, {6, 6, 6, 6};
+PUSHA A0;
+ARL A0, {0, 0, 0, 0};
+POPA A0;
+MOV result.texcoord[1], c[A0.y];
+POPA A0;
+MOV result.texcoord[0], c[A0.y];
+END
+%% vp popa_empty
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+MOV result.texcoord[0], 1;
+POPA A0;
+MOV result.texcoord[0], 2;
+END
+%% vp pusha_overflow
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+ARL A0, {1, 1, 1, 1};
+MOV result.texcoord[0], 1;
+PUSHA A0;
+PUSHA A0;
+PUSHA A0;
+PUSHA A0;
+MOV result.texcoord[0], 2;
+PUSHA A0;
+MOV result.texcoord[0], 3;
+END
+%% vp ret_pops_address
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS A0;
+ARL A0, {1, 1, 1, 1};
+MOV result.texcoord[0], 1;
+CAL sub;
+MOV result.texcoord[0], 4;
+RET;
+sub:
+PUSHA A0;
+MOV result.texcoord[0], 2;
+RET;
+MOV result.texcoord[0], 3;
+END
+%% fp if_else
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOVC t, fragment.texcoord[0];
+IF GT.x;
+MOV result.color, 1;
+ELSE;
+MOV result.color, 2;
+ENDIF;
+END
+%% fp if_nested
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, r;
+MOV r, 0;
+MOVC t, fragment.texcoord[0];
+IF GT.x;
+ IF LT.z;
+  MOV r, 1;
+ ELSE;
+  MOV r, 2;
+ ENDIF;
+ELSE;
+ IF GT.y;
+  MOV r, 3;
+ ENDIF;
+ENDIF;
+MOV result.color, r;
+END
+%% fp if_swizzle
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, r;
+MOV r, 0;
+MOVC t, fragment.texcoord[0];
+IF LT.wzyx;
+MOV r, 1;
+ENDIF;
+IF EQ.yyyy;
+ADD r, r, 2;
+ENDIF;
+MOV result.color, r;
+END
+%% fp rep_count
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+REP {4, 9, 9, 9};
+ADD t, t, {1, 2, 0, 0};
+ENDREP;
+MOV result.color, t;
+END
+%% fp rep_local
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+REP program.local[2];
+ADD t, t, 1;
+ENDREP;
+MOV result.color, t;
+END
+%% fp rep_fraction
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+REP {2.7, 0, 0, 0};
+ADD t.x, t.x, 1;
+ENDREP;
+REP {1.999, 0, 0, 0};
+ADD t.y, t.y, 1;
+ENDREP;
+MOV result.color, t;
+END
+%% fp rep_nested_four
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+REP {2};
+REP {2};
+REP {3};
+REP {2};
+ADD t, t, 1;
+ENDREP;
+ENDREP;
+ENDREP;
+ENDREP;
+MOV result.color, t;
+END
+%% fp rep_brk_cond
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+REP {8};
+ADDC t, t, fragment.texcoord[0];
+BRK (GT.x);
+ADD t.w, t.w, 10;
+ENDREP;
+MOV result.color, t;
+END
+%% fp rep_brk_uncond
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+REP {5};
+ADD t, t, 1;
+BRK;
+ENDREP;
+MOV result.color, t;
+END
+%% fp rep_brk_in_if
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, c;
+MOV t, 0;
+REP {6};
+ADD t, t, 1;
+SUBC c, t.x, fragment.texcoord[3].x;
+IF GE.x;
+BRK;
+ENDIF;
+ENDREP;
+MOV result.color, t;
+END
+%% fp rep_brk_inner
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, c;
+MOV t, 0;
+REP {3};
+MOV c, 0;
+REP {5};
+ADDC c, c, 1;
+SUBC c.y, c.x, 2;
+BRK (GE.y);
+ADD t, t, 1;
+ENDREP;
+ADD t.w, t.w, 100;
+ENDREP;
+MOV result.color, t;
+END
+%% fp loop_count
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+LOOP {4, 2, 1};
+ADD t, t, 1;
+ENDLOOP;
+MOV result.color, t;
+END
+%% fp indirectx_rep
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP r0, rTempRep0;
+PARAM i0 = {3, 0, 1, 0};
+MOV r0, 0;
+REP i0;
+ADD r0, r0, fragment.texcoord[0];
+MOVC rTempRep0.x, r0.x;
+BRK (GT.x);
+ENDREP;
+MOV result.color, r0;
+END
+%% fp cal_ret
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, fragment.texcoord[0];
+CAL sub;
+MOV result.color, t;
+RET;
+sub:
+ADD t, t, 1;
+RET;
+END
+%% fp cal_main_label
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV result.color, 9;
+sub:
+ADD t, t, 1;
+RET;
+main:
+MOV t, fragment.texcoord[0];
+CAL sub;
+CAL sub;
+MOV result.color, t;
+END
+%% fp cal_conditional
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOVC t, fragment.texcoord[0];
+CAL sub (GT.x);
+CAL sub2 (LT.yyyy);
+MOV result.color, t;
+RET;
+sub:
+ADD t, t, 10;
+RET;
+sub2:
+ADD t, t, 100;
+RET;
+END
+%% fp ret_conditional
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOVC t, fragment.texcoord[0];
+MOV result.color, t;
+RET (GT.x);
+MOV result.color, 5;
+END
+%% fp ret_conditional_in_sub
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+CAL sub;
+MOV result.color, t;
+RET;
+sub:
+MOVC t.x, fragment.texcoord[0].x;
+RET (LT.x);
+MOV t.y, 7;
+RET;
+END
+%% fp cal_fall_through
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+CAL a;
+MOV result.color, t;
+RET;
+a:
+ADD t.x, t.x, 1;
+b:
+ADD t.y, t.y, 1;
+RET;
+END
+%% fp cal_nested
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+CAL a;
+MOV result.color, t;
+RET;
+a:
+ADD t.x, t.x, 1;
+CAL b;
+ADD t.x, t.x, 10;
+RET;
+b:
+ADD t.y, t.y, 1;
+CAL c;
+RET;
+c:
+ADD t.z, t.z, 1;
+RET;
+END
+%% fp cal_recursion
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, n;
+MOV t, 0;
+MOV n, fragment.texcoord[3].x;
+CAL rec;
+MOV result.color, t;
+RET;
+rec:
+ADD t, t, 1;
+SUBC n.x, n.x, 1;
+CAL rec (GE.x);
+ADD t.y, t.y, 10;
+RET;
+END
+%% fp cal_depth_limit
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+MOV result.color, 0.5;
+CAL d1;
+MOV result.color, t;
+RET;
+d1:
+ADD t.x, t.x, 1;
+CAL d2;
+RET;
+d2:
+ADD t.y, t.y, 1;
+CAL d3;
+RET;
+d3:
+ADD t.z, t.z, 1;
+CAL d4;
+RET;
+d4:
+ADD t.w, t.w, 1;
+MOV result.color, t;
+CAL d5;
+RET;
+d5:
+MOV result.color, 9;
+RET;
+END
+%% fp cal_in_if
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOVC t, fragment.texcoord[0];
+IF GT.x;
+CAL sub;
+ELSE;
+CAL sub2;
+ENDIF;
+MOV result.color, t;
+RET;
+sub:
+ADD t, t, 1;
+RET;
+sub2:
+ADD t, t, -1;
+RET;
+END
+%% fp cal_in_rep
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+REP {3};
+CAL sub;
+ADD t.y, t.y, 1;
+ENDREP;
+MOV result.color, t;
+RET;
+sub:
+ADD t.x, t.x, 2;
+RET;
+END
+%% fp ret_in_rep
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, 0;
+CAL sub;
+MOV result.color, t;
+RET;
+sub:
+REP {10};
+ADD t, t, 1;
+SUBC t.w, t.x, fragment.texcoord[3].x;
+RET (GE.w);
+ENDREP;
+MOV t.z, -1;
+RET;
+END
+%% fp cal_cc_shared
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t, r;
+MOV r, 0;
+CAL setcc;
+MOV r (GT), 1;
+MOV result.color, r;
+RET;
+setcc:
+MOVC t, fragment.texcoord[0];
+RET;
+END
+%% fp kil_in_sub
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+MOV t, fragment.texcoord[0];
+CAL sub;
+MOV result.color, t;
+RET;
+sub:
+KIL t.xyxy;
+RET;
+END
+%% fp label_named_like_temp
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP foo;
+MOV foo, 1;
+CAL foo;
+MOV result.color, foo;
+RET;
+foo:
+ADD foo, foo, 1;
+RET;
+END
+%% fp tex_in_sub
+!!ARBfp1.0
+OPTION NV_fragment_program2;
+TEMP t;
+CAL sample;
+MOV result.color, t;
+RET;
+sample:
+TXD t, fragment.texcoord[0], fragment.texcoord[1], fragment.texcoord[2], texture[0], 2D;
+RET;
+END
+%% vp bra_forward
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP t;
+MOVC t, vertex.texcoord[0];
+MOV result.texcoord[0], 1;
+BRA skip (GT.x);
+MOV result.texcoord[0], 2;
+skip:
+END
+%% vp bra_backward
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP t;
+MOV t, 0;
+top:
+ADD t, t, 1;
+SUBC t.y, t.x, vertex.texcoord[3].x;
+BRA top (LT.y);
+MOV result.texcoord[0], t;
+END
+%% vp bra_unconditional
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP t;
+MOV t, 1;
+BRA end;
+MOV t, 2;
+end:
+MOV result.texcoord[0], t;
+END
+%% vp bra_into_earlier_code
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP t;
+MOV t, 0;
+BRA start;
+second:
+ADD t.y, t.y, 1;
+BRA done;
+start:
+ADD t.x, t.x, 1;
+BRA second;
+done:
+MOV result.texcoord[0], t;
+END
+%% vp bra_main_label
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP t;
+first:
+MOV t, 5;
+BRA out;
+main:
+MOV result.position, vertex.position;
+MOV t, 1;
+BRA first (FL);
+ADD t, t, 1;
+out:
+MOV result.texcoord[0], t;
+END
+%% vp cal_vertex
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+TEMP t;
+MOV t, vertex.texcoord[0];
+CAL sub;
+MOV result.texcoord[0], t;
+RET;
+sub:
+ADD t, t, 10;
+RET;
+END
+%% vp cal_vertex_conditional
+!!ARBvp1.0
+OPTION NV_vertex_program2;
+MOV result.position, vertex.position;
+TEMP t;
+MOVC t, vertex.texcoord[0];
+CAL sub (LT.x);
+MOV result.texcoord[0], t;
+RET;
+sub:
+MUL t, t, -2;
+RET;
+END
+%% vp cal_vertex_recursion
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP t, n;
+MOV t, 0;
+MOV n, vertex.texcoord[3].x;
+MOV result.texcoord[0], -1;
+CAL rec;
+MOV result.texcoord[0], t;
+RET;
+rec:
+ADD t, t, 1;
+SUBC n.x, n.x, 1;
+CAL rec (GE.x);
+RET;
+END
+%% vp ret_vertex_main
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP t;
+MOVC t, vertex.texcoord[0];
+MOV result.texcoord[0], 1;
+RET (LT.y);
+MOV result.texcoord[0], 2;
+END
+%% vp indirectx_loop
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS aL;
+TEMP r0, rLoopTemp0;
+PARAM i0 = { 0, 0, 1, 0 };
+PARAM c[8] = { program.local[0..7] };
+MOV r0, 0;
+MOV rLoopTemp0, vertex.texcoord[3].xyzz;
+MOV rLoopTemp0.y, i0.y;
+MOV rLoopTemp0.w, i0.z;
+MOV rLoopTemp0.z, -1;
+PUSHA aL;
+ARLC aL, rLoopTemp0;
+BRA endbranch0 (LE.x);
+branch0:
+ADD r0.x, r0.x, 1;
+ADD r0.y, r0.y, c[aL.y].x;
+ARAC aL.xy, aL;
+BRA branch0 (GT.x);
+endbranch0:
+POPA aL;
+MOV result.texcoord[0], r0;
+END
+%% vp indirectx_rep
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS aRep;
+TEMP r0, rTempRep0;
+MOV r0, 0;
+MOV rTempRep0, vertex.texcoord[3];
+PUSHA aRep;
+ARLC aRep, rTempRep0;
+BRA endbranch0 (LE.x);
+branch0:
+ADD r0, r0, 1;
+ADD rTempRep0, rTempRep0, -1;
+ARLC aRep, rTempRep0;
+BRA branch0 (GT.x);
+endbranch0:
+POPA aRep;
+MOV result.texcoord[0], r0;
+END
+%% vp indirectx_if_else
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+TEMP r0, rTempCond;
+MOV r0, vertex.texcoord[0];
+MOVC rTempCond, r0;
+BRA L0 (LE.x);
+MOV r0, 1;
+BRA L1 (TR.x);
+L0:
+MOV r0, 2;
+L1:
+MOV result.texcoord[0], r0;
+END
+%% vp indirectx_nested_loops
+!!ARBvp1.0
+OPTION NV_vertex_program3;
+MOV result.position, vertex.position;
+ADDRESS aL, aM;
+TEMP r0, t;
+MOV r0, 0;
+MOV t, {3, 0, -1, 1};
+PUSHA aL;
+ARLC aL, t;
+BRA end0 (LE.x);
+top0:
+MOV t, {2, 0, -1, 1};
+PUSHA aL;
+ARLC aL, t;
+BRA end1 (LE.x);
+top1:
+ADD r0, r0, 1;
+ARAC aL.xy, aL;
+BRA top1 (GT.x);
+end1:
+POPA aL;
+ADD r0.y, r0.y, 10;
+ARAC aL.xy, aL;
+BRA top0 (GT.x);
+end0:
+POPA aL;
+MOV result.texcoord[0], r0;
+END

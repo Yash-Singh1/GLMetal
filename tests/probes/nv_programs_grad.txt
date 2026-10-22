@@ -1,0 +1,129 @@
+%% glsl txd_1d
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler1D tex6;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = texture1DGradARB(tex6, a.x, b.x, c.x);
+}
+%% glsl txd_2d
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler2D tex0;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = texture2DGradARB(tex0, a.xy, b.xy, c.xy);
+}
+%% glsl txd_3d
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler3D tex3;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = texture3DGradARB(tex3, a.xyz, b.xyz, c.xyz);
+}
+%% glsl txd_cube
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform samplerCube tex2;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = textureCubeGradARB(tex2, a.xyz - 0.4, b.xyz, c.xyz);
+}
+%% glsl txd_rect
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler2DRect tex4;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = texture2DRect(tex4, a.xy * 8.0);
+}
+%% glsl txd_shadow1d
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler1DShadow tex7;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = vec4(shadow1DGradARB(tex7, vec3(a.x, 0.0, 0.5), b.x, c.x).rrr, 1.0);
+}
+%% glsl txd_shadow2d
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler2DShadow tex5;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = vec4(shadow2DGradARB(tex5, vec3(a.xy, 0.5), b.xy, c.xy).rrr, 1.0);
+}
+%% glsl txd_shadowrect
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler2DRectShadow tex8;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = vec4(shadow2DRect(tex8, vec3(a.xy * 8.0, 0.5)).rrr, 1.0);
+}
+%% glsl txd_2d_pattern
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler2D tex1;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = texture2DGradARB(tex1, a.xy, b.xy, c.xy);
+}
+%% glsl txd_2d_anisotropic
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler2D tex0;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = texture2DGradARB(tex0, a.xy, i.x * vec2(0.03125, 0.0) + vec2(0.03125, 0.0), i.x * vec2(0.0, 0.0078125) + vec2(0.0, 0.03125));
+}
+%% glsl txd_2d_swapped_axes
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler2D tex0;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = texture2DGradARB(tex0, a.xy, c.xy, b.xy);
+}
+%% glsl txd_3d_lod
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler3D tex3;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = texture3DGradARB(tex3, a.xyz, vec3(i.x * 0.0625), vec3(0.0));
+}
+%% glsl txd_cc_sat
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler2D tex1;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = max(clamp(texture2DGradARB(tex1, a.xy, b.xy, c.xy), 0.0, 1.0), 0.0);
+}
+%% glsl txd_masked
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler2D tex0;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  vec4 t = texture2DGradARB(tex0, a.xy, b.xy, c.xy);
+  gl_FragColor = vec4(t.x, 0.5, t.z, 0.5);
+}
+%% glsl txd_option_fp1
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler2D tex0;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = texture2DGradARB(tex0, a.xy, b.xy, c.xy);
+}
+%% glsl tex_in_sub
+#version 120
+#extension GL_ARB_shader_texture_lod : require
+uniform sampler2D tex0;
+void main() {
+  vec4 a = gl_TexCoord[0], b = gl_TexCoord[1], c = gl_TexCoord[2], i = gl_TexCoord[3];
+  gl_FragColor = texture2DGradARB(tex0, a.xy, b.xy, c.xy);
+}

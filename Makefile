@@ -238,6 +238,28 @@ test-arb-queries: lib $(OUT)/arb_program_queries $(OUT)/arb_program_errors
 		diff $(OUT)/arb-queries-apple.txt $(OUT)/arb-queries-threaded.txt && \
 		echo "ARB program queries: direct/threaded match Apple ($$(wc -l < $(OUT)/arb-queries-apple.txt) lines)"
 
+# ARB programs with the NV options (tests/probes/nv_programs.txt): load
+# errors, computed values and counters against Apple's, less the documented
+# lines where Apple contradicts the extensions; GLMetal's TXD against
+# Apple's GLSL texture*GradARB (Apple runs TXD as a MOV).
+$(OUT)/nv_programs: tests/probes/nv_programs.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -o $@
+.PHONY: test-nv-programs
+test-nv-programs: lib $(OUT)/nv_programs $(OUT)/arb_program_queries
+	@$(OUT)/nv_programs < tests/probes/nv_programs.txt > $(OUT)/nv-programs-apple.txt 2>/dev/null
+	@$(OUT)/nv_programs $(OUT)/libGLMetal.dylib < tests/probes/nv_programs.txt > $(OUT)/nv-programs-direct.txt 2>/dev/null
+	@GLMETAL_THREAD_ALL=1 $(OUT)/nv_programs $(OUT)/libGLMetal.dylib < tests/probes/nv_programs.txt \
+		> $(OUT)/nv-programs-threaded.txt 2>/dev/null
+	@$(OUT)/nv_programs < tests/probes/nv_programs_grad.txt > $(OUT)/nv-programs-grad-apple.txt 2>/dev/null
+	@$(OUT)/arb_program_queries < tests/probes/nv_programs.txt > $(OUT)/nv-queries-apple.txt
+	@$(OUT)/arb_program_queries $(OUT)/libGLMetal.dylib < tests/probes/nv_programs.txt > $(OUT)/nv-queries-glmetal.txt 2>/dev/null
+	@python3 tests/probes/quirkdiff.py $(OUT)/nv-programs-apple.txt $(OUT)/nv-programs-direct.txt tests/probes/nv_programs_quirks.txt && \
+		python3 tests/probes/quirkdiff.py $(OUT)/nv-programs-apple.txt $(OUT)/nv-programs-threaded.txt tests/probes/nv_programs_quirks.txt && \
+		python3 tests/probes/quirkdiff.py $(OUT)/nv-queries-apple.txt $(OUT)/nv-queries-glmetal.txt tests/probes/nv_queries_quirks.txt && \
+		python3 tests/probes/nv_twins.py $(OUT)/nv-programs-grad-apple.txt $(OUT)/nv-programs-direct.txt && \
+		echo "NV programs: direct/threaded/counters match Apple ($$(grep -c '^%%' tests/probes/nv_programs.txt) programs, $$(grep -c '^apple:' tests/probes/nv_programs_quirks.txt) documented quirks)"
+
 # Small legacy entry points (colour index, texture residency, vertex blend
 # state, unadvertised extensions) against Apple's answers.
 $(OUT)/legacy_misc: tests/probes/legacy_misc.c

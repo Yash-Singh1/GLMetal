@@ -96,8 +96,9 @@ struct parser {
        an error (ARB_vertex_program 2.14.3.1). */
     uint32_t conventional_bound, generic_bound;
     /* glGetProgramivARB counters, as Apple's implementation counts: every
-       instruction, temporaries and parameters (incl. literals, deduplicated)
-       actually referenced, attributes read, address registers declared. */
+       instruction, temporaries and parameters (named ones and bindings
+       deduplicated, every inline literal) actually referenced, attributes
+       read, address registers declared. */
     int instructions, alu_instructions, tex_instructions, address_declared;
     char (*param_keys)[160], (*attrib_keys)[160];
     int param_count, attrib_count;
@@ -110,17 +111,37 @@ struct parser {
     char error_hint[64];     /* the token Apple's messages quote */
     struct token previous;   /* the token before the current one */
     bool failed;
-    /* NV_fragment_program2 / NV_vertex_program3 (OPTION NV_*): precision
-       and condition-code opcode suffixes, |abs| operands, conditional
-       writes and branches, more opcodes, vertex texture fetch. */
-    bool nv;
-    bool cc_used;
-    int loop_depth;
+    /* NV program options: 0 none; fragment 1 (NV_fragment_program,
+       NV_fragment_program_option) or 2 (NV_fragment_program2); vertex 2
+       (NV_vertex_program2, NV_vertex_program2_option) or 3
+       (NV_vertex_program3). They add precision and condition-code opcode
+       suffixes, |abs| operands, conditional writes, blocks and branches,
+       more opcodes and vertex texture fetch. */
+    int nv;
+    bool shadow_option; /* ARB_fragment_program_shadow */
+    uint8_t cc_used;    /* condition code registers 0 and 1 (NV_vertex_program3) */
+    uint32_t nv_helpers; /* helper functions the body calls (enum nv_helper) */
+    /* IF, REP and LOOP blocks open at this point. */
+    struct block { int kind, open, close, counter; bool has_else; } blocks[64];
+    int block_depth;
+    /* Programs with labels, CAL, RET, BRA, PUSHA or POPA run as a state
+       machine: the body is a series of segments "if (glm_pc == id) {...}"
+       in a loop, a branch sets glm_pc, CAL and PUSHA push onto a 4-entry
+       stack (MAX_PROGRAM_CALL_DEPTH_NV) shared with RET and POPA, and
+       blocks become branches. flow_candidate: the program has one of them
+       (found before parsing). */
+    bool flow_candidate, flow_decided, flow;
+    int segments, loop_counters;
+    struct label { char name[64]; int id; bool defined; } *labels;
+    int label_count;
     /* result.clip[n] written as DP4 of one vector with state.clip[n].plane
        (Direct3D clip planes): the vector becomes gl_ClipVertex. */
     uint8_t clips_written;
     bool clip_vertex_ok;
+    bool dest_address; /* the last destination was an address register */
 };
+
+enum nv_helper { HELPER_PACK = 1, HELPER_RCC = 2 };
 
 /* Adds `key` (outer parentheses ignored) to a counted set. */
 static void count_key(char (**keys)[160], int *count, const char *key)
@@ -239,7 +260,7 @@ static void expect(struct parser *p, const char *text)
 static int expect_integer(struct parser *p)
 {
     if (p->token.kind != TOK_NUMBER) {
-        fail(p, "expected an integer near '%s'", p->token.text);
+        fail(p, "invalid number"); /* Apple's message */
         return 0;
     }
     int v = (int)p->token.number;
@@ -678,8 +699,11 @@ static void attribute_binding(struct parser *p, char *out)
         snprintf(out, 160, "vec4(gl_FogFragCoord, 0.0, 0.0, 1.0)");
     } else if (!strcmp(what, "position")) snprintf(out, 160, "gl_FragCoord");
     /* NV_fragment_program2: +1 for front-facing primitives, -1 for back. */
-    else if (!strcmp(what, "facing") && p->nv) snprintf(out, 160, "vec4(gl_FrontFacing ? 1.0 : -1.0, 0.0, 0.0, 1.0)");
-    else fail(p, "unknown fragment attribute '%s'", what);
+    else if (!strcmp(what, "facing") && p->nv >= 2) snprintf(out, 160, "vec4(gl_FrontFacing ? 1.0 : -1.0, 0.0, 0.0, 1.0)");
+    else if (!strcmp(what, "facing")) { /* Apple's message without NV_fragment_program2 */
+        fail(p, "malformed declaration");
+        snprintf(p->error_hint, sizeof p->error_hint, "%s", what);
+    } else fail(p, "unknown fragment attribute '%s'", what);
 }
 
 enum result_slot {
@@ -795,11 +819,11 @@ static void source_operand(struct parser *p, char *out, size_t size)
     char base[200] = {0};
     if (p->token.kind == TOK_NUMBER || is(p, "{")) {
         char c[160], key[160];
-        bool scalar = p->token.kind == TOK_NUMBER;
         constant_vector(p, c, true);
         snprintf(base, sizeof base, "%s", c);
-        /* A scalar constant and the equal vector count apart. */
-        snprintf(key, sizeof key, "%s%s", scalar ? "scalar " : "", c);
+        /* Every inline constant counts as a parameter of its own, as in
+           Apple's implementation (named PARAMs and bindings count once). */
+        snprintf(key, sizeof key, "literal %d %s", p->param_count, c);
         count_key(&p->param_keys, &p->param_count, key);
     } else if (p->token.kind == TOK_IDENT) {
         if (is(p, "vertex") || is(p, "fragment")) {
@@ -835,10 +859,13 @@ static void source_operand(struct parser *p, char *out, size_t size)
                     expect(p, ".");
                     char comp[8];
                     expect_ident(p, comp, sizeof comp);
+                    /* NV_vertex_program2_option: any component of A0. */
+                    int c = swizzle_component(comp[0]);
+                    if (c < 0 || comp[1] || (c && !p->nv)) fail(p, "invalid address register component");
                     int offset = 0;
                     if (accept(p, "+")) offset = expect_integer(p);
                     else if (accept(p, "-")) offset = -expect_integer(p);
-                    snprintf(index, sizeof index, "clamp(%s.x + %d, 0, %d)", a ? a->glsl : address, offset + (n->alias_array ? n->alias_base : 0),
+                    snprintf(index, sizeof index, "clamp(%s.%c + %d, 0, %d)", a ? a->glsl : address, "xyzw"[c < 0 ? 0 : c], offset + (n->alias_array ? n->alias_base : 0),
                              n->alias_array ? n->alias_base + n->array_size - 1 : n->array_size - 1);
                     if (n->alias_array) {
                         if (!strcmp(n->alias_array, "glm_arb_env")) p->env_dynamic = true;
@@ -871,7 +898,7 @@ static void source_operand(struct parser *p, char *out, size_t size)
             }
         }
     } else {
-        fail(p, "unexpected '%s'", p->token.text);
+        fail(p, "undefined source identifier"); /* Apple's message */
         return;
     }
 swizzle:;
@@ -885,8 +912,10 @@ swizzle:;
     snprintf(out, size, "%s(%s%s)", negate ? "-" : "", base, swz);
 }
 
-/* NV condition-code test: EQ NE LT LE GT GE TR FL, an optional register
-   digit, and a swizzle. Returns a bvec4 expression over glm_cc0. */
+/* NV condition-code test: EQ NE LT LE GT GE TR FL, a register digit (0 or
+   1, NV_vertex_program3 only) and a swizzle. Returns a bvec4 expression
+   over glm_cc0 / glm_cc1, or false, consuming nothing, if the token is not
+   a test. A code of an unordered (NaN) result passes NE only. */
 static bool condition_test(struct parser *p, char *out, size_t size)
 {
     static const char *const tests[] = {"EQ", "NE", "LT", "LE", "GT", "GE", "TR", "FL"};
@@ -895,26 +924,50 @@ static bool condition_test(struct parser *p, char *out, size_t size)
     char word[16];
     snprintf(word, sizeof word, "%s", p->token.text);
     size_t n = strlen(word);
-    if (n == 3 && (word[2] == '0' || word[2] == '1')) word[--n] = 0;
+    int reg = 0;
+    if (n == 3 && p->vertex && p->nv >= 3 && (word[2] == '0' || word[2] == '1')) {
+        reg = word[2] - '0';
+        word[--n] = 0;
+    }
     int which = -1;
     for (int i = 0; i < 8; ++i)
         if (!strcmp(word, tests[i])) which = i;
     if (which < 0) return false;
     next(p);
-    p->cc_used = true;
     char swz[8];
     source_swizzle(p, swz);
     if (!swz[0]) snprintf(swz, sizeof swz, ".xyzw");
     if (which == 6) snprintf(out, size, "bvec4(true)");
     else if (which == 7) snprintf(out, size, "bvec4(false)");
-    else snprintf(out, size, "%s(glm_cc0%s, vec4(0.0))", functions[which], swz);
+    else {
+        p->cc_used |= (uint8_t)(1u << reg);
+        snprintf(out, size, "%s(glm_cc%d%s, vec4(0.0))", functions[which], reg, swz);
+    }
     return true;
+}
+
+/* An optional "(test)" (after a destination, CAL, BRA, RET or BRK): the
+   bvec4 test, or "" when there is none. */
+static void condition_mask(struct parser *p, char *out, size_t size)
+{
+    out[0] = 0;
+    if (!accept(p, "(")) return;
+    if (!condition_test(p, out, size)) {
+        fail(p, "invalid condition mask");
+        return;
+    }
+    expect(p, ")");
 }
 
 /* Destination: variable and write mask ("xyzw" subset). */
 static void destination(struct parser *p, char *variable, size_t size, char *mask, int *slot)
 {
     *slot = -1;
+    p->dest_address = false;
+    if (p->token.kind != TOK_IDENT) {
+        fail(p, "undefined destination identifier");
+        return;
+    }
     if (is(p, "result")) {
         *slot = result_binding(p);
         snprintf(variable, size, "%s", result_variable(*slot));
@@ -936,6 +989,7 @@ static void destination(struct parser *p, char *variable, size_t size, char *mas
         } else if (n->kind == NAME_TEMP || n->kind == NAME_ADDRESS) {
             snprintf(variable, size, "%s", n->glsl);
             if (n->kind == NAME_TEMP) p->temp_used[n->slot] = true;
+            p->dest_address = n->kind == NAME_ADDRESS;
         } else {
             fail(p, "'%s' cannot be written", ident);
             return;
@@ -991,13 +1045,23 @@ enum { TARGET_1D, TARGET_2D, TARGET_3D, TARGET_CUBE, TARGET_RECT, TARGET_SHADOW1
 static int target_code(struct parser *p, const char *t)
 {
     static const char *const names[] = {"1D", "2D", "3D", "CUBE", "RECT", "SHADOW1D", "SHADOW2D", "SHADOWRECT"};
-    for (int i = 0; i < 8; ++i)
-        if (!strcmp(t, names[i])) return i;
-    fail(p, "unknown texture target '%s'", t);
+    for (int i = 0; i < 8; ++i) {
+        if (strcmp(t, names[i])) continue;
+        /* Shadow targets need OPTION ARB_fragment_program_shadow; vertex
+           programs (NV_vertex_program3) have none. */
+        if (i >= TARGET_SHADOW1D && (p->vertex || !p->shadow_option)) break;
+        return i;
+    }
+    fail(p, "malformed source texture");
+    snprintf(p->error_hint, sizeof p->error_hint, "%s", t);
     return TARGET_2D;
 }
 
-static void texture_sample(struct parser *p, const char *op, const char *coord, int unit, int target, char *out, size_t size)
+/* TEX, TXP, TXB, TXL (level of detail coord.w) and TXD (derivatives ddx,
+   ddy). Vertex programs sample level 0 (NV_vertex_program3: TXB biases
+   it). One-dimensional textures are 2D textures one texel high. */
+static void texture_sample(struct parser *p, const char *op, const char *coord, const char *ddx, const char *ddy,
+                           int unit, int target, char *out, size_t size)
 {
     static const char *const sampler_types[] = {"sampler2D", "sampler2D", "sampler3D", "samplerCube", "sampler2D",
                                                 "sampler2DShadow", "sampler2DShadow", "sampler2DShadow"};
@@ -1007,91 +1071,134 @@ static void texture_sample(struct parser *p, const char *op, const char *coord, 
         p->sampler_declared[unit] |= 1u << target;
         emit(&p->declarations, "uniform %s %s;\n", sampler_types[target], sampler);
     }
-    bool project = !strcmp(op, "TXP"), bias = !strcmp(op, "TXB");
+    bool project = !strcmp(op, "TXP"), bias = !strcmp(op, "TXB"), lod = !strcmp(op, "TXL"), grad = !strcmp(op, "TXD");
+    if (p->vertex) {
+        lod |= bias;
+        bias = false;
+    }
+    /* Rectangle textures have one level, and their unnormalized samplers
+       take no level of detail. */
+    if (target == TARGET_RECT || target == TARGET_SHADOWRECT) bias = lod = grad = false;
     char c[300];
     /* Projection divides by q for every target but cube maps. */
     if (project && target != TARGET_CUBE) snprintf(c, sizeof c, "(%s / %s.w)", coord, coord);
     else snprintf(c, sizeof c, "%s", coord);
-    char bias_arg[160] = "";
-    if (bias) snprintf(bias_arg, sizeof bias_arg, ", %s.w", coord);
+    char where[400], gx[300] = "", gy[300] = "";
     switch (target) {
-    case TARGET_1D: snprintf(out, size, "texture(%s, vec2(%s.x, 0.5)%s)", sampler, c, bias_arg); break;
-    case TARGET_2D: snprintf(out, size, "texture(%s, %s.xy%s)", sampler, c, bias_arg); break;
-    case TARGET_3D: case TARGET_CUBE: snprintf(out, size, "texture(%s, %s.xyz%s)", sampler, c, bias_arg); break;
-    /* Rectangle samplers take texel coordinates (unnormalized samplers). */
-    case TARGET_RECT: snprintf(out, size, "texture(%s, %s.xy)", sampler, c); break;
+    case TARGET_1D:
+        snprintf(where, sizeof where, "vec2(%s.x, 0.5)", c);
+        snprintf(gx, sizeof gx, "vec2(%s.x, 0.0)", ddx);
+        snprintf(gy, sizeof gy, "vec2(%s.x, 0.0)", ddy);
+        break;
+    case TARGET_2D: case TARGET_RECT:
+        snprintf(where, sizeof where, "%s.xy", c);
+        snprintf(gx, sizeof gx, "%s.xy", ddx);
+        snprintf(gy, sizeof gy, "%s.xy", ddy);
+        break;
+    case TARGET_3D: case TARGET_CUBE:
+        snprintf(where, sizeof where, "%s.xyz", c);
+        snprintf(gx, sizeof gx, "%s.xyz", ddx);
+        snprintf(gy, sizeof gy, "%s.xyz", ddy);
+        break;
     case TARGET_SHADOW1D:
-        snprintf(out, size, "vec4(vec3(texture(%s, vec3(%s.x, 0.5, %s.z))), 1.0)", sampler, c, c); break;
-    case TARGET_SHADOW2D: snprintf(out, size, "vec4(vec3(texture(%s, %s.xyz)), 1.0)", sampler, c); break;
-    case TARGET_SHADOWRECT:
-        snprintf(out, size, "vec4(vec3(texture(%s, %s.xyz)), 1.0)", sampler, c);
+        snprintf(where, sizeof where, "vec3(%s.x, 0.5, %s.z)", c, c);
+        snprintf(gx, sizeof gx, "vec2(%s.x, 0.0)", ddx);
+        snprintf(gy, sizeof gy, "vec2(%s.x, 0.0)", ddy);
+        break;
+    default: /* SHADOW2D, SHADOWRECT */
+        snprintf(where, sizeof where, "%s.xyz", c);
+        snprintf(gx, sizeof gx, "%s.xy", ddx);
+        snprintf(gy, sizeof gy, "%s.xy", ddy);
         break;
     }
+    char call[1100];
+    if (grad) snprintf(call, sizeof call, "textureGrad(%s, %s, %s, %s)", sampler, where, gx, gy);
+    else if (lod) snprintf(call, sizeof call, "textureLod(%s, %s, %s.w)", sampler, where, coord);
+    else if (p->vertex && target != TARGET_RECT) snprintf(call, sizeof call, "textureLod(%s, %s, 0.0)", sampler, where);
+    else if (bias) snprintf(call, sizeof call, "texture(%s, %s, %s.w)", sampler, where, coord);
+    else snprintf(call, sizeof call, "texture(%s, %s)", sampler, where);
+    if (target >= TARGET_SHADOW1D) snprintf(out, size, "vec4(vec3(%s), 1.0)", call);
+    else snprintf(out, size, "%s", call);
 }
 
 /* ---- statements ---------------------------------------------------------- */
 
+/* vertex, fragment: the lowest option level (struct parser.nv) that has
+   the opcode in that stage; -1 if none does. */
 struct opcode {
     const char *name;
     int sources;
-    bool vertex, fragment;
+    signed char vertex, fragment;
 };
 
 static const struct opcode opcodes[] = {
-    {"ABS", 1, 1, 1}, {"ADD", 2, 1, 1}, {"ARL", 1, 1, 0}, {"CMP", 3, 0, 1}, {"COS", 1, 0, 1}, {"DP3", 2, 1, 1},
-    {"DP4", 2, 1, 1}, {"DPH", 2, 1, 1}, {"DST", 2, 1, 1}, {"EX2", 1, 1, 1}, {"EXP", 1, 1, 0}, {"FLR", 1, 1, 1},
-    {"FRC", 1, 1, 1}, {"KIL", 1, 0, 1}, {"LG2", 1, 1, 1}, {"LIT", 1, 1, 1}, {"LOG", 1, 1, 0}, {"LRP", 3, 0, 1},
-    {"MAD", 3, 1, 1}, {"MAX", 2, 1, 1}, {"MIN", 2, 1, 1}, {"MOV", 1, 1, 1}, {"MUL", 2, 1, 1}, {"POW", 2, 1, 1},
-    {"RCP", 1, 1, 1}, {"RSQ", 1, 1, 1}, {"SCS", 1, 0, 1}, {"SGE", 2, 1, 1}, {"SIN", 1, 0, 1}, {"SLT", 2, 1, 1},
-    {"SUB", 2, 1, 1}, {"SWZ", 1, 1, 1}, {"TEX", 1, 0, 1}, {"TXB", 1, 0, 1}, {"TXP", 1, 0, 1}, {"XPD", 2, 1, 1},
+    {"ABS", 1, 0, 0}, {"ADD", 2, 0, 0}, {"ARL", 1, 0, -1}, {"CMP", 3, -1, 0}, {"COS", 1, 2, 0}, {"DP3", 2, 0, 0},
+    {"DP4", 2, 0, 0}, {"DPH", 2, 0, 0}, {"DST", 2, 0, 0}, {"EX2", 1, 0, 0}, {"EXP", 1, 0, -1}, {"FLR", 1, 0, 0},
+    {"FRC", 1, 0, 0}, {"KIL", 1, -1, 0}, {"LG2", 1, 0, 0}, {"LIT", 1, 0, 0}, {"LOG", 1, 0, -1}, {"LRP", 3, -1, 0},
+    {"MAD", 3, 0, 0}, {"MAX", 2, 0, 0}, {"MIN", 2, 0, 0}, {"MOV", 1, 0, 0}, {"MUL", 2, 0, 0}, {"POW", 2, 0, 0},
+    {"RCP", 1, 0, 0}, {"RSQ", 1, 0, 0}, {"SCS", 1, -1, 0}, {"SGE", 2, 0, 0}, {"SIN", 1, 2, 0}, {"SLT", 2, 0, 0},
+    {"SUB", 2, 0, 0}, {"SWZ", 1, 0, 0}, {"TEX", 1, 3, 0}, {"TXB", 1, 3, 0}, {"TXP", 1, 3, 0}, {"XPD", 2, 0, 0},
+    /* NV_fragment_program_option, NV_fragment_program2,
+       NV_vertex_program2_option, NV_vertex_program3 */
+    {"SEQ", 2, 2, 1}, {"SNE", 2, 2, 1}, {"SGT", 2, 2, 1}, {"SLE", 2, 2, 1}, {"SFL", 2, 2, 1}, {"STR", 2, 2, 1},
+    {"DDX", 1, -1, 1}, {"DDY", 1, -1, 1}, {"RFL", 2, -1, 1}, {"X2D", 3, -1, 1}, {"TXD", 3, -1, 1},
+    {"PK2H", 1, -1, 1}, {"PK2US", 1, -1, 1}, {"PK4B", 1, -1, 1}, {"PK4UB", 1, -1, 1}, {"UP2H", 1, -1, 1},
+    {"UP2US", 1, -1, 1}, {"UP4B", 1, -1, 1}, {"UP4UB", 1, -1, 1}, {"DIV", 2, -1, 2}, {"NRM", 1, -1, 2},
+    {"DP2", 2, -1, 2}, {"DP2A", 3, -1, 2}, {"TXL", 1, 3, 2}, {"SSG", 1, 2, -1}, {"RCC", 1, 2, -1},
+    {"ARA", 1, 2, -1}, {"ARR", 1, 2, -1},
 };
 
-/* NV_fragment_program2 / NV_vertex_program3 additions. */
-static const struct opcode nv_opcodes[] = {
-    {"SEQ", 2, 1, 1}, {"SNE", 2, 1, 1}, {"SGT", 2, 1, 1}, {"SLE", 2, 1, 1}, {"SFL", 2, 1, 1}, {"STR", 2, 1, 1},
-    {"SSG", 1, 1, 1}, {"DIV", 2, 1, 1}, {"NRM", 1, 1, 1}, {"DDX", 1, 0, 1}, {"DDY", 1, 0, 1}, {"TXL", 1, 1, 1},
-    {"RFL", 2, 1, 1}, {"DP2", 2, 1, 1}, {"DP2A", 3, 1, 1},
-};
-
-static const struct opcode *lookup_opcode(const char *base, bool nv)
+static const struct opcode *lookup_opcode(const struct parser *p, const char *base)
 {
-    for (size_t i = 0; i < sizeof opcodes / sizeof *opcodes; ++i)
-        if (!strcmp(opcodes[i].name, base)) return &opcodes[i];
-    if (nv)
-        for (size_t i = 0; i < sizeof nv_opcodes / sizeof *nv_opcodes; ++i)
-            if (!strcmp(nv_opcodes[i].name, base)) return &nv_opcodes[i];
+    for (size_t i = 0; i < sizeof opcodes / sizeof *opcodes; ++i) {
+        if (strcmp(opcodes[i].name, base)) continue;
+        int level = p->vertex ? opcodes[i].vertex : opcodes[i].fragment;
+        return level >= 0 && p->nv >= level ? &opcodes[i] : NULL;
+    }
     return NULL;
 }
 
-/* saturate: 0 none, 1 [0, 1] (_SAT), 2 [-1, 1] (NV _SSAT). NV names are
-   OP[R|H|X][C][_SAT]: the precision is ignored, C updates the condition
-   code. */
-static const struct opcode *find_opcode(const char *word, bool nv, int *saturate, bool *update_cc)
+/* saturate: 0 none, 1 [0, 1] (_SAT), 2 [-1, 1] (_SSAT, NV_fragment_program2).
+   NV names are OP[R|H|X][C][_SAT]: the precision (fragment programs) is
+   ignored; C updates the condition code, C0 or C1 (NV_vertex_program3)
+   picks the register. */
+static const struct opcode *find_opcode(const struct parser *p, const char *word, int *saturate, bool *update_cc,
+                                        int *cc_reg)
 {
     char base[16];
     snprintf(base, sizeof base, "%s", word);
     *saturate = 0;
     *update_cc = false;
+    *cc_reg = 0;
     size_t n = strlen(base);
     if (n > 4 && !strcmp(base + n - 4, "_SAT")) {
         base[n -= 4] = 0;
         *saturate = 1;
-    } else if (nv && n > 5 && !strcmp(base + n - 5, "_SSAT")) {
+    } else if (n > 5 && !strcmp(base + n - 5, "_SSAT")) {
         base[n -= 5] = 0;
         *saturate = 2;
     }
-    const struct opcode *op = lookup_opcode(base, nv);
-    if (op || !nv) return op;
-    if (n > 3 && base[n - 1] == 'C') {
-        base[--n] = 0;
-        *update_cc = true;
-        if ((op = lookup_opcode(base, nv))) return op;
+    const struct opcode *op = lookup_opcode(p, base);
+    if (!op && p->nv) {
+        if (p->vertex && p->nv >= 3 && n > 4 && base[n - 2] == 'C' && (base[n - 1] == '0' || base[n - 1] == '1')) {
+            *cc_reg = base[n - 1] - '0';
+            base[n -= 2] = 0;
+            *update_cc = true;
+        } else if (n > 3 && base[n - 1] == 'C') {
+            base[--n] = 0;
+            *update_cc = true;
+        }
+        if (*update_cc) op = lookup_opcode(p, base);
+        if (!op && !p->vertex && n > 3 && strchr("RHX", base[n - 1])) {
+            base[--n] = 0;
+            op = lookup_opcode(p, base);
+        }
     }
-    if (n > 3 && (base[n - 1] == 'R' || base[n - 1] == 'H' || base[n - 1] == 'X')) {
-        base[--n] = 0;
-        if ((op = lookup_opcode(base, nv))) return op;
-    }
-    return NULL;
+    /* Vertex programs saturate from NV_vertex_program3 on, and never
+       signed. */
+    if (op && *saturate == 2 && (p->vertex || p->nv < 2)) op = NULL;
+    if (op && *saturate == 1 && p->vertex && p->nv < 3) op = NULL;
+    return op;
 }
 
 /* SWZ's extended swizzle: four of 0, 1, x, y, z, w (or r g b a), each
@@ -1117,16 +1224,62 @@ static void extended_swizzle(struct parser *p, const char *source, char *out, si
     snprintf(out, size, "vec4(%s, %s, %s, %s)", comps[0], comps[1], comps[2], comps[3]);
 }
 
-static void instruction(struct parser *p, const struct opcode *op, int saturate, bool update_cc)
+/* An address register operand (ARA, PUSHA): the register, no swizzle. */
+static const char *address_operand(struct parser *p)
+{
+    char ident[64];
+    expect_ident(p, ident, sizeof ident);
+    if (p->failed) return "";
+    struct name *a = find_name(p, ident);
+    if (!a || a->kind != NAME_ADDRESS) {
+        fail(p, "invalid address register");
+        undefined_hint(p, ident);
+        return "";
+    }
+    return a->glsl;
+}
+
+/* Writes the instruction result glm_<prefix><id> (vec4, or ivec4 for
+   address registers) to `variable` under the write mask and the condition
+   test, and copies the written components to condition code register
+   cc_reg when the opcode has the C suffix. */
+static void store(struct parser *p, const char *variable, const char *mask, const char *prefix, int id,
+                  const char *test, bool update_cc, int cc_reg)
+{
+    static const char *const vectors[] = {"", "float", "vec2", "vec3", "vec4"};
+    if (update_cc) p->cc_used |= (uint8_t)(1u << cc_reg);
+    bool integer = prefix[4] == 'a';
+    if (test[0]) {
+        emit(&p->body, "  bvec4 glm_w%d = %s;\n", id, test);
+        for (const char *c = mask; *c; ++c) {
+            emit(&p->body, "  if (glm_w%d.%c) %s.%c = %s%d.%c;\n", id, *c, variable, *c, prefix, id, *c);
+            if (update_cc)
+                emit(&p->body, "  if (glm_w%d.%c) glm_cc%d.%c = float(%s%d.%c);\n", id, *c, cc_reg, *c, prefix, id, *c);
+        }
+        return;
+    }
+    if (!strcmp(mask, "xyzw")) emit(&p->body, "  %s = %s%d;\n", variable, prefix, id);
+    else emit(&p->body, "  %s.%s = %s%d.%s;\n", variable, mask, prefix, id, mask);
+    if (update_cc)
+        emit(&p->body, "  glm_cc%d.%s = %s(%s%d.%s);\n", cc_reg, mask, integer ? vectors[strlen(mask)] : "", prefix, id,
+             mask);
+}
+
+static bool is_texture_op(const char *n)
+{
+    return !strcmp(n, "TEX") || !strcmp(n, "TXP") || !strcmp(n, "TXB") || !strcmp(n, "TXL") || !strcmp(n, "TXD");
+}
+
+static void instruction(struct parser *p, const struct opcode *op, int saturate, bool update_cc, int cc_reg)
 {
     char variable[64], mask[8];
     int slot;
-    char s[3][400];
+    char s[3][400] = {"", "", ""};
+    const char *n = op->name;
     ++p->instructions;
-    if (!strcmp(op->name, "TEX") || !strcmp(op->name, "TXP") || !strcmp(op->name, "TXB") || !strcmp(op->name, "TXL"))
-        ++p->tex_instructions;
+    if (is_texture_op(n)) ++p->tex_instructions;
     else ++p->alu_instructions;
-    if (!strcmp(op->name, "KIL")) {
+    if (!strcmp(n, "KIL")) {
         char test[160];
         if (p->nv && condition_test(p, test, sizeof test)) {
             emit(&p->body, "  if (any(%s)) discard;\n", test);
@@ -1137,33 +1290,48 @@ static void instruction(struct parser *p, const struct opcode *op, int saturate,
         return;
     }
     destination(p, variable, sizeof variable, mask, &slot);
+    bool address = !strcmp(n, "ARL") || !strcmp(n, "ARR") || !strcmp(n, "ARA");
+    if (!p->failed && address != p->dest_address) {
+        fail(p, "invalid address register");
+        return;
+    }
     /* NV conditional write: "dst (GT.x), ..." writes components passing. */
     char write_test[160] = "";
-    if (p->nv && accept(p, "(")) {
-        if (!condition_test(p, write_test, sizeof write_test)) fail(p, "expected a condition");
-        expect(p, ")");
-    }
-    for (int i = 0; i < op->sources; ++i) {
+    if (p->nv) condition_mask(p, write_test, sizeof write_test);
+    if (!strcmp(n, "ARA")) {
         expect(p, ",");
-        source_operand(p, s[i], sizeof s[i]);
+        snprintf(s[0], sizeof s[0], "%s", address_operand(p));
+    } else {
+        for (int i = 0; i < op->sources; ++i) {
+            expect(p, ",");
+            source_operand(p, s[i], sizeof s[i]);
+        }
     }
     if (p->failed) return;
     char value[1400];
-    const char *n = op->name;
-    if (!strcmp(n, "ARL")) {
-        emit(&p->body, "  %s.x = int(floor(%s.x));\n", variable, s[0]);
+    if (address) {
+        /* ARL floors, ARR rounds to even, ARA adds the halves of a
+           register. ARB_vertex_program's ARL loads A0.x only. */
+        if (!strcmp(n, "ARL")) snprintf(value, sizeof value, "ivec4(floor(%s))", s[0]);
+        else if (!strcmp(n, "ARR")) snprintf(value, sizeof value, "ivec4(roundEven(%s))", s[0]);
+        else snprintf(value, sizeof value, "(%s.xyxy + %s.zwzw)", s[0], s[0]);
+        if (!p->nv) strcpy(mask, "x");
+        int id = p->temp_counter++;
+        emit(&p->body, "  ivec4 glm_a%d = %s;\n", id, value);
+        store(p, variable, mask, "glm_a", id, write_test, update_cc, cc_reg);
         return;
     }
     if (!strcmp(n, "SWZ")) {
         /* The source was parsed without a swizzle; the rest is the mask. */
         expect(p, ",");
         extended_swizzle(p, s[0], value, sizeof value);
-    } else if (!strcmp(n, "TEX") || !strcmp(n, "TXP") || !strcmp(n, "TXB") || !strcmp(n, "TXL")) {
+    } else if (is_texture_op(n)) {
         int unit;
         char target[16];
         expect(p, ",");
         texture_operand(p, &unit, target, sizeof target);
-        texture_sample(p, n, s[0], unit, target_code(p, target), value, sizeof value);
+        if (p->failed) return;
+        texture_sample(p, n, s[0], s[1], s[2], unit, target_code(p, target), value, sizeof value);
     } else if (!strcmp(n, "ABS")) snprintf(value, sizeof value, "abs(%s)", s[0]);
     else if (!strcmp(n, "SEQ")) snprintf(value, sizeof value, "vec4(equal(%s, %s))", s[0], s[1]);
     else if (!strcmp(n, "SNE")) snprintf(value, sizeof value, "vec4(notEqual(%s, %s))", s[0], s[1]);
@@ -1180,7 +1348,20 @@ static void instruction(struct parser *p, const struct opcode *op, int saturate,
         snprintf(value, sizeof value, "vec4(2.0 * dot(%s.xyz, %s.xyz) / dot(%s.xyz, %s.xyz) * %s.xyz - %s.xyz, 0.0)",
                  s[0], s[1], s[0], s[0], s[0], s[1]);
     else if (!strcmp(n, "DP2")) snprintf(value, sizeof value, "vec4(dot(%s.xy, %s.xy))", s[0], s[1]);
-    else if (!strcmp(n, "DP2A")) snprintf(value, sizeof value, "vec4(dot(%s.xy, %s.xy) + %s.z)", s[0], s[1], s[2]);
+    else if (!strcmp(n, "DP2A")) snprintf(value, sizeof value, "vec4(dot(%s.xy, %s.xy) + %s.x)", s[0], s[1], s[2]);
+    else if (!strcmp(n, "X2D"))
+        snprintf(value, sizeof value, "(%s.xy + %s.x * %s.xz + %s.y * %s.yw).xyxy", s[0], s[1], s[2], s[1], s[2]);
+    else if (!strncmp(n, "PK", 2) || !strncmp(n, "UP", 2)) {
+        /* Packed values are float bit patterns; unpacking reads one
+           component. */
+        p->nv_helpers |= HELPER_PACK;
+        char lower[8];
+        for (int i = 0; i < 6; ++i) lower[i] = (char)tolower((unsigned char)n[i]);
+        snprintf(value, sizeof value, "glm_%s(%s%s)", lower, s[0], n[0] == 'U' ? ".x" : "");
+    } else if (!strcmp(n, "RCC")) {
+        p->nv_helpers |= HELPER_RCC;
+        snprintf(value, sizeof value, "vec4(glm_rcc(%s.x))", s[0]);
+    }
     else if (!strcmp(n, "ADD")) snprintf(value, sizeof value, "(%s + %s)", s[0], s[1]);
     else if (!strcmp(n, "SUB")) snprintf(value, sizeof value, "(%s - %s)", s[0], s[1]);
     else if (!strcmp(n, "MUL")) snprintf(value, sizeof value, "(%s * %s)", s[0], s[1]);
@@ -1209,7 +1390,8 @@ static void instruction(struct parser *p, const struct opcode *op, int saturate,
     else if (!strcmp(n, "LRP")) snprintf(value, sizeof value, "mix(%s, %s, %s)", s[2], s[1], s[0]);
     else if (!strcmp(n, "COS")) snprintf(value, sizeof value, "vec4(cos(%s.x))", s[0]);
     else if (!strcmp(n, "SIN")) snprintf(value, sizeof value, "vec4(sin(%s.x))", s[0]);
-    else if (!strcmp(n, "SCS")) snprintf(value, sizeof value, "vec4(cos(%s.x), sin(%s.x), 0.0, 1.0)", s[0], s[0]);
+    /* z and w are undefined; Apple's are 0. */
+    else if (!strcmp(n, "SCS")) snprintf(value, sizeof value, "vec4(cos(%s.x), sin(%s.x), 0.0, 0.0)", s[0], s[0]);
     else {
         fail(p, "unsupported instruction %s", n);
         return;
@@ -1219,19 +1401,7 @@ static void instruction(struct parser *p, const struct opcode *op, int saturate,
     int id = p->temp_counter++;
     emit(&p->body, "  vec4 glm_v%d = %s%s%s;\n", id, saturate ? "clamp(" : "", value,
          saturate == 2 ? ", -1.0, 1.0)" : saturate ? ", 0.0, 1.0)" : "");
-    if (!strcmp(n, "ARL")) return;
-    if (write_test[0]) {
-        emit(&p->body, "  bvec4 glm_w%d = %s;\n", id, write_test);
-        for (const char *c = mask; *c; ++c) {
-            emit(&p->body, "  if (glm_w%d.%c) %s.%c = glm_v%d.%c;\n", id, *c, variable, *c, id, *c);
-            if (update_cc) emit(&p->body, "  if (glm_w%d.%c) glm_cc0.%c = glm_v%d.%c;\n", id, *c, *c, id, *c);
-        }
-    } else {
-        if (!strcmp(mask, "xyzw")) emit(&p->body, "  %s = glm_v%d;\n", variable, id);
-        else emit(&p->body, "  %s.%s = glm_v%d.%s;\n", variable, mask, id, mask);
-        if (update_cc) emit(&p->body, "  glm_cc0.%s = glm_v%d.%s;\n", mask, id, mask);
-    }
-    if (update_cc) p->cc_used = true;
+    store(p, variable, mask, "glm_v", id, write_test, update_cc, cc_reg);
     /* DP4 result.clip[n].x, V, state.clip[n].plane: clip against the
        enabled user planes with gl_ClipVertex = V, as fixed function does. */
     if (slot >= RESULT_CLIP0 && slot < RESULT_CLIP0 + 8) {
@@ -1245,37 +1415,193 @@ static void instruction(struct parser *p, const struct opcode *op, int saturate,
     }
 }
 
-/* NV control flow: IF/ELSE/ENDIF on a condition code test, REP n/ENDREP
-   and BRK [test]. Returns false for other statements. */
+/* ---- blocks and branches ------------------------------------------------- */
+
+enum { BLOCK_IF, BLOCK_REP, BLOCK_LOOP };
+
+/* A new state machine segment id (0 is the program's first segment). */
+static int new_segment(struct parser *p) { return ++p->segments; }
+
+/* Ends the current segment, continuing at `pc` (a GLSL int expression;
+   -1 ends the program), and opens segment `open`. */
+static void next_segment(struct parser *p, const char *pc, int open)
+{
+    emit(&p->body, "  glm_pc = %s;\n  }\n  if (glm_pc == %d) {\n", pc, open);
+}
+
+static struct label *find_label(struct parser *p, const char *name)
+{
+    for (int i = 0; i < p->label_count; ++i)
+        if (!strcmp(p->labels[i].name, name)) return &p->labels[i];
+    if (p->label_count % 16 == 0) p->labels = realloc(p->labels, (size_t)(p->label_count + 16) * sizeof *p->labels);
+    struct label *l = &p->labels[p->label_count++];
+    snprintf(l->name, sizeof l->name, "%s", name);
+    l->id = new_segment(p);
+    l->defined = false;
+    return l;
+}
+
+/* NV flow control. Fragment programs (NV_fragment_program2): IF/ELSE/ENDIF
+   on a condition code test, REP n/ENDREP, LOOP {n, start, step}/ENDLOOP
+   (the loop index A0.x is not readable), BRK [(test)], CAL label [(test)]
+   and RET [(test)]. Vertex programs (NV_vertex_program2): BRA label
+   [(test)], CAL, RET, and PUSHA/POPA (NV_vertex_program3). Returns false
+   for other statements. */
 static bool control_statement(struct parser *p, const char *word)
 {
-    char test[160];
-    if (!strcmp(word, "IF")) {
-        if (!condition_test(p, test, sizeof test)) { fail(p, "expected a condition"); return true; }
-        emit(&p->body, "  if (any(%s)) {\n", test);
-    } else if (!strcmp(word, "ELSE")) {
-        emit(&p->body, "  } else {\n");
-    } else if (!strcmp(word, "ENDIF") || !strcmp(word, "ENDREP") || !strcmp(word, "ENDLOOP")) {
-        if (strcmp(word, "ENDIF")) --p->loop_depth;
-        emit(&p->body, "  }\n");
-    } else if (!strcmp(word, "REP") || !strcmp(word, "LOOP")) {
-        int id = p->temp_counter++;
-        if (is(p, ";")) {
-            emit(&p->body, "  for (int glm_rep%d = 0; glm_rep%d < 4096; ++glm_rep%d) {\n", id, id, id);
+    bool blocks = !p->vertex && p->nv >= 2, calls = p->nv >= 2, branches = p->vertex && p->nv >= 2;
+    bool stack = p->vertex && p->nv >= 3;
+    struct block *top = p->block_depth ? &p->blocks[p->block_depth - 1] : NULL;
+    char test[160], pc[240];
+    if (blocks && !strcmp(word, "IF")) {
+        if (!condition_test(p, test, sizeof test)) {
+            fail(p, "invalid condition mask");
+            return true;
+        }
+        if (p->block_depth == (int)(sizeof p->blocks / sizeof *p->blocks)) {
+            fail(p, "blocks nested too deeply");
+            return true;
+        }
+        struct block *b = &p->blocks[p->block_depth++];
+        *b = (struct block){.kind = BLOCK_IF};
+        if (p->flow) {
+            int then = new_segment(p);
+            b->open = new_segment(p); /* the ELSE part, or after ENDIF */
+            snprintf(pc, sizeof pc, "any(%s) ? %d : %d", test, then, b->open);
+            next_segment(p, pc, then);
         } else {
-            char count[400];
-            source_operand(p, count, sizeof count);
+            emit(&p->body, "  if (any(%s)) {\n", test);
+        }
+    } else if (blocks && !strcmp(word, "ELSE")) {
+        if (!top || top->kind != BLOCK_IF || top->has_else) {
+            fail(p, "ELSE outside an IF block");
+            return true;
+        }
+        top->has_else = true;
+        if (p->flow) {
+            top->close = new_segment(p);
+            snprintf(pc, sizeof pc, "%d", top->close);
+            next_segment(p, pc, top->open);
+        } else {
+            emit(&p->body, "  } else {\n");
+        }
+    } else if (blocks && (!strcmp(word, "ENDIF") || !strcmp(word, "ENDREP") || !strcmp(word, "ENDLOOP"))) {
+        int kind = word[3] == 'I' ? BLOCK_IF : word[3] == 'R' ? BLOCK_REP : BLOCK_LOOP;
+        if (!top || top->kind != kind) {
+            fail(p, "%s outside its block", word);
+            return true;
+        }
+        if (p->flow && kind == BLOCK_IF) {
+            int after = top->has_else ? top->close : top->open;
+            snprintf(pc, sizeof pc, "%d", after);
+            next_segment(p, pc, after);
+        } else if (p->flow) {
+            emit(&p->body, "  glm_lc%d -= 1;\n", top->counter);
+            snprintf(pc, sizeof pc, "glm_lc%d > 0 ? %d : %d", top->counter, top->open, top->close);
+            next_segment(p, pc, top->close);
+        } else {
+            emit(&p->body, "  }\n");
+        }
+        --p->block_depth;
+    } else if (blocks && (!strcmp(word, "REP") || !strcmp(word, "LOOP"))) {
+        /* The count is x ({count, start, step} for LOOP), floored; blocks
+           with no positive count are skipped. */
+        if (is(p, ";")) {
+            fail(p, "undefined source identifier");
+            return true;
+        }
+        char count[400];
+        source_operand(p, count, sizeof count);
+        if (p->failed) return true;
+        if (p->block_depth == (int)(sizeof p->blocks / sizeof *p->blocks)) {
+            fail(p, "blocks nested too deeply");
+            return true;
+        }
+        struct block *b = &p->blocks[p->block_depth++];
+        *b = (struct block){.kind = word[0] == 'R' ? BLOCK_REP : BLOCK_LOOP};
+        if (p->flow) {
+            b->counter = p->loop_counters++;
+            b->open = new_segment(p);
+            b->close = new_segment(p);
+            emit(&p->body, "  glm_lc%d = int(clamp(floor(%s.x), 0.0, 65536.0));\n", b->counter, count);
+            snprintf(pc, sizeof pc, "glm_lc%d > 0 ? %d : %d", b->counter, b->open, b->close);
+            next_segment(p, pc, b->open);
+        } else {
+            int id = p->temp_counter++;
             emit(&p->body, "  for (int glm_rep%d = 0; glm_rep%d < int(%s.x); ++glm_rep%d) {\n", id, id, count, id);
         }
-        ++p->loop_depth;
-    } else if (!strcmp(word, "BRK")) {
-        if (is(p, ";")) emit(&p->body, "  break;\n");
-        else if (condition_test(p, test, sizeof test)) emit(&p->body, "  if (any(%s)) break;\n", test);
-        else fail(p, "expected a condition");
+    } else if (blocks && !strcmp(word, "BRK")) {
+        condition_mask(p, test, sizeof test);
+        if (p->failed) return true;
+        struct block *loop = NULL;
+        for (int i = p->block_depth - 1; i >= 0 && !loop; --i)
+            if (p->blocks[i].kind != BLOCK_IF) loop = &p->blocks[i];
+        if (!loop) {
+            fail(p, "BRK outside a loop");
+            return true;
+        }
+        if (p->flow) {
+            int next = new_segment(p);
+            if (test[0]) snprintf(pc, sizeof pc, "any(%s) ? %d : %d", test, loop->close, next);
+            else snprintf(pc, sizeof pc, "%d", loop->close);
+            next_segment(p, pc, next);
+        } else if (test[0]) {
+            emit(&p->body, "  if (any(%s)) break;\n", test);
+        } else {
+            emit(&p->body, "  break;\n");
+        }
+    } else if ((calls && !strcmp(word, "CAL")) || (branches && !strcmp(word, "BRA"))) {
+        char name[64];
+        expect_ident(p, name, sizeof name);
+        if (p->failed) return true;
+        int target = find_label(p, name)->id;
+        condition_mask(p, test, sizeof test);
+        if (p->failed) return true;
+        int next = new_segment(p);
+        const char *taken = test[0] ? test : "bvec4(true)";
+        if (word[0] == 'B') {
+            snprintf(pc, sizeof pc, "any(%s) ? %d : %d", taken, target, next);
+            next_segment(p, pc, next);
+        } else {
+            /* Calling with a full stack ends the program. */
+            emit(&p->body,
+                 "  if (any(%s)) {\n  if (glm_sp < 4) { glm_ret[glm_sp] = %d; glm_sp += 1; glm_pc = %d; } else glm_pc = -1;\n"
+                 "  } else glm_pc = %d;\n  }\n  if (glm_pc == %d) {\n",
+                 taken, next, target, next, next);
+        }
+    } else if (calls && !strcmp(word, "RET")) {
+        condition_mask(p, test, sizeof test);
+        if (p->failed) return true;
+        int next = new_segment(p);
+        /* RET with an empty stack ends the program, as does one popping a
+           PUSHA entry (glm_ret -1). */
+        emit(&p->body,
+             "  if (any(%s)) {\n  if (glm_sp > 0) { glm_sp -= 1; glm_pc = glm_ret[glm_sp]; } else glm_pc = -1;\n"
+             "  } else glm_pc = %d;\n  }\n  if (glm_pc == %d) {\n",
+             test[0] ? test : "bvec4(true)", next, next);
+    } else if (stack && !strcmp(word, "PUSHA")) {
+        const char *a = address_operand(p);
+        if (p->failed) return true;
+        int next = new_segment(p);
+        emit(&p->body,
+             "  if (glm_sp < 4) { glm_ret[glm_sp] = -1; glm_astack[glm_sp] = %s; glm_sp += 1; glm_pc = %d; } else glm_pc = -1;\n"
+             "  }\n  if (glm_pc == %d) {\n",
+             a, next, next);
+    } else if (stack && !strcmp(word, "POPA")) {
+        /* The whole register: no write mask or condition. */
+        const char *variable = address_operand(p);
+        if (p->failed) return true;
+        int next = new_segment(p);
+        emit(&p->body,
+             "  if (glm_sp > 0 && glm_ret[glm_sp - 1] == -1) { glm_sp -= 1; %s = glm_astack[glm_sp]; glm_pc = %d; }"
+             " else glm_pc = -1;\n  }\n  if (glm_pc == %d) {\n",
+             variable, next, next);
     } else {
         return false;
     }
+    /* Apple counts flow control as ALU instructions. */
     ++p->instructions;
+    ++p->alu_instructions;
     return true;
 }
 
@@ -1368,17 +1694,51 @@ static void statement(struct parser *p)
     }
     expect_ident(p, word, sizeof word);
     if (p->failed) return;
+    int saturate, cc_reg;
+    bool update_cc;
+    /* Options come first; branching needs NV_fragment_program2 or
+       NV_vertex_program2. */
+    if (strcmp(word, "OPTION") && !p->flow_decided) {
+        p->flow_decided = true;
+        p->flow = p->flow_candidate && p->nv >= 2;
+    }
+    if (p->flow && is(p, ":") && !find_opcode(p, word, &saturate, &update_cc, &cc_reg)) {
+        /* A label (its own namespace; labels inside blocks work too). */
+        struct label *l = find_label(p, word);
+        if (l->defined) {
+            fail(p, "duplicate branch label");
+            return;
+        }
+        l->defined = true;
+        next(p);
+        char pc[16];
+        snprintf(pc, sizeof pc, "%d", l->id);
+        next_segment(p, pc, l->id);
+        return;
+    }
+    /* NV_fragment_program_option storage precision (ignored). */
+    if (!p->vertex && p->nv && (!strcmp(word, "SHORT") || !strcmp(word, "LONG")) && (is(p, "TEMP") || is(p, "OUTPUT")))
+        expect_ident(p, word, sizeof word);
     if (!strcmp(word, "OPTION")) {
         char option[64];
         expect_ident(p, option, sizeof option);
-        if (!strncmp(option, "NV_fragment_program", 19) || !strncmp(option, "NV_vertex_program", 17)) p->nv = true;
-        if (!strcmp(option, "ARB_position_invariant") && p->vertex) p->position_invariant = true;
+        int level = 0;
+        if (!p->vertex && (!strcmp(option, "NV_fragment_program") || !strcmp(option, "NV_fragment_program2")))
+            level = option[19] ? 2 : 1;
+        else if (p->vertex && (!strcmp(option, "NV_vertex_program2") || !strcmp(option, "NV_vertex_program3")))
+            level = option[17] - '0';
+        if (level) {
+            if (level > p->nv) p->nv = level;
+        } else if (!strcmp(option, "ARB_position_invariant") && p->vertex) p->position_invariant = true;
         else if (!strcmp(option, "ARB_fog_linear") && !p->vertex) p->fog_option = 1;
         else if (!strcmp(option, "ARB_fog_exp") && !p->vertex) p->fog_option = 2;
         else if (!strcmp(option, "ARB_fog_exp2") && !p->vertex) p->fog_option = 3;
-        else if (strncmp(option, "ARB_precision_hint_", 19) && strcmp(option, "ARB_draw_buffers") &&
-                 strncmp(option, "NV_", 3) && strcmp(option, "ATI_draw_buffers") && strcmp(option, "ARB_fragment_program_shadow"))
-            fail(p, "unsupported option %s", option);
+        else if (!strcmp(option, "ARB_fragment_program_shadow") && !p->vertex) p->shadow_option = true;
+        else if (p->vertex || (strncmp(option, "ARB_precision_hint_", 19) && strcmp(option, "ARB_draw_buffers") &&
+                               strcmp(option, "ATI_draw_buffers"))) {
+            fail(p, "unrecognised option");
+            snprintf(p->error_hint, sizeof p->error_hint, "%s", option);
+        }
     } else if (!strcmp(word, "TEMP")) {
         declaration_list(p, NAME_TEMP);
     } else if (!strcmp(word, "ADDRESS")) {
@@ -1422,20 +1782,13 @@ static void statement(struct parser *p)
         n->alias = true;
     } else if (p->nv && control_statement(p, word)) {
     } else {
-        int saturate;
-        bool update_cc;
-        const struct opcode *op = find_opcode(word, p->nv, &saturate, &update_cc);
-        /* NV_vertex_program3 adds saturation, texture fetches and the
-           fragment arithmetic ops to vertex programs. */
-        bool allowed = op && (p->vertex ? op->vertex || (p->nv && strcmp(op->name, "KIL") && strcmp(op->name, "DDX") &&
-                                                         strcmp(op->name, "DDY"))
-                                        : op->fragment);
-        if (!allowed || (saturate && p->vertex && !p->nv)) {
+        const struct opcode *op = find_opcode(p, word, &saturate, &update_cc, &cc_reg);
+        if (!op) {
             fail(p, "unrecognised statement");
             snprintf(p->error_hint, sizeof p->error_hint, "%s", word);
             return;
         }
-        instruction(p, op, saturate, update_cc);
+        instruction(p, op, saturate, update_cc, cc_reg);
     }
     if (!p->failed) expect(p, ";");
 }
@@ -1450,6 +1803,75 @@ static const char helpers[] =
     "vec4 glm_arb_log(float a) {\n"
     "  float v = abs(a), e = floor(log2(v));\n"
     "  return vec4(e, v / exp2(e), log2(v), 1.0);\n}\n";
+
+/* NV pack/unpack: half conversions round to nearest even and keep
+   infinities, NaNs and denormals; the 8- and 16-bit forms round half up. */
+static const char pack_helpers[] =
+    "uint glm_f2h(float f) {\n"
+    "  uint x = floatBitsToUint(f), sign = (x >> 16) & 0x8000u, m = x & 0x7fffffu;\n"
+    "  int e = int((x >> 23) & 0xffu) - 112;\n"
+    "  if (e == 143) return sign | 0x7c00u | (m != 0u ? 0x200u | (m >> 13) : 0u);\n"
+    "  if (e >= 31) return sign | 0x7c00u;\n"
+    "  if (e <= 0) {\n"
+    "    if (e < -10) return sign;\n"
+    "    m |= 0x800000u;\n"
+    "    uint shift = uint(14 - e), h = m >> shift, rest = m & ((1u << shift) - 1u), mid = 1u << (shift - 1u);\n"
+    "    return sign | (h + uint(rest > mid || (rest == mid && (h & 1u) != 0u)));\n"
+    "  }\n"
+    "  uint h = (uint(e) << 10) | (m >> 13), rest = m & 0x1fffu;\n"
+    "  return sign | (h + uint(rest > 0x1000u || (rest == 0x1000u && (h & 1u) != 0u)));\n}\n"
+    "float glm_h2f(uint h) {\n"
+    "  uint sign = (h & 0x8000u) << 16, e = (h >> 10) & 0x1fu, m = h & 0x3ffu;\n"
+    "  if (e == 0u) return (sign != 0u ? -1.0 : 1.0) * float(m) * 5.9604645e-8;\n"
+    "  if (e == 31u) return uintBitsToFloat(sign | 0x7f800000u | (m << 13));\n"
+    "  return uintBitsToFloat(sign | ((e + 112u) << 23) | (m << 13));\n}\n"
+    "vec4 glm_pk2h(vec4 a) { return vec4(uintBitsToFloat(glm_f2h(a.x) | (glm_f2h(a.y) << 16))); }\n"
+    "vec4 glm_pk2us(vec4 a) {\n"
+    "  uvec2 u = uvec2(floor(clamp(a.xy, 0.0, 1.0) * 65535.0 + 0.5));\n"
+    "  return vec4(uintBitsToFloat(u.x | (u.y << 16)));\n}\n"
+    "vec4 glm_pk4b(vec4 a) {\n"
+    "  uvec4 u = uvec4(floor(clamp(a, -128.0 / 127.0, 1.0) * 127.0 + 128.5));\n"
+    "  return vec4(uintBitsToFloat(u.x | (u.y << 8) | (u.z << 16) | (u.w << 24)));\n}\n"
+    "vec4 glm_pk4ub(vec4 a) {\n"
+    "  uvec4 u = uvec4(floor(clamp(a, 0.0, 1.0) * 255.0 + 0.5));\n"
+    "  return vec4(uintBitsToFloat(u.x | (u.y << 8) | (u.z << 16) | (u.w << 24)));\n}\n"
+    "vec4 glm_up2h(float a) { uint u = floatBitsToUint(a); return vec2(glm_h2f(u & 0xffffu), glm_h2f(u >> 16)).xyxy; }\n"
+    "vec4 glm_up2us(float a) { uint u = floatBitsToUint(a); return (vec2(uvec2(u & 0xffffu, u >> 16)) / 65535.0).xyxy; }\n"
+    "vec4 glm_up4b(float a) {\n"
+    "  uvec4 u = (uvec4(floatBitsToUint(a)) >> uvec4(0u, 8u, 16u, 24u)) & 0xffu;\n"
+    "  return (vec4(u) - 128.0) / 127.0;\n}\n"
+    "vec4 glm_up4ub(float a) {\n"
+    "  uvec4 u = (uvec4(floatBitsToUint(a)) >> uvec4(0u, 8u, 16u, 24u)) & 0xffu;\n"
+    "  return vec4(u) / 255.0;\n}\n";
+
+/* NV_vertex_program2_option RCC: the reciprocal clamped to
+   +-[2^-64, 2^64]. */
+static const char rcc_helper[] =
+    "float glm_rcc(float a) {\n  float r = 1.0 / a;\n"
+    "  return r > 0.0 ? clamp(r, 5.42101086e-20, 1.84467441e19) : clamp(r, -1.84467441e19, -5.42101086e-20);\n}\n";
+
+/* Whether the program has labels or CAL, RET, BRA, PUSHA or POPA
+   statements (scanned before parsing: they make the body a state
+   machine). */
+static bool scan_flow(const char *source, size_t length, size_t start)
+{
+    static const char *const words[] = {"CAL", "RET", "BRA", "PUSHA", "POPA"};
+    struct parser *q = calloc(1, sizeof *q);
+    q->source = source;
+    q->length = length;
+    q->at = start;
+    next(q);
+    bool found = false, statement_start = true;
+    while (q->token.kind != TOK_END && !found) {
+        bool word = q->token.kind == TOK_IDENT && statement_start;
+        for (size_t i = 0; word && i < sizeof words / sizeof *words; ++i) found |= !strcmp(q->token.text, words[i]);
+        statement_start = is(q, ";");
+        next(q);
+        found |= word && is(q, ":");
+    }
+    free(q);
+    return found;
+}
 
 /* The GLSL expression parameter_binding gives `text` (state.* or program.*). */
 static void binding_key(bool vertex, const char *text, char *out)
@@ -1548,6 +1970,7 @@ bool glm_arb_translate(const char *source, size_t length, bool vertex, struct gl
         while (n < length && n < sizeof p->error_hint - 1 && !isspace((unsigned char)source[n])) ++n;
         snprintf(p->error_hint, sizeof p->error_hint, "%.*s", (int)n, source);
     } else {
+        p->flow_candidate = scan_flow(source, length, header_length);
         p->at = header_length;
         next(p);
         while (!p->failed && !is(p, "END")) {
@@ -1560,6 +1983,11 @@ bool glm_arb_translate(const char *source, size_t length, bool vertex, struct gl
             }
             statement(p);
         }
+        /* Blocks must be closed and branch labels defined (quoted at END,
+           as Apple's message is). */
+        for (int i = 0; !p->failed && i < p->label_count; ++i)
+            if (!p->labels[i].defined) fail(p, "undefined branch label");
+        if (!p->failed && p->block_depth) fail(p, "unterminated block");
         /* Only whitespace and comments may follow END, as Apple's parser
            requires. */
         if (!p->failed) {
@@ -1577,6 +2005,7 @@ bool glm_arb_translate(const char *source, size_t length, bool vertex, struct gl
         for (size_t i = 0; i < p->error_position && i < length; ++i) line += source[i] == '\n';
         snprintf(out->error, sizeof out->error, "Error on line %d: %s (hint: '%s')", line, p->error, p->error_hint);
         out->error_position = (int)p->error_position;
+        free(p->labels);
         free(p->declarations.data);
         free(p->body.data);
         free(p->prologue.data);
@@ -1599,16 +2028,37 @@ bool glm_arb_translate(const char *source, size_t length, bool vertex, struct gl
     count_program(p, out);
     free_counting(p);
     emit(&t, "%s", helpers);
+    if (p->nv_helpers & HELPER_PACK) emit(&t, "%s", pack_helpers);
+    if (p->nv_helpers & HELPER_RCC) emit(&t, "%s", rcc_helper);
     if (p->declarations.data) emit(&t, "%s", p->declarations.data);
     for (int slot = 0; slot < RESULT_COUNT; ++slot) {
         bool written = (p->results_written & (1u << slot)) != 0;
-        if (written) emit(&t, "vec4 %s = vec4(0.0, 0.0, 0.0, 1.0);\n", result_variable(slot));
+        /* Components a fragment program leaves unwritten are 0, as on
+           Apple's implementation. */
+        if (written)
+            emit(&t, "vec4 %s = vec4(0.0, 0.0, 0.0, %s);\n", result_variable(slot), vertex ? "1.0" : "0.0");
     }
     if (p->clips_written) emit(&t, "vec4 glm_clip_vertex = vec4(0.0);\n");
     emit(&t, "void main() {\n");
-    if (p->cc_used) emit(&t, "  vec4 glm_cc0 = vec4(0.0);\n");
+    for (int r = 0; r < 2; ++r)
+        if (p->cc_used & (1u << r)) emit(&t, "  vec4 glm_cc%d = vec4(0.0);\n", r);
     if (p->prologue.data) emit(&t, "%s", p->prologue.data);
-    if (p->body.data) emit(&t, "%s", p->body.data);
+    if (p->flow) {
+        /* Execution starts at the label "main" if there is one; the loop
+           ends at glm_pc -1, or after MAX_PROGRAM_EXEC_INSTRUCTIONS_NV
+           passes. */
+        int start = 0;
+        for (int i = 0; i < p->label_count; ++i)
+            if (!strcmp(p->labels[i].name, "main")) start = p->labels[i].id;
+        emit(&t, "  int glm_pc = %d, glm_sp = 0;\n  int glm_ret[4] = int[4](0, 0, 0, 0);\n", start);
+        emit(&t, "  ivec4 glm_astack[4] = ivec4[4](ivec4(0), ivec4(0), ivec4(0), ivec4(0));\n");
+        for (int i = 0; i < p->loop_counters; ++i) emit(&t, "  int glm_lc%d = 0;\n", i);
+        emit(&t, "  for (int glm_step = 0; glm_step < 65536 && glm_pc >= 0; ++glm_step) {\n  if (glm_pc == 0) {\n");
+        if (p->body.data) emit(&t, "%s", p->body.data);
+        emit(&t, "  glm_pc = -1;\n  }\n  }\n");
+    } else if (p->body.data) {
+        emit(&t, "%s", p->body.data);
+    }
     uint32_t w = p->results_written;
     if (vertex) {
         /* Position-invariant programs get user clip planes as fixed
@@ -1643,6 +2093,7 @@ bool glm_arb_translate(const char *source, size_t length, bool vertex, struct gl
     }
     emit(&t, "}\n");
     out->glsl = t.data;
+    free(p->labels);
     free(p->declarations.data);
     free(p->body.data);
     free(p->prologue.data);
