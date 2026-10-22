@@ -1220,7 +1220,8 @@ static GLuint builtin_texture(void)
 }
 
 static const char *const builtin_names[] = {"gather", "query_lod", "bitfield", "packing", "derivatives",
-                                            "fetch_offsets", "integer_math", "matrix_funcs", "frag_depth"};
+                                            "fetch_offsets", "integer_math", "matrix_funcs", "frag_depth",
+                                            "double_packing"};
 GLC_CASE_VARIANTS(gl4_glsl_builtins, builtin_names, .profile = GLC_CORE, .tolerance = 1)
 {
     static const char *const shaders[] = {
@@ -1280,6 +1281,16 @@ GLC_CASE_VARIANTS(gl4_glsl_builtins, builtin_names, .profile = GLC_CORE, .tolera
            Conservative depth qualifiers require GLSL 4.20 or an extension. */
         GLSL "in vec2 uv; out vec4 frag;\n"
              "void main(){ gl_FragDepth = gl_FragCoord.z + uv.x * 0.4 * uv.y; frag = vec4(uv, 0.5, 1.0); }",
+        /* double_packing: a double's words and back, for zero, signs,
+           infinity and a range of values (GLMetal keeps doubles as floats) */
+        GLSL "in vec2 uv; out vec4 frag;\n"
+             "void main(){ int q = int(uv.x * 4.0) + 4 * int(uv.y * 4.0);\n"
+             "  float x = q == 0 ? 0.0 : q == 1 ? -1.0 : q == 2 ? 3.14159265 : q == 3 ? uintBitsToFloat(0x7f800000u)\n"
+             "          : q == 4 ? -6.5e30 : q == 5 ? 1.5e-30 : (uv.x * 100.0 - 50.0) * exp2(float(q - 10));\n"
+             "  uvec2 w = unpackDouble2x32(double(x));\n"
+             "  float back = float(packDouble2x32(uvec2(w.x, q == 3 ? w.y : w.y ^ (uint(q) << 12))));\n"
+             "  frag = vec4(float(w.y >> 24) / 255.0, float((w.y >> 16) & 255u) / 255.0, float(w.x >> 24) / 255.0,\n"
+             "              isinf(back) ? 1.0 : fract(abs(back) / exp2(floor(log2(max(abs(back), 1e-37))) - 6.0))); }",
     };
     GLuint program = fullscreen(shaders[glc_variant]);
     builtin_texture();

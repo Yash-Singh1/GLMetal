@@ -389,6 +389,25 @@ check-reference: lib $(OUT)/apple_get_sweep
 		diff $(OUT)/apple-get-reference.expected - > $(OUT)/reference-threaded.diff && echo "reference: threaded matches Apple" || \
 		{ echo "reference: threaded differs from Apple ($(OUT)/reference-threaded.diff)"; exit 1; }
 
+# GLSL built-in functions, variables and qualifiers (tests/probes/glsl_builtins.txt,
+# from tools/gen_glsl_builtins.py over glslang's tables): every shader Apple's
+# GL compiles must compile in GLMetal, direct and threaded. GLMetal's glslang
+# also accepts some that Apple's GLSL 1.20 / 4.10 rejects, which is harmless.
+$(OUT)/glsl_compile: tests/probes/glsl_compile.c
+	@mkdir -p $(OUT)
+	$(CC) -arch arm64 -w $< -o $@
+.PHONY: test-glsl-builtins
+test-glsl-builtins: lib $(OUT)/glsl_compile
+	@$(OUT)/glsl_compile < tests/probes/glsl_builtins.txt > $(OUT)/glsl-builtins-apple.txt 2>/dev/null
+	@$(OUT)/glsl_compile $(OUT)/libGLMetal.dylib < tests/probes/glsl_builtins.txt > $(OUT)/glsl-builtins-direct.txt 2>/dev/null
+	@GLMETAL_THREAD_ALL=1 $(OUT)/glsl_compile $(OUT)/libGLMetal.dylib < tests/probes/glsl_builtins.txt \
+		> $(OUT)/glsl-builtins-threaded.txt 2>/dev/null
+	@for mode in direct threaded; do \
+		awk -F': ' 'NR == FNR { ok[$$1] = $$2 == "ok"; n += ok[$$1]; next } ok[$$1] { seen++; if ($$2 != "ok") { bad++; print "rejected: " $$1 } } \
+			END { if (seen != n) print "missing: " n - seen " shaders"; exit bad || seen != n }' \
+			$(OUT)/glsl-builtins-apple.txt $(OUT)/glsl-builtins-$$mode.txt || exit 1; \
+	done && echo "GLSL built-ins: direct/threaded compile all $$(grep -c ': ok$$' $(OUT)/glsl-builtins-apple.txt) shaders Apple compiles ($$(grep -c '^%%' tests/probes/glsl_builtins.txt) in the corpus)"
+
 # Which enums each setter, getter and command accepts (tools/apple_enum_sweep.c)
 # against Apple's (data/apple-enum-reference.txt), less the documented
 # differences (tests/probes/enum_sweep_quirks.txt), direct and threaded.

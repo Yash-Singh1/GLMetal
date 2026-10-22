@@ -126,6 +126,9 @@ struct Prepared {
     bool legacy = false;
     bool writes_frag_color = false;
     bool writes_frag_data = false;
+    // Legacy uniforms declared sampler1D / sampler1DShadow (2D images here):
+    // their GL type, and so their binding, stays 1D.
+    std::set<std::string> samplers_1d, shadow_samplers_1d;
 };
 
 bool ident_start(char c) { return std::isalpha(static_cast<unsigned char>(c)) || c == '_'; }
@@ -275,8 +278,9 @@ std::string rewrite_legacy(const std::string &in, glm_stage stage, Rewrite &r)
 
 const char texture_defines[] =
     "#define texture1D(s, c) texture(s, vec2(c, 0.5))\n"
-    "#define texture1DProj(s, c) textureProj(s, vec3((c).x, 0.5, (c).w))\n"
+    "#define texture1DProj(s, c) textureProj(s, glm_proj1d(c))\n"
     "#define texture1DLod(s, c, l) textureLod(s, vec2(c, 0.5), l)\n"
+    "#define texture1DProjLod(s, c, l) textureProjLod(s, glm_proj1d(c), l)\n"
     "#define texture2D texture\n#define texture2DProj textureProj\n#define texture2DLod textureLod\n"
     "#define texture2DProjLod textureProjLod\n#define texture2DRect texture\n#define texture2DRectProj textureProj\n"
     "#define texture3D texture\n#define texture3DProj textureProj\n#define texture3DLod textureLod\n"
@@ -289,7 +293,18 @@ const char texture_defines[] =
     "#define shadow1D(s, c) glm_lum(texture(s, vec3((c).x, 0.5, (c).z)))\n"
     "#define shadow1DProj(s, c) glm_lum(textureProj(s, vec4((c).x, 0.5, (c).z, (c).w)))\n"
     "#define shadow1DLod(s, c, l) glm_lum(textureLod(s, vec3((c).x, 0.5, (c).z), l))\n"
+    "#define shadow1DProjLod(s, c, l) glm_lum(textureProjLod(s, vec4((c).x, 0.5, (c).z, (c).w), l))\n"
+    "#define shadow1DArray(s, c) glm_lum(texture(s, c))\n#define shadow1DArrayLod(s, c, l) glm_lum(textureLod(s, c, l))\n"
+    // The bias forms, which bias_calls names by argument count.
+    "#define glm_texture1D_bias(s, c, b) texture(s, vec2(c, 0.5), b)\n"
+    "#define glm_texture1DProj_bias(s, c, b) textureProj(s, glm_proj1d(c), b)\n"
+    "#define glm_shadow2D_bias(s, c, b) glm_lum(texture(s, c, b))\n"
+    "#define glm_shadow2DProj_bias(s, c, b) glm_lum(textureProj(s, c, b))\n"
+    "#define glm_shadow1D_bias(s, c, b) glm_lum(texture(s, vec3((c).x, 0.5, (c).z), b))\n"
+    "#define glm_shadow1DProj_bias(s, c, b) glm_lum(textureProj(s, vec4((c).x, 0.5, (c).z, (c).w), b))\n"
+    "#define glm_shadow1DArray_bias(s, c, b) glm_lum(texture(s, c, b))\n"
     "#define sampler1D sampler2D\n#define sampler1DShadow sampler2DShadow\n"
+    "#define texture1DArrayLod textureLod\n#define texture3DProjLod textureProjLod\n"
     // EXT_gpu_shader4 spellings.
     "#define texelFetch1D(s, c, l) texelFetch(s, ivec2(c, 0), l)\n#define texelFetch2D texelFetch\n"
     "#define texelFetch3D texelFetch\n#define texelFetch2DRect texelFetch\n#define texelFetch2DArray texelFetch\n"
@@ -302,6 +317,101 @@ const char texture_defines[] =
     "#define textureCubeGrad textureGrad\n#define texture2DRectGrad textureGrad\n#define texture2DLodOffset textureLodOffset\n"
     "#define texture2DOffset textureOffset\n#define shadow2DRectProj(s, c) glm_lum(textureProj(s, c))\n"
     "#define shadowCube(s, c) glm_lum(texture(s, c))\n";
+
+// The 1D projective coordinate of texture1DProj's vec2 and vec4 forms, and
+// the noise functions (0, as Apple's are): the ones `body` names (core
+// shaders get the noise functions only). Sampler arguments stay in the
+// macros, where the sampler rewrites (border_rewrite) see them.
+std::string legacy_functions(const std::string &body, bool fragment, bool core = false)
+{
+    (void)fragment;
+    struct group { const char *name; const char *code; };
+    static const group groups[] = {
+        /* t is 0.5 after the division too (the row of a 1D texture). */
+        {"glm_proj1d", "vec3 glm_proj1d(vec2 c) { return vec3(c.x, 0.5 * c.y, c.y); }\n"
+                       "vec3 glm_proj1d(vec4 c) { return vec3(c.x, 0.5 * c.w, c.w); }\n"},
+        {"noise1", "float noise1(float x) { return 0.0; }\nfloat noise1(vec2 x) { return 0.0; }\n"
+                   "float noise1(vec3 x) { return 0.0; }\nfloat noise1(vec4 x) { return 0.0; }\n"},
+        {"noise2", "vec2 noise2(float x) { return vec2(0.0); }\nvec2 noise2(vec2 x) { return vec2(0.0); }\n"
+                   "vec2 noise2(vec3 x) { return vec2(0.0); }\nvec2 noise2(vec4 x) { return vec2(0.0); }\n"},
+        {"noise3", "vec3 noise3(float x) { return vec3(0.0); }\nvec3 noise3(vec2 x) { return vec3(0.0); }\n"
+                   "vec3 noise3(vec3 x) { return vec3(0.0); }\nvec3 noise3(vec4 x) { return vec3(0.0); }\n"},
+        {"noise4", "vec4 noise4(float x) { return vec4(0.0); }\nvec4 noise4(vec2 x) { return vec4(0.0); }\n"
+                   "vec4 noise4(vec3 x) { return vec4(0.0); }\nvec4 noise4(vec4 x) { return vec4(0.0); }\n"},
+        /* Doubles lowered to float (without_doubles): the double's value
+           rounded to float, and a float's exact double bits. */
+        {"glm_packDouble2x32",
+         "float glm_packDouble2x32(uvec2 v) {\n"
+         "  int e = int((v.y >> 20) & 0x7ffu); float sign = (v.y >> 31) != 0u ? -1.0 : 1.0;\n"
+         "  if (e == 0x7ff) return ((v.y & 0xfffffu) | v.x) != 0u ? uintBitsToFloat(0x7fc00000u) : sign * uintBitsToFloat(0x7f800000u);\n"
+         "  if (e == 0) return sign * 0.0;\n"
+         "  float m = 1.0 + float(v.y & 0xfffffu) / 1048576.0 + float(v.x) / 4503599627370496.0;\n"
+         "  return sign * ldexp(m, clamp(e - 1023, -160, 128));\n"
+         "}\n"},
+        {"glm_unpackDouble2x32",
+         "uvec2 glm_unpackDouble2x32(float f) {\n"
+         "  uint b = floatBitsToUint(f), sign = b & 0x80000000u, m = b & 0x7fffffu; int e = int((b >> 23) & 0xffu);\n"
+         "  if (e == 255) return uvec2(m << 29, sign | 0x7ff00000u | (m >> 3));\n"
+         "  if (e == 0) {\n"
+         "    if (m == 0u) return uvec2(0u, sign);\n"
+         "    int top = findMSB(m); e = top - 22; m = (m ^ (1u << top)) << (23 - top);\n"
+         "  }\n"
+         "  return uvec2(m << 29, sign | (uint(e + 896) << 20) | (m >> 3));\n"
+         "}\n"},
+    };
+    auto named = [&](const char *name) {
+        size_t n = std::strlen(name), at = 0;
+        while ((at = body.find(name, at)) != std::string::npos) {
+            size_t end = at + n;
+            if ((at == 0 || !ident_char(body[at - 1])) && (end >= body.size() || !ident_char(body[end]))) return true;
+            at = end;
+        }
+        return false;
+    };
+    std::string out;
+    bool projective = named("texture1DProj") || named("texture1DProjLod") || named("glm_texture1DProj_bias");
+    for (const group &g : groups) {
+        bool used = std::strcmp(g.name, "glm_proj1d") == 0 ? projective && !core : named(g.name);
+        if (used) out += g.code;
+    }
+    return out;
+}
+
+// Fragment shaders' three-argument (bias) calls of the legacy lookups that
+// also have a two-argument form, renamed for their glm_<name>_bias macros.
+std::string bias_calls(const std::string &text)
+{
+    static const std::set<std::string> names = {"texture1D", "texture1DProj", "shadow2D", "shadow2DProj", "shadow1D",
+                                                "shadow1DProj", "shadow1DArray"};
+    std::string out;
+    size_t i = 0;
+    while (i < text.size()) {
+        if (!ident_start(text[i]) || (i > 0 && (ident_char(text[i - 1]) || text[i - 1] == '.'))) {
+            out += text[i++];
+            continue;
+        }
+        size_t start = i;
+        while (i < text.size() && ident_char(text[i])) ++i;
+        std::string word = text.substr(start, i - start);
+        size_t open = i;
+        while (open < text.size() && std::isspace(static_cast<unsigned char>(text[open]))) ++open;
+        if (!names.count(word) || open >= text.size() || text[open] != '(') {
+            out += word;
+            continue;
+        }
+        // Top-level commas of the call.
+        int depth = 0, commas = 0;
+        for (size_t j = open; j < text.size(); ++j) {
+            char c = text[j];
+            if (c == '(' || c == '[') ++depth;
+            else if (c == ')' || c == ']') {
+                if (--depth == 0) break;
+            } else if (c == ',' && depth == 1) ++commas;
+        }
+        out += commas == 2 ? "glm_" + word + "_bias" : word;
+    }
+    return out;
+}
 
 // Locations a variable of `type` occupies (matrices: one per column).
 int location_size(const std::string &type, int array)
@@ -789,14 +899,15 @@ std::string without_doubles(const std::string &text)
 {
     if (text.find("double") == std::string::npos && text.find("dvec") == std::string::npos &&
         text.find("dmat") == std::string::npos && text.find("lf") == std::string::npos &&
-        text.find("LF") == std::string::npos)
+        text.find("LF") == std::string::npos && text.find("Double2x32") == std::string::npos)
         return text;
     std::string out = std::regex_replace(text, std::regex(R"(#\s*extension\s+GL_ARB_gpu_shader_fp64[^\n]*)"), "");
     out = std::regex_replace(out, std::regex(R"(\b([0-9]+\.?[0-9]*(?:[eE][-+]?[0-9]+)?|\.[0-9]+(?:[eE][-+]?[0-9]+)?)(lf|LF)\b)"), "$1");
     static const std::map<std::string, std::string> renames = {
         {"double", "float"}, {"dvec2", "vec2"}, {"dvec3", "vec3"}, {"dvec4", "vec4"}, {"dmat2", "mat2"}, {"dmat3", "mat3"},
         {"dmat4", "mat4"}, {"dmat2x2", "mat2"}, {"dmat3x3", "mat3"}, {"dmat4x4", "mat4"}, {"dmat2x3", "mat2x3"},
-        {"dmat2x4", "mat2x4"}, {"dmat3x2", "mat3x2"}, {"dmat3x4", "mat3x4"}, {"dmat4x2", "mat4x2"}, {"dmat4x3", "mat4x3"}};
+        {"dmat2x4", "mat2x4"}, {"dmat3x2", "mat3x2"}, {"dmat3x4", "mat3x4"}, {"dmat4x2", "mat4x2"}, {"dmat4x3", "mat4x3"},
+        {"packDouble2x32", "glm_packDouble2x32"}, {"unpackDouble2x32", "glm_unpackDouble2x32"}};
     return rename_words(out, renames);
 }
 
@@ -1022,6 +1133,7 @@ Prepared prepare_stage(const char *source, glm_stage stage, Bindings *bindings)
         if (version < 330) header += "#extension GL_ARB_explicit_attrib_location : enable\n";
         if (version < 420) header += "#extension GL_ARB_shading_language_420pack : enable\n";
         if (capture) header += xfb_extension;
+        header += legacy_functions(text, stage == GLM_STAGE_FRAGMENT, true);
         if (stage == GLM_STAGE_VERTEX) {
             Rewrite r;
             std::string body;
@@ -1125,6 +1237,7 @@ Prepared prepare_stage(const char *source, glm_stage stage, Bindings *bindings)
             if (r.used.count("gl_MultiTexCoord" + std::to_string(u))) reserved.insert(8 + u);
         body = assign_locations(body, "in", bindings ? bindings->attributes : std::map<std::string, int>(), reserved);
     }
+    std::map<std::string, int> user_outputs;
     {
         std::set<int> fixed;
         for (int l = 0; l < GLM_VARYING_USER; ++l) fixed.insert(l);
@@ -1135,12 +1248,34 @@ Prepared prepare_stage(const char *source, glm_stage stage, Bindings *bindings)
         if (bindings && stage == GLM_STAGE_VERTEX) bindings->varyings = recorded;
         // User fragment outputs ("varying out", EXT_gpu_shader4).
         if (stage == GLM_STAGE_FRAGMENT)
-            body = assign_locations(body, "out", bindings ? bindings->outputs : none, {});
+            body = assign_locations(body, "out", bindings ? bindings->outputs : none, {}, &user_outputs);
+    }
+    if (stage == GLM_STAGE_FRAGMENT) body = bias_calls(body);
+    {
+        static const std::regex declaration(R"(uniform\s+(?:(?:lowp|mediump|highp)\s+)?(sampler1D|sampler1DShadow)\s+([^;]+);)");
+        static const std::regex name_pattern(R"(([A-Za-z_]\w*))");
+        if (body.find("sampler1D") != std::string::npos)
+            for (std::sregex_iterator it(body.begin(), body.end(), declaration), end; it != end; ++it) {
+                std::string names = (*it)[2].str();
+                // Names before any [size] or initializer, comma separated.
+                size_t k = 0;
+                while (k < names.size()) {
+                    size_t comma = names.find(',', k);
+                    std::string item = names.substr(k, comma == std::string::npos ? std::string::npos : comma - k);
+                    std::smatch m;
+                    if (std::regex_search(item, m, name_pattern))
+                        ((*it)[1] == "sampler1D" ? p.samplers_1d : p.shadow_samplers_1d).insert(m[1].str());
+                    if (comma == std::string::npos) break;
+                    k = comma + 1;
+                }
+            }
     }
     std::ostringstream pre;
     bool capture = stage == GLM_STAGE_VERTEX && bindings && bindings->capture && !bindings->feedback.empty();
     pre << "#version 410\n#extension GL_ARB_shading_language_420pack : enable\n" << (capture ? xfb_extension : "")
-        << texture_defines;
+        << texture_defines << legacy_functions(body, stage == GLM_STAGE_FRAGMENT)
+        // ARB_draw_instanced's spelling.
+        << (stage == GLM_STAGE_VERTEX ? "#define gl_InstanceIDARB gl_InstanceID\n" : "");
     bool state = false;
     for (const auto &name : r.used) {
         if (!legacy_state.count(name)) continue;
@@ -1217,8 +1352,11 @@ Prepared prepare_stage(const char *source, glm_stage stage, Bindings *bindings)
                    "vec4 glm_Color_sel, glm_SecondaryColor_sel;\n";
         p.writes_frag_color = r.used.count("gl_FragColor") != 0;
         p.writes_frag_data = r.used.count("gl_FragData") != 0;
+        // A shader with outputs of its own (and no gl_FragColor) has no
+        // glm_FragColor, which would take their location 0.
+        bool frag_color = !p.writes_frag_data && (p.writes_frag_color || user_outputs.empty());
         if (p.writes_frag_data) pre << "layout(location=0) out vec4 glm_FragData[8];\n";
-        else pre << "layout(location=0) out vec4 glm_FragColor;\n";
+        else if (frag_color) pre << "layout(location=0) out vec4 glm_FragColor;\n";
         if (body.find("gl_PointCoord") != std::string::npos) {
             body = point_coord_flip(body);
             pre << point_coord_code;
@@ -1228,7 +1366,7 @@ Prepared prepare_stage(const char *source, glm_stage stage, Bindings *bindings)
         // ARB_color_buffer_float: GL_CLAMP_FRAGMENT_COLOR, as the backend resolves it.
         const char *fragment_clamp = p.writes_frag_data
             ? " if (glm_clamp_fragment > 0.5) for (int i = 0; i < 8; ++i) glm_FragData[i] = clamp(glm_FragData[i], 0.0, 1.0);"
-            : " if (glm_clamp_fragment > 0.5) glm_FragColor = clamp(glm_FragColor, 0.0, 1.0);";
+            : frag_color ? " if (glm_clamp_fragment > 0.5) glm_FragColor = clamp(glm_FragColor, 0.0, 1.0);" : "";
         pre << "#line 1\n" << body << "\nvoid main() {"
             << (reads_colors ? " bool glm_back = glm_TwoSide != 0.0 && !gl_FrontFacing;"
                                " glm_Color_sel = glm_back ? glm_BackColor_in : glm_Color;"
@@ -3338,6 +3476,11 @@ static void compile_program(const glm_compile_request *req, glm_compile_result *
             auto found = gl_types.find(entry.first);
             if (found == gl_types.end()) found = gl_types.find(entry.first + "[0]");
             if (found != gl_types.end() && found->second >= 0x8B56 && found->second <= 0x8B59) entry.second.type = found->second;
+            // GL_SAMPLER_1D / GL_SAMPLER_1D_SHADOW for legacy 1D samplers.
+            for (int s = 0; s < GLM_STAGE_COUNT; ++s) {
+                if (prepared[s].samplers_1d.count(entry.first)) entry.second.type = 0x8B5D;
+                if (prepared[s].shadow_samplers_1d.count(entry.first)) entry.second.type = 0x8B61;
+            }
         }
         // Block members: glslang's names index arrays (of blocks, structs
         // and members) differently; every element has the same type, so
@@ -3541,6 +3684,10 @@ static void compile_program(const glm_compile_request *req, glm_compile_result *
             std::string name = msl.get_name(image.id);
             auto cube = cube_code.resources.find(name);
             int slot = cube != cube_code.resources.end() ? cube->second : sampler_slots[name];
+            // An unused sampler can share a used one's automatic binding,
+            // so each takes its own before it is bound.
+            msl.set_decoration(image.id, spv::DecorationDescriptorSet, 9);
+            msl.set_decoration(image.id, spv::DecorationBinding, static_cast<uint32_t>(image.id));
             bind(image.id, -1, cube != cube_code.resources.end() ? 64 + slot : slot, slot);
         }
         for (auto &image : resources.separate_images) {
